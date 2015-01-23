@@ -238,6 +238,22 @@ endif !HAVE_PSM_DL
 
 endif HAVE_PSM
 
+if HAVE_GNI
+_gni_files = \
+	prov/gni/src/gnix_init.c 
+
+if HAVE_GNI_DL
+pkglib_LTLIBRARIES += libgnix-fi.la
+libgnix_fi_la_SOURCES = $(_gni_files) $(common_srcs)
+libgnix_fi_la_LIBADD = $(linkback)
+libgnix_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libgnix_fi_la_DEPENDENCIES = $(linkback)
+else !HAVE_GNI_DL
+src_libfabric_la_SOURCES += $(_gni_files)
+endif !HAVE_GNI_DL
+
+endif HAVE_GNI
+
 src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
 src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
