@@ -77,6 +77,8 @@ struct fi_ops_ep {
 	int	(*rx_ctx)(struct fid_sep *sep, int index,
 			struct fi_rx_attr *attr, struct fid_ep **rx_ep,
 			void *context);
+	ssize_t (*rx_size_left)(struct fid_ep *ep);
+	ssize_t (*tx_size_left)(struct fid_ep *ep);
 };
 
 struct fi_ops_msg {
@@ -220,6 +222,18 @@ fi_rx_context(struct fid_sep *sep, int index, struct fi_rx_attr *attr,
 	      struct fid_ep **rx_ep, void *context)
 {
 	return sep->ops->rx_ctx(sep, index, attr, rx_ep, context);
+}
+
+static inline ssize_t
+fi_rx_size_left(struct fid_ep *ep)
+{
+	return ep->ops->rx_size_left(ep);
+}
+
+static inline ssize_t
+fi_tx_size_left(struct fid_ep *ep)
+{
+	return ep->ops->tx_size_left(ep);
 }
 
 static inline int

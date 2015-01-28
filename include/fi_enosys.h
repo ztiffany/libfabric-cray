@@ -235,6 +235,8 @@ static struct fi_ops_ep X = {
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
+	.rx_size_left = fi_no_rx_size_left,
+	.tx_size_left = fi_no_tx_size_left,
 };
 */
 int fi_no_enable(struct fid_ep *ep);
@@ -249,6 +251,8 @@ int fi_no_tx_ctx(struct fid_sep *sep, int index,
 int fi_no_rx_ctx(struct fid_sep *sep, int index,
 		struct fi_rx_attr *attr, struct fid_ep **rx_ep,
 		void *context);
+ssize_t fi_no_rx_size_left(struct fid_ep *ep);
+ssize_t fi_no_tx_size_left(struct fid_ep *ep);
 
 /*
 static struct fi_ops_msg X = {

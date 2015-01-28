@@ -19,6 +19,9 @@ fi_ep_bind
 fi_scalable_ep_bind
 :   Associate a scalable endpoint with an address vector
 
+fi_pep_bind
+:   Associate a passive endpoint with an event queue
+
 fi_enable
 :   Transitions an endpoint into an active state.
 
@@ -36,6 +39,10 @@ fi_getopt / fi_setopt
 
 fi_rx_context / fi_tx_context / fi_srx_context  / fi_stx_context
 :   Open a transmit or receive context.
+
+fi_rx_size_left / fi_tx_size_left
+:   Query the lower bound on how many RX/TX operations may be posted without
+    an operation returning -FI_EAGAIN.
 
 # SYNOPSIS
 
@@ -75,6 +82,8 @@ int fi_ep_bind(struct fid_ep *ep, struct fid *fid, uint64_t flags);
 
 int fi_scalable_ep_bind(struct fid_sep *sep, struct fid *fid, uint64_t flags);
 
+int fi_pep_bind(struct fid_pep *pep, struct fid *fid, uint64_t flags);
+
 int fi_enable(struct fid_ep *ep);
 
 int fi_cancel(struct fid_ep *ep, void *context);
@@ -88,6 +97,10 @@ int fi_getopt(struct fid_ *ep, int level, int optname,
 
 int fi_setopt(struct fid *ep, int level, int optname,
     const void *optval, size_t optlen);
+
+ssize_t fi_rx_size_left(struct fid_ep *ep);
+
+ssize_t fi_tx_size_left(struct fid_ep *ep);
 {% endhighlight %}
 
 # ARGUMENTS
@@ -106,6 +119,9 @@ int fi_setopt(struct fid *ep, int level, int optname,
 
 *sep*
 : A scalable fabric endpoint.
+
+*pep*
+: A passive fabric endpoint.
 
 *fid*
 : Fabric identifier of an associated resource.
@@ -366,6 +382,24 @@ The following option levels and option names and parameters are defined.
   receives posted after the value has been changed.  It is recommended
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
+
+## fi_rx_size_left
+
+The fi_rx_size_left call returns a lower bound on the number of receive
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted receive operations (e.g., number of iov entries, which receive function
+is called, etc.), it may be possible to post more receive operations than
+originally indicated by fi_rx_size_left.
+
+## fi_tx_size_left
+
+The fi_tx_size_left call returns a lower bound on the number of transmit
+operations that may be posted to the given endpoint without that operation
+returning -FI_EAGAIN.  Depending on the specific details of the subsequently
+posted transmit operations (e.g., number of iov entries, which transmit
+function is called, etc.), it may be possible to post more transmit operations
+than originally indicated by fi_tx_size_left.
 
 # ENDPOINT ATTRIBUTES
 
@@ -728,6 +762,7 @@ struct fi_tx_attr {
 	size_t    inject_size;
 	size_t    size;
 	size_t    iov_limit;
+	size_t    rma_iov_limit;
 };
 {% endhighlight %}
 
@@ -772,6 +807,16 @@ struct fi_tx_attr {
 *iov_limit*
 : This is the maximum number of IO vectors (scatter-gather elements)
   that a single posted operation may reference.
+
+*rma_iov_limit*
+: This is the maximum number of RMA IO vectors (scatter-gather elements)
+  that an RMA or atomic operation may reference.  The rma_iov_limit
+  corresponds to the rma_iov_count values in RMA and atomic operations.
+  See struct fi_msg_rma and struct fi_msg_atomic in fi_rma.3 and
+  fi_atomic.3, for additional details.  This limit applies to both the
+  number of RMA IO vectors that may be specified when initiating an
+  operation from the local endpoint, as well as the maximum number of
+  IO vectors that may be carried in a single request from a remote endpoint.
 
 ## fi_rx_context
 
