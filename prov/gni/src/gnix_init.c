@@ -38,15 +38,6 @@
 #include "fi.h"
 #include "prov.h"
 
-// This is useful for making sure we have the gni headers and lib
-// paths right.  Remove when we get some real code in here.
-int gnix_foobar(void){
-       uint32_t version;
-       GNI_GetVersion(&version);
-       return 0;
-}
-
-
 static int
 gnix_getinfo(uint32_t version, const char *node, const char *service,
              uint64_t flags, struct fi_info *hints, struct fi_info **info)
