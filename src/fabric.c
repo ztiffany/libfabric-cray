@@ -184,6 +184,8 @@ done:
 
 	fi_register_provider(VERBS_INIT);
 	fi_register_provider(SOCKETS_INIT);
+
+	fi_register_provider(GNI_INIT);
 	init = 1;
 
 unlock:

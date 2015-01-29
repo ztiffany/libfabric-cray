@@ -240,7 +240,10 @@ endif HAVE_PSM
 
 if HAVE_GNI
 _gni_files = \
-	prov/gni/src/gnix_init.c 
+	prov/gni/src/gnix.h \
+	prov/gni/src/gnix_init.c \
+	prov/gni/src/gnix_ep.c \
+	prov/gni/src/gnix_ep_rdm.c
 
 if HAVE_GNI_DL
 pkglib_LTLIBRARIES += libgnix-fi.la
