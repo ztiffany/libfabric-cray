@@ -120,6 +120,7 @@ static void fi_tostr_addr_format(char *buf, uint32_t addr_format)
 	CASEENUMSTR(FI_SOCKADDR_IN6);
 	CASEENUMSTR(FI_SOCKADDR_IB);
 	CASEENUMSTR(FI_ADDR_PSMX);
+	CASEENUMSTR(FI_ADDR_GNI);
 	default:
 		if (addr_format & FI_PROV_SPECIFIC)
 			strcatf(buf, "Provider specific");

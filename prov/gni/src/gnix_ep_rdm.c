@@ -35,19 +35,3 @@
 
 #include "gnix.h"
 
-int
-gnix_rdm_getinfo(uint32_t version, const char *node, const char *service,
-                 uint64_t flags, struct fi_info *hints,
-                 struct fi_info **info)
-{
-  struct fi_info *_info = gnix_fi_info(FI_EP_RDM, hints);
-  if (!_info) return FI_ENOMEM;
-
-  // fill in RDM attributes
-
-  *info = _info;
-
-  return 0;
-}
-
-

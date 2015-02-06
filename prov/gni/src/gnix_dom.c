@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -30,9 +32,9 @@
  * SOFTWARE.
  */
 
-//
-// Endpoint common code
-//
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
 #include <stdlib.h>
 #include <string.h>
@@ -40,4 +42,9 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
+int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		     struct fid_domain **dom, void *context)
+{
+	return -FI_ENOSYS;  /* TODO: need to implement */
+}
 

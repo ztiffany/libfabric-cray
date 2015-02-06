@@ -17,13 +17,13 @@ m4_include([config/pkg.m4])
 	      [PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
                                   CPPFLAGS="$CRAY_UGNI_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_UGNI_LIBS $CPPFLAGS"
+                                  LDFLAGS="$CRAY_UGNI_LIBS $LDFLAGS"
                                  ],
                                  [ugni_lib_happy=0])
                PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
                                   CPPFLAGS="$CRAY_GNI_HEADERS_CFLAGS $CPPFLAGS"
-                                  LDFLAGS="$CRAY_GNI_HEADER_LIBS $CPPFLAGS"
+                                  LDFLAGS="$CRAY_GNI_HEADER_LIBS $LDFLAGS"
                                  ],
                                  [gni_header_happy=0])
 	       ])
