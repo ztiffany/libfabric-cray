@@ -40,14 +40,12 @@
 #include "sock.h"
 #include "sock_util.h"
 
-extern const char const sock_dom_name[];
-
 const struct fi_domain_attr sock_domain_attr = {
 	.name = NULL,
 	.threading = FI_THREAD_SAFE,
 	.control_progress = FI_PROGRESS_AUTO,
 	.data_progress = FI_PROGRESS_AUTO,
-	.mr_key_size = 0,
+	.mr_key_size = sizeof(uint16_t),
 	.cq_data_size = sizeof(uint64_t),
 	.ep_cnt = SOCK_EP_MAX_EP_CNT,
 	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
@@ -364,7 +362,7 @@ int sock_endpoint(struct fid_domain *domain, struct fi_info *info,
 }
 
 int sock_scalable_ep(struct fid_domain *domain, struct fi_info *info,
-		     struct fid_sep **sep, void *context)
+		     struct fid_ep **sep, void *context)
 {
 	switch (info->ep_type) {
 	case FI_EP_RDM:

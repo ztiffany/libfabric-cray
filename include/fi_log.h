@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015, Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -28,45 +28,39 @@
  * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
  * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
  * SOFTWARE.
+ *
  */
 
-#ifndef _FI_USNIC_H_
-#define _FI_USNIC_H_
+#if !defined(FI_LOG_H)
+#define FI_LOG_H
 
-#include <stdint.h>
-#include <net/if.h>
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#define FI_PROTO_RUDP 100
+extern int fi_log_level;
 
-/*
- * usNIC specific info
+void fi_log_init(void);
+void fi_warn_impl(const char *prov, const char *fmt, ...);
+void fi_log_impl(int level, const char *prov, const char *func, int line,
+		 const char *fmt, ...);
+void fi_debug_impl(const char *prov, const char *func, int line, const char *fmt, ...);
+
+/* Callers are responsible for including their own trailing "\n".  Non-provider
+ * code should pass prov=NULL.
  */
-struct fi_usnic_info {
-	uint32_t ui_link_speed;
-	uint32_t ui_netmask_be;
-	char ui_ifname[IFNAMSIZ];
+#define FI_WARN(prov, ...) fi_warn_impl(prov, __VA_ARGS__)
 
-	uint32_t ui_num_vf;
-	uint32_t ui_qp_per_vf;
-	uint32_t ui_cq_per_vf;
-};
+#define FI_LOG(level, prov, ...) \
+	do { \
+		if ((level) <= fi_log_level) \
+			fi_log_impl(level, prov, __func__, __LINE__, __VA_ARGS__); \
+	} while (0)
 
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_FABRIC_OPS_1 "fabric_ops 1"
-struct fi_usnic_ops_fabric {
-	size_t size;
-	int (*getinfo)(struct fid_fabric *fabric, struct fi_usnic_info *info);
-};
+#if ENABLE_DEBUG
+#  define FI_DEBUG(prov, ...) fi_debug_impl(prov, __func__, __LINE__, __VA_ARGS__)
+#else
+#  define FI_DEBUG(prov, ...) do {} while (0)
+#endif
 
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_AV_OPS_1 "av_ops 1"
-struct fi_usnic_ops_av {
-	size_t size;
-	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
-};
-
-#endif /* _FI_USNIC_H_ */
+#endif /* !defined(FI_LOG_H) */

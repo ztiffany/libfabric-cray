@@ -47,7 +47,7 @@ int fi_av_insertsym(struct fid_av *av, const char *node,
     size_t nodecnt, const char *service, size_t svccnt,
     fi_addr_t *fi_addr, uint64_t flags, void *context);
 
-int fi_av_remove(struct fid_av *av, fi_addr_t fi_addr, size_t count,
+int fi_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
     uint64_t flags);
 
 int fi_av_lookup(struct fid_av *av, fi_addr_t fi_addr,
@@ -245,6 +245,10 @@ The fi_close call is used to release all resources associated with an
 address vector.  Note that any events queued on an event queue referencing
 the AV are left untouched.  It is recommended that callers retrieve all
 events associated with the AV before closing it.
+
+When closing the address vector, there must be no opened endpoints associated
+with the AV.  If resources are still associated with the AV when attempting to
+close, the call will return -FI_EBUSY.
 
 ## fi_av_bind
 

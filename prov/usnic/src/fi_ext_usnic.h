@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,25 +30,52 @@
  * SOFTWARE.
  */
 
-#ifndef _SOCK_UTIL_H_
-#define _SOCK_UTIL_H_
+#ifndef _FI_EXT_USNIC_H_
+#define _FI_EXT_USNIC_H_
 
-#include "fi_log.h"
+#include <stdint.h>
+#include <net/if.h>
 
-#define SOCK_ERROR (1)
-#define SOCK_WARN (2)
-#define SOCK_INFO (3)
+#define FI_PROTO_RUDP 100
 
-extern useconds_t sock_progress_thread_wait;
+#define FI_USNIC_INFO_VERSION 1
 
-extern const char sock_fab_name[];
-extern const char sock_dom_name[];
-extern const char sock_prov_name[];
+/*
+ * usNIC specific info
+ */
+struct fi_usnic_info_v1 {
+	uint32_t ui_link_speed;
+	uint32_t ui_netmask_be;
+	char ui_ifname[IFNAMSIZ];
 
-#define SOCK_LOG_INFO(...) FI_LOG(SOCK_INFO, sock_prov_name, __VA_ARGS__)
+	uint32_t ui_num_vf;
+	uint32_t ui_qp_per_vf;
+	uint32_t ui_cq_per_vf;
+};
 
-#define SOCK_LOG_WARN(...) FI_WARN(sock_prov_name, __VA_ARGS__)
+struct fi_usnic_info {
+	uint32_t ui_version;
+	union {
+		struct fi_usnic_info_v1 v1;
+	} ui;
+};
 
-#define SOCK_LOG_ERROR(...) FI_WARN(sock_prov_name, __VA_ARGS__)
+/*
+ * usNIC-specific AV ops
+ */
+#define FI_USNIC_FABRIC_OPS_1 "fabric_ops 1"
+struct fi_usnic_ops_fabric {
+	size_t size;
+	int (*getinfo)(struct fid_fabric *fabric, struct fi_usnic_info *info);
+};
 
-#endif
+/*
+ * usNIC-specific AV ops
+ */
+#define FI_USNIC_AV_OPS_1 "av_ops 1"
+struct fi_usnic_ops_av {
+	size_t size;
+	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
+};
+
+#endif /* _FI_EXT_USNIC_H_ */

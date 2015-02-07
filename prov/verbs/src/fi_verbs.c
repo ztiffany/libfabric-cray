@@ -57,13 +57,14 @@
 
 #include "fi.h"
 #include "fi_enosys.h"
+#include "fi_log.h"
 #include "prov.h"
+#include "fi_log.h"
 
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
 
-#define VERBS_WARN(fmt, ...) \
-	do { fprintf(stderr, "%s:%s: " fmt, PACKAGE, VERBS_PROV_NAME, ##__VA_ARGS__); } while (0)
+#define VERBS_WARN(...) FI_WARN(VERBS_PROV_NAME, __VA_ARGS__)
 
 #define VERBS_MSG_SIZE (1ULL << 31)
 #define VERBS_IB_PREFIX "IB-0x"
@@ -614,6 +615,12 @@ fi_ibv_getepinfo(const char *node, const char *service,
 	ret = rdma_create_ep(id, rai, NULL, NULL);
 	if (ret) {
 		ret = -errno;
+		if (ret == -ENOENT) {
+			FI_LOG(1, "verbs",
+				"rdma_create_ep()-->ENOENT; likely usnic bug, "
+				"skipping verbs provider.\n");
+			ret = -FI_ENODATA;
+		}
 		goto err2;
 	}
 
@@ -2715,5 +2722,6 @@ static struct fi_provider fi_ibv_prov = {
 
 VERBS_INI
 {
+	fi_log_init();
 	return &fi_ibv_prov;
 }

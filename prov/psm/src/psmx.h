@@ -34,67 +34,15 @@ extern "C" {
 #include <psm.h>
 #include <psm_mq.h>
 #include "psm_am.h"
+
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
+#include "fi_log.h"
 
-#define PSM_PFX "libfabric:psm"
+#define PSMX_PROVNAME "PSM"
 
-#define PSMX_FREE_LIST_INIT(head, tail, type, count) \
-	do { \
-		int i; \
-		type *item; \
-		head = tail = NULL; \
-		for (i=0; i<count; i++) { \
-			item = calloc(sizeof(type), 1); \
-			if (!item) {\
-				fprintf(stderr, "%s: out of memory.\n", __func__); \
-				exit(-1); \
-			} \
-			item->next = head; \
-			head = item; \
-			if (!tail) \
-				tail = head; \
-		} \
-	} while (0)
-
-#define PSMX_FREE_LIST_GET(head, tail, type, item) \
-	do { \
-		if (head) { \
-			item = head; \
-			head = head->next; \
-			if (!head) \
-				tail = head; \
-			item->next = NULL; \
-		} \
-		else { \
-			item = calloc(sizeof(type), 1); \
-			if (!item) {\
-				fprintf(stderr, "%s: out of memory.\n", __func__); \
-				exit(-1); \
-			} \
-		} \
-	} while (0)
-
-#define PSMX_FREE_LIST_PUT(head, tail, type, item) \
-	do { \
-		memset(item, 0, sizeof(type)); \
-		if (tail) \
-			tail->next = item; \
-		else \
-			head = tail = item; \
-	} while (0)
-
-#define PSMX_FREE_LIST_FINALIZE(head, tail, type) \
-	do { \
-		type *next; \
-		while (head) { \
-			next = head->next; \
-			free(head); \
-			head = next; \
-		} \
-		tail = NULL; \
-	} while (0)
+#define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
 
 #define PSMX_TIME_OUT	120
 
@@ -228,16 +176,24 @@ struct psmx_am_request {
 	};
 	struct fi_context fi_context;
 	struct psmx_fid_ep *ep;
-	struct psmx_am_request *next;
 	int state;
 	int no_event;
 	int error;
+	struct slist_entry list_entry;
+};
+
+struct psmx_unexp {
+	psm_epaddr_t		sender_addr;
+	uint64_t		sender_context;
+	uint32_t		len_received;
+	uint32_t		done;
+	struct slist_entry	list_entry;
+	char			buf[0];
 };
 
 struct psmx_req_queue {
-	pthread_mutex_t		lock;
-	struct psmx_am_request	*head;
-	struct psmx_am_request	*tail;
+	pthread_mutex_t	lock;
+	struct slist	list;
 };
 
 struct psmx_multi_recv {
@@ -307,13 +263,7 @@ struct psmx_cq_event {
 	} cqe;
 	int error;
 	uint64_t source;
-	struct psmx_cq_event *next;
-};
-
-struct psmx_cq_event_queue {
-	struct psmx_cq_event	*head;
-	struct psmx_cq_event	*tail;
-	size_t	count;
+	struct slist_entry list_entry;
 };
 
 struct psmx_fid_wait {
@@ -345,8 +295,9 @@ struct psmx_fid_cq {
 	struct psmx_fid_domain		*domain;
 	int 				format;
 	int				entry_size;
-	struct psmx_cq_event_queue	event_queue;
-	struct psmx_cq_event_queue	free_list;
+	size_t				event_count;
+	struct slist			event_queue;
+	struct slist			free_list;
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
@@ -607,7 +558,6 @@ int	psmx_errno(int err);
 int	psmx_epid_to_epaddr(struct psmx_fid_domain *domain,
 			    psm_epid_t epid, psm_epaddr_t *epaddr);
 void	psmx_query_mpi(void);
-void	psmx_debug(char *fmt, ...);
 
 void	psmx_cq_enqueue_event(struct psmx_fid_cq *cq, struct psmx_cq_event *event);
 struct	psmx_cq_event *psmx_cq_create_event(struct psmx_fid_cq *cq,
@@ -623,17 +573,6 @@ void	psmx_wait_signal(struct fid_wait *wait);
 
 int	psmx_am_init(struct psmx_fid_domain *domain);
 int	psmx_am_fini(struct psmx_fid_domain *domain);
-int	psmx_am_enqueue_recv(struct psmx_fid_domain *domain,
-				struct psmx_am_request *req);
-struct psmx_am_request *
-	psmx_am_search_and_dequeue_recv(struct psmx_fid_domain *domain,
-					const void *src_addr);
-#if PSMX_AM_USE_SEND_QUEUE
-int	psmx_am_enqueue_send(struct psmx_fid_domain *domain,
-				  struct psmx_am_request *req);
-#endif
-int	psmx_am_enqueue_rma(struct psmx_fid_domain *domain,
-				  struct psmx_am_request *req);
 int	psmx_am_progress(struct psmx_fid_domain *domain);
 int	psmx_am_process_send(struct psmx_fid_domain *domain,
 				struct psmx_am_request *req);

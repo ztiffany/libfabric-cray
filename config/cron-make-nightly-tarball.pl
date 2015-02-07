@@ -63,8 +63,16 @@ die "$download_dir_arg is not a valid directory"
 sub doit {
     my $allowed_to_fail = shift;
     my $cmd = shift;
+    my $stdout_file = shift;
 
-    $cmd .= " 2>/dev/null >/dev/null"
+    # Redirect stdout if requested or not verbose
+    if (defined $stdout_file) {
+        $cmd .= " >$stdout_file";
+    } elsif (!$verbose_arg) {
+        $cmd .= " >/dev/null";
+    }
+
+    $cmd .= " 2>/dev/null"
         if (!$verbose_arg);
 
     my $rc = system($cmd);
@@ -72,7 +80,7 @@ sub doit {
         # If we die/fail, ensure to change out of the temp tree so
         # that it can be removed upon exit.
         chdir("/");
-        die "Command @_ failed: exit status $rc";
+        die "Command $cmd failed: exit status $rc";
     }
 }
 
@@ -105,20 +113,23 @@ close(IN);
 
 # Get the original version number
 $config =~ m/AC_INIT\(\[libfabric\], \[(.+?)\]/;
-my $version = $1;
-verbose("*** Got configure.ac version: $version\n");
+my $orig_version = $1;
+verbose("*** Got configure.ac version: $orig_version\n");
+my $version = "$orig_version.$gd";
+$version =~ y/-/./;
+verbose("*** Nightly tarball version: $version\n");
 
 # Is there already a tarball of this version in the download
 # directory?  If so, just exit now without doing anything.
-if (-f "$download_dir_arg/libfabric-$version-$gd.tar.gz") {
-    verbose("*** Target tarball already exists: libfabric-$version-$gd.tar.gz\n");
+if (-f "$download_dir_arg/libfabric-$version.tar.gz") {
+    verbose("*** Target tarball already exists: libfabric-$version.tar.gz\n");
     verbose("*** Exiting without doing anything\n");
     exit(0);
 }
 
 # Update the version number with the output from "git describe"
 verbose("*** Re-writing configure.ac with git describe results...\n");
-$config =~ s/(AC_INIT\(\[libfabric\], \[.+?)\]/$1-$gd]/;
+$config =~ s/(AC_INIT\(\[libfabric\], \[).+?\]/$1$version]/;
 open(OUT, ">configure.ac");
 print OUT $config;
 close(OUT);
@@ -137,25 +148,25 @@ doit(0, "git checkout configure.ac");
 
 # Move the resulting tarballs to the downloads directory
 verbose("*** Placing tarballs in download directory...\n");
-doit(0, "mv libfabric-$version-$gd.tar.gz libfabric-$version-$gd.tar.bz2 $download_dir_arg");
+doit(0, "mv libfabric-$version.tar.gz libfabric-$version.tar.bz2 $download_dir_arg");
 
 # Make sym links to these newest tarballs
 chdir($download_dir_arg);
 unlink("libfabric-latest.tar.gz");
 unlink("libfabric-latest.tar.bz2");
-doit(0, "ln -s libfabric-$version-$gd.tar.gz libfabric-latest.tar.gz");
-doit(0, "ln -s libfabric-$version-$gd.tar.bz2 libfabric-latest.tar.bz2");
+doit(0, "ln -s libfabric-$version.tar.gz libfabric-latest.tar.gz");
+doit(0, "ln -s libfabric-$version.tar.bz2 libfabric-latest.tar.bz2");
 
 # Re-generate hashes
 verbose("*** Re-generating md5/sha1sums...\n");
-doit(0, "md5sum libfabric*tar* > md5sums.txt");
-doit(0, "sha1sum libfabric*tar* > sha1sums.txt");
+doit(0, "md5sum libfabric*tar*", "md5sums.txt");
+doit(0, "sha1sum libfabric*tar*", "sha1sums.txt");
 
 # Re-write latest.txt
 verbose("*** Re-creating latest.txt...\n");
 unlink("latest.txt");
 open(OUT, ">latest.txt") || die "Can't write to latest.txt";
-print OUT "libfabric-$version-$gd\n";
+print OUT "libfabric-$version\n";
 close(OUT);
 
 # All done

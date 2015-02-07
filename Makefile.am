@@ -1,3 +1,5 @@
+# Makefile.am for libfabric
+
 AM_CPPFLAGS = \
 	-I$(srcdir)/include \
 	-D_GNU_SOURCE \
@@ -18,6 +20,10 @@ else !HAVE_LD_VERSION_SCRIPT
     libfabric_version_script =
 endif !HAVE_LD_VERSION_SCRIPT
 
+rdmaincludedir = $(includedir)/rdma
+
+rdmainclude_HEADERS =
+
 # internal utility functions shared by in-tree providers:
 common_srcs = \
 	src/common.c \
@@ -31,11 +37,17 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_log.h \
 	include/fi_rbuf.h \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
+	src/log.c \
 	$(common_srcs)
+
+src_libfabric_la_CPPFLAGS = $(AM_CPPFLAGS)
+src_libfabric_la_LDFLAGS =
+src_libfabric_la_LIBADD =
 
 if HAVE_SOCKETS
 _sockets_files = \
@@ -60,7 +72,6 @@ _sockets_files = \
 	prov/sockets/src/sock_msg.c \
 	prov/sockets/src/sock_rma.c \
 	prov/sockets/src/sock_atomic.c \
-	prov/sockets/src/sock_util.c \
 	prov/sockets/src/sock_util.h \
 	prov/sockets/src/indexer.c
 
@@ -82,11 +93,20 @@ _verbs_files = prov/verbs/src/fi_verbs.c
 if HAVE_VERBS_DL
 pkglib_LTLIBRARIES += libverbs-fi.la
 libverbs_fi_la_SOURCES = $(_verbs_files) $(common_srcs)
-libverbs_fi_la_LIBADD = $(linkback)
-libverbs_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+# Technically, verbs_ibverbs_CPPFLAGS and verbs_rdmacm_CPPFLAGS could
+# be different, but it is highly unlikely that they ever will be.  So
+# only list verbs_ibverbs_CPPFLAGS here.  Same with verbs_*_LDFLAGS,
+# below.
+libverbs_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(verbs_ibverbs_CPPFLAGS)
+libverbs_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(verbs_ibverbs_LDFLAGS)
+libverbs_fi_la_LIBADD = $(linkback) $(verbs_rdmacm_LIBS) $(verbs_ibverbs_LIBS)
 libverbs_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_VERBS_DL
 src_libfabric_la_SOURCES += $(_verbs_files)
+src_libfabric_la_CPPFLAGS += $(verbs_ibverbs_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(verbs_ibverbs_LDFLAGS)
+src_libfabric_la_LIBADD += $(verbs_rdmacm_LIBS) $(verbs_ibverbs_LIBS)
 endif !HAVE_VERBS_DL
 
 endif HAVE_VERBS
@@ -154,7 +174,7 @@ libusnic_direct_sources = \
 
 _usnic_files = \
 	$(libusnic_direct_sources) \
-	prov/usnic/src/fi_usnic.h \
+	prov/usnic/src/fi_ext_usnic.h \
 	prov/usnic/src/usdf.h \
 	prov/usnic/src/usdf_av.c \
 	prov/usnic/src/usdf_av.h \
@@ -186,19 +206,23 @@ _usnic_files = \
 
 _usnic_cppflags = \
         -D__LIBUSNIC__ \
-        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(USNIC_LIBNL_CPPFLAGS) \
+        -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_libnl_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
+
+rdmainclude_HEADERS += \
+	prov/usnic/src/fi_ext_usnic.h
 
 if HAVE_USNIC_DL
 pkglib_LTLIBRARIES += libusnic-fi.la
 libusnic_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(_usnic_cppflags)
 libusnic_fi_la_SOURCES = $(_usnic_files) $(common_srcs)
-libusnic_fi_la_LIBADD = $(linkback)
 libusnic_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libusnic_fi_la_LIBADD = $(linkback) $(usnic_libnl_LIBS)
 libusnic_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_USNIC_DL
-AM_CPPFLAGS += $(_usnic_cppflags)
 src_libfabric_la_SOURCES += $(_usnic_files)
+src_libfabric_la_CPPFLAGS += $(_usnic_cppflags)
+src_libfabric_la_LIBADD += $(usnic_libnl_LIBS)
 endif !HAVE_USNIC_DL
 
 endif HAVE_USNIC
@@ -229,11 +253,16 @@ _psm_files = \
 if HAVE_PSM_DL
 pkglib_LTLIBRARIES += libpsmx-fi.la
 libpsmx_fi_la_SOURCES = $(_psm_files) $(common_srcs)
-libpsmx_fi_la_LIBADD = $(linkback)
-libpsmx_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
+libpsmx_fi_la_CPPFLAGS = $(AM_CPPFLAGS) $(psm_CPPFLAGS)
+libpsmx_fi_la_LDFLAGS = \
+    -module -avoid-version -shared -export-dynamic $(psm_LDFLAGS)
+libpsmx_fi_la_LIBADD = $(linkback) $(psm_LIBS)
 libpsmx_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_PSM_DL
 src_libfabric_la_SOURCES += $(_psm_files)
+src_libfabric_la_CPPFLAGS += $(psm_CPPFLAGS)
+src_libfabric_la_LDFLAGS += $(psm_LDFLAGS)
+src_libfabric_la_LIBADD += $(psm_LIBS)
 endif !HAVE_PSM_DL
 
 endif HAVE_PSM
@@ -257,13 +286,11 @@ endif !HAVE_GNI_DL
 
 endif HAVE_GNI
 
-src_libfabric_la_LDFLAGS = -version-info 1 -export-dynamic \
+src_libfabric_la_LDFLAGS += -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
 src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
 
-rdmaincludedir = $(includedir)/rdma
-
-rdmainclude_HEADERS = \
+rdmainclude_HEADERS += \
 	$(top_srcdir)/include/rdma/fabric.h \
 	$(top_srcdir)/include/rdma/fi_atomic.h \
 	$(top_srcdir)/include/rdma/fi_cm.h \

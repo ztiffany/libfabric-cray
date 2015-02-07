@@ -97,11 +97,11 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	psm_uuid_t uuid;
 	int err = -ENOMEM;
 
-	psmx_debug("%s\n", __func__);
+	PSMX_DEBUG("%s\n", __func__);
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
-		psmx_debug("%s: a domain has been opened for the fabric\n");
+		PSMX_DEBUG("%s: a domain has been opened for the fabric\n");
 		return -EBUSY;
 	}
 
@@ -180,25 +180,23 @@ err_out:
 
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
-	int rma_target = 1;
-
-	if ((ep_cap & (FI_READ | FI_WRITE)) && 
-	    !(ep_cap & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
-		rma_target = 0;
-
 	if ((ep_cap & PSMX_CAPS) != ep_cap)
 		return -EINVAL;
 
-	if ((ep_cap & FI_TAGGED) && domain->tagged_ep)
+	if ((ep_cap & FI_TAGGED) && domain->tagged_ep &&
+	    fi_recv_allowed(ep_cap))
 		return -EBUSY;
 
-	if ((ep_cap & FI_MSG) && domain->msg_ep)
+	if ((ep_cap & FI_MSG) && domain->msg_ep &&
+	    fi_recv_allowed(ep_cap))
 		return -EBUSY;
 
-	if ((ep_cap & FI_RMA) && rma_target && domain->rma_ep)
+	if ((ep_cap & FI_RMA) && domain->rma_ep &&
+	    fi_rma_target_allowed(ep_cap))
 		return -EBUSY;
 
-	if ((ep_cap & FI_ATOMICS) && rma_target && domain->atomics_ep)
+	if ((ep_cap & FI_ATOMICS) && domain->atomics_ep &&
+	    fi_rma_target_allowed(ep_cap))
 		return -EBUSY;
 
 	return 0;
@@ -207,7 +205,6 @@ int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep)
 {
 	uint64_t ep_cap = 0;
-	int rma_target = 1;
 
 	if (ep)
 		ep_cap = ep->caps;
@@ -230,20 +227,16 @@ int psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep
 		domain->am_initialized = 1;
 	}
 
-	if ((ep_cap & (FI_READ | FI_WRITE)) && 
-	    !(ep_cap & (FI_REMOTE_READ | FI_REMOTE_WRITE)))
-		rma_target = 0;
-
-	if ((ep_cap & FI_RMA) && rma_target)
+	if ((ep_cap & FI_RMA) && fi_rma_target_allowed(ep_cap))
 		domain->rma_ep = ep;
 
-	if ((ep_cap & FI_ATOMICS) && rma_target)
+	if ((ep_cap & FI_ATOMICS) && fi_rma_target_allowed(ep_cap))
 		domain->atomics_ep = ep;
 
-	if (ep_cap & FI_TAGGED)
+	if ((ep_cap & FI_TAGGED) && fi_recv_allowed(ep_cap))
 		domain->tagged_ep = ep;
 
-	if (ep_cap & FI_MSG)
+	if ((ep_cap & FI_MSG) && fi_recv_allowed(ep_cap))
 		domain->msg_ep = ep;
 
 	return 0;

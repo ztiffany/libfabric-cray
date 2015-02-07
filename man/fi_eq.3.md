@@ -12,6 +12,9 @@ fi_eq \- Event queue operations
 fi_eq_open / fi_close
 : Open/close an event queue
 
+fi_control
+: Control operation of EQ
+
 fi_eq_read / fi_eq_readerr
 : Read an event from an event queue
 
@@ -82,6 +85,12 @@ const char * fi_eq_strerror(struct fid_eq *eq, int prov_errno,
 
 *flags*
 : Additional flags to apply to the operation
+
+*command*
+: Command of control operation to perform on EQ.
+
+*arg*
+: Optional control argument
 
 *prov_errno*
 : Provider specific error value
@@ -181,9 +190,11 @@ struct fi_eq_attr {
 
 ## fi_close
 
-The fi_close call releases all resources associated with an event
-queue.  The EQ must not be bound to any other resources prior to being
-closed.  Any events which remain on the EQ when it is closed are lost.
+The fi_close call releases all resources associated with an event queue.  Any
+events which remain on the EQ when it is closed are lost.
+
+The EQ must not be bound to any other objects prior to being closed, otherwise
+the call will return -FI_EBUSY.
 
 ## fi_control
 
