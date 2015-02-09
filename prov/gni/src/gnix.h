@@ -148,6 +148,9 @@ extern "C"
                                     FI_REMOTE_READ |\
                                     FI_REMOTE_WRITE) 
 
+/*
+ * if this has to be changed, check gnix_getinfo, etc.
+ */
 #define GNIX_EP_MSG_CAPS          GNIX_EP_RDM_CAPS
 
 #define GNIX_MAX_MSG_SIZE         ((0x1ULL << 32) - 1)

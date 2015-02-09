@@ -124,7 +124,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	int ret = 0;
-	int caps = 0;
 	int mode = GNIX_FAB_MODES;
 	struct fi_info *gnix_info;
 	struct gnix_ep_name *dest_addr = NULL;
@@ -239,7 +238,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 */
         	}
 
-                caps = hints->caps;
 	}
 
 	/*
@@ -269,7 +267,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->next = NULL;
 	gnix_info->ep_type = FI_EP_RDM;
-	gnix_info->caps = (hints && hints->caps) ? hints->caps : caps;
+	gnix_info->caps = GNIX_EP_RDM_CAPS;
 	gnix_info->mode = mode;
 	gnix_info->addr_format = FI_ADDR_GNI;
 	gnix_info->src_addrlen = 0;
