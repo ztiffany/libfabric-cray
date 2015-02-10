@@ -1,4 +1,6 @@
 /*
+ * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -30,14 +32,28 @@
  * SOFTWARE.
  */
 
-//
-// Endpoint common code
-//
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <netinet/tcp.h>
+#include <poll.h>
+#include <stdarg.h>
+#include <stddef.h>
+#include <stdio.h>
 #include <string.h>
+#include <sys/select.h>
+#include <sys/socket.h>
+#include <sys/types.h>
+#include <sys/time.h>
+#include <unistd.h>
+#include <stdlib.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
 
-
+int gnix_log_level = GNIX_ERROR;

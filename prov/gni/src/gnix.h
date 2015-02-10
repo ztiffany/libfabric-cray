@@ -62,6 +62,7 @@ extern "C"
 #include <fi_list.h>
 #include "gni_pub.h"
 #include "ccan/list.h"
+#include "gnix_util.h"
 
 #define GNI_MAJOR_VERSION 0
 #define GNI_MINOR_VERSION 5
@@ -69,6 +70,8 @@ extern "C"
 /*
  * useful macros
  */
+
+#define PFX "libfabric:gni"
 
 #ifndef likely
 #define likely(x)   __builtin_expect((x),1)
@@ -110,6 +113,10 @@ extern "C"
  * for RDM and MSG (future) endpoint types.
  */
 
+/*
+ * see capabilities section in fi_getinfo.3
+ */
+
 #define GNIX_EP_RDM_CAPS         (FI_MSG | \
                                   FI_RMA | \
                                   FI_TAGGED | \
@@ -117,23 +124,50 @@ extern "C"
                                   FI_BUFFERED_RECV | \
                                   FI_DIRECTED_RECV | \
                                   FI_MULTI_RECV | \
+                                  FI_INJECT | \
                                   FI_SOURCE | \
                                   FI_READ | FI_WRITE | \
                                   FI_SEND | FI_RECV | \
                                   FI_REMOTE_READ | FI_REMOTE_WRITE | \
                                   FI_REMOTE_COMPLETE | \
                                   FI_CANCEL |\
-                                  FI_MORE )               /* optimization, see fi_msg.3 */
-      
-
-#define GNIX_EP_MSG_CAPS          GNIX_EP_RDM_CAPS
+                                  FI_FENCE )
 
 /*
- * Cray gni provider will support the following fabric interface modes (see fi_getinfo.3 man page)
+ * see Operations flags in fi_endpoint.3
+ */
+
+#define GNIX_EP_OP_FLAGS          ( FI_MULTI_RECV |\
+                                    FI_BUFFERED_RECV |\
+                                    FI_COMPLETION |\
+                                    FI_REMOTE_COMPLETE |\
+                                    FI_READ |\
+                                    FI_WRITE |\
+                                    FI_SEND |\
+                                    FI_RECV |\
+                                    FI_REMOTE_READ |\
+                                    FI_REMOTE_WRITE) 
+
+/*
+ * if this has to be changed, check gnix_getinfo, etc.
+ */
+#define GNIX_EP_MSG_CAPS          GNIX_EP_RDM_CAPS
+
+#define GNIX_MAX_MSG_SIZE         ((0x1ULL << 32) - 1)
+#define GNIX_INJECT_SIZE          64
+
+/*
+ * Cray gni provider will require the following fabric interface modes (see fi_getinfo.3 man page)
  */
 #define GNIX_FAB_MODES           (FI_CONTEXT |  \
                                   FI_LOCAL_MR | \
                                   FI_PROV_MR_ATTR)
+
+/*
+ * fabric modes that GNI provider doesn't need 
+ */
+
+#define GNIX_FAB_MODES_CLEAR      (FI_MSG_PREFIX | FI_ASYNC_IOV)
 
 /*
  * gnix address format - used for fi_send/fi_recv, etc.
@@ -168,6 +202,15 @@ enum gnix_progress_type {
         GNIX_PRG_NON_BLOCKING
 };
 
+
+/*
+ * simple struct for gnix fabric, may add more stuff here later
+ */
+
+struct gnix_fabric {
+    struct fid_fabric fab_fid;
+    atomic_t ref;
+};
 
 /*
  * a gnix_domain is associated with one cdm and one nic
@@ -270,14 +313,21 @@ struct gnix_rdm_ep {
 };
 
 /*
+ * globals
+ */
+
+extern const char const gnix_fab_name[];
+
+/*
  * prototypes 
  */
 
+int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+                     struct fid_domain **domain, void *context);
 int gnix_rdm_getinfo(uint32_t version, const char *node, const char *service,
-		     uint64_t flags, struct fi_info *hints,
-                     struct fi_info **info);
-
+		     uint64_t flags, struct fi_info *hints, struct fi_info **info);
 struct fi_info *gnix_fi_info(enum fi_ep_type ep_type, struct fi_info *hints);
+int gnix_verify_domain_attr(struct fi_domain_attr *attr);
 
 #ifdef __cplusplus 
 } /* extern "C" */

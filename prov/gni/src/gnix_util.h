@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,14 +30,41 @@
  * SOFTWARE.
  */
 
-//
-// Endpoint common code
-//
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#include <stdlib.h>
-#include <string.h>
+#ifndef _GNIX_UTIL_H_
+#define _GNIX_UTIL_H_
 
-#include "gnix.h"
-#include "gnix_util.h"
+#include <stdio.h>
 
+#define GNIX_ERROR (1)
+#define GNIX_WARN (2)
+#define GNIX_INFO (3)
+
+extern int gnix_log_level;
+
+#define GNIX_LOG_INFO(...) do {						\
+		if (gnix_log_level >= GNIX_INFO) {			\
+			fprintf(stderr, "[GNIX_INFO - %s:%d]: ", __func__, __LINE__); \
+			fprintf(stderr, __VA_ARGS__);			\
+		}							\
+	} while (0)
+
+#define GNIX_LOG_WARN(...) do {						\
+		if (gnix_log_level >= GNIX_WARN) {			\
+			fprintf(stderr, "[GNIX_WARN - %s:%d]: ", __func__, __LINE__); \
+			fprintf(stderr, __VA_ARGS__);			\
+		}							\
+	} while (0)
+
+#define GNIX_LOG_ERROR(...) do {					\
+		if (gnix_log_level >= GNIX_ERROR) {			\
+			fprintf(stderr, "[GNIX_ERROR - %s:%d]: ", __func__, __LINE__); \
+			fprintf(stderr, __VA_ARGS__);			\
+		}							\
+	} while (0)
+
+#endif
 
