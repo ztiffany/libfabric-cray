@@ -1,0 +1,18 @@
+language: c
+
+compiler:
+  - gcc
+
+before_install:
+  - git clone https://github.com/bturrubiates/ugni-build.git;
+    pushd ugni-build;
+    sudo tar -C / -xzvf ugni.build.tgz;
+    popd
+
+os:
+  - linux
+
+env:
+  - PKG_CONFIG_PATH="/opt/cray/ugni/default/lib64/pkgconfig:/opt/cray/gni-headers/default/lib64/pkgconfig"
+
+script: ./autogen.sh && ./configure && make V=1
