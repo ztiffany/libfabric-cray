@@ -106,8 +106,6 @@ static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
 			 * check exact match of ip addr
 			 */
 			if(!strcmp(fnd_ip_addr,ip_addr)) {
-				fprintf(stderr,"found a match %s "
-					"%s\n",fnd_ip_addr, ip_addr);
 
 	                        scount = sscanf(mac_str, "00:01:01:%02x:%02x:%02x", &w, &x, &y);
 	                        if (scount != 3) {

@@ -262,7 +262,7 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 			p, 64);
 		break;
 	case FI_ADDR_GNI:  /*TODO: eventually something better */
-		sprintf(p, "0x%llx",*(uint64_t *)addr);
+		sprintf(p, "0x%lx",*(uint64_t *)addr);
 		break;
 	default:
 		sprintf(p, "%p", addr);
