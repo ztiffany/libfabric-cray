@@ -75,7 +75,7 @@ static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
         int ret = -FI_ENODATA;   /* return this if no ipgogif for this ip-addr found */
         FILE *fd=NULL;
         char line[BUF_SIZE], *tmp;
-        char dummy[64],iface[64];
+        char dummy[64],iface[64],fnd_ip_addr[64];
         char mac_str[64];
         int w,x,y;
 
@@ -95,23 +95,30 @@ static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
                 if ((strstr(line,ip_addr) != NULL) && (strstr(line,"ipogif") != NULL)) {
 
                         ret = 0;
-                        scount = sscanf(line,"%s%s%s%s%s%s",dummy,dummy,dummy,mac_str,dummy,iface);
+                        scount = sscanf(line,"%s%s%s%s%s%s",fnd_ip_addr,dummy,
+					dummy,mac_str,dummy,iface);
                         if (scount != 6) {
                                 ret = -EIO;
                                 goto err;
                         }
 
-                        scount = sscanf(mac_str, "00:01:01:%02x:%02x:%02x", &w, &x, &y);
-                        if (scount != 3) {
-                                ret = -EIO;
-                                goto err;
-                        }
+			/*
+			 * check exact match of ip addr
+			 */
+			if(!strcmp(fnd_ip_addr,ip_addr)) {
 
-                        /*
-                         * mysteries of XE/XC mac to nid mapping, see nid2mac in xt sysutils
-                         */
-
-                        *gni_nic_addr = (w << 16) | (x << 8) | y;
+	                        scount = sscanf(mac_str, "00:01:01:%02x:%02x:%02x", &w, &x, &y);
+	                        if (scount != 3) {
+	                                ret = -EIO;
+	                                goto err;
+	                        }
+	                        /*
+	                         * mysteries of XE/XC mac to nid mapping, see nid2mac in xt sysutils
+	                         */
+	                        *gni_nic_addr = (w << 16) | (x << 8) | y;
+				ret = FI_SUCCESS;
+				break;
+			}
                 }
         }
 
@@ -124,7 +131,8 @@ err:
  * gnixu name resolution function,
  */
 
-int gnix_resolve_name(const char *node, const char *service, struct gnix_ep_name *resolved_addr)
+int gnix_resolve_name(const char *node, const char *service,
+		      struct gnix_ep_name *resolved_addr)
 {
         int s, rc = 0;
         struct addrinfo *result, *rp;

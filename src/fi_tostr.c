@@ -261,6 +261,9 @@ static void fi_tostr_addr(char *buf, uint32_t addr_format,
 		inet_ntop(AF_INET6, &((struct sockaddr_in6 *)addr)->sin6_addr,
 			p, 64);
 		break;
+	case FI_ADDR_GNI:  /*TODO: eventually something better */
+		sprintf(p, "0x%lx",*(uint64_t *)addr);
+		break;
 	default:
 		sprintf(p, "%p", addr);
 		break;
