@@ -126,22 +126,30 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	int ret = 0;
 	int mode = GNIX_FAB_MODES;
 	struct fi_info *gnix_info;
-	struct gnix_ep_name *dest_addr = NULL;
+	struct gnix_ep_name *dest_addr = NULL, *src_addr = NULL, *addr = NULL;
 
-        /*
-         * the code below for resolving a node/service to what
-         * will be a gnix_ep_name address is not fully implemented,
-         * but put a place holder in place 
-         */
-
-	if (node && !(flags & FI_SOURCE)) {
-		dest_addr = (struct gnix_ep_name *)malloc(sizeof(*dest_addr));
-                if (dest_addr == NULL) {
-                	ret = -FI_ENOMEM;
+	/*
+	 * the code below for resolving a node/service to what
+	 * will be a gnix_ep_name address is not fully implemented,
+	 * but put a place holder in place
+	 */
+	if (node) {
+		addr = malloc(sizeof(*addr));
+		if (!addr) {
+			ret = -FI_ENOMEM;
 			goto err;
 		}
-		ret = gnix_resolve_name(node,service,dest_addr);
-		if (ret) goto err;
+
+		ret = gnix_resolve_name(node, service, addr);
+		if (ret) {
+			goto err;
+		}
+
+		if (flags & FI_SOURCE) {
+			src_addr = addr;
+		} else {
+			dest_addr = addr;
+		}
 	}
 
         if (hints) {
@@ -270,9 +278,9 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->caps = GNIX_EP_RDM_CAPS;
 	gnix_info->mode = mode;
 	gnix_info->addr_format = FI_ADDR_GNI;
-	gnix_info->src_addrlen = 0;
+	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
 	gnix_info->dest_addrlen = sizeof(struct gnix_ep_name);
-	gnix_info->src_addr = NULL;
+	gnix_info->src_addr = src_addr;
 	gnix_info->dest_addr = dest_addr;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
 	gnix_info->fabric_attr->prov_name = strdup(gnix_fab_name); /* let's consider gni copyrighted :) */
