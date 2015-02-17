@@ -32,7 +32,7 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <errno.h>
@@ -67,9 +67,9 @@ const struct fi_fabric_attr gnix_fabric_attr = {
 static struct fi_ops_fabric gnix_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = gnix_domain_open,
-	.passive_ep = NULL,          /* TODO: need to define for FI_EP_MSG */
-	.eq_open = NULL,             /* TODO: need to define for FI_EP_MSG */
-	.wait_open = NULL,           /* TODO: what's this about */
+	.passive_ep = NULL, /* TODO: need to define for FI_EP_MSG */
+	.eq_open = NULL,    /* TODO: need to define for FI_EP_MSG */
+	.wait_open = NULL,  /* TODO: what's this about */
 };
 
 static int gnix_fabric_close(fid_t fid)
@@ -97,8 +97,8 @@ static struct fi_ops gnix_fab_fi_ops = {
  * define methods needed for the GNI fabric provider
  */
 
-static int gnix_fabric(struct fi_fabric_attr *attr,
-		       struct fid_fabric **fabric, void *context)
+static int gnix_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
+		       void *context)
 {
 	struct gnix_fabric *fab;
 
@@ -121,7 +121,8 @@ static int gnix_fabric(struct fi_fabric_attr *attr,
 }
 
 static int gnix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints, struct fi_info **info)
+			uint64_t flags, struct fi_info *hints,
+			struct fi_info **info)
 {
 	int ret = 0;
 	int mode = GNIX_FAB_MODES;
@@ -152,32 +153,32 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
-        if (hints) {
+	if (hints) {
 
-                /*
-                 * check for endpoint type, only support FI_EP_RDM for now
-                 */
+		/*
+		 * check for endpoint type, only support FI_EP_RDM for now
+		 */
 
-                switch (hints->ep_type) {
-                case FI_EP_UNSPEC:
-                case FI_EP_RDM:
-                        break;
-                default:
+		switch (hints->ep_type) {
+		case FI_EP_UNSPEC:
+		case FI_EP_RDM:
+			break;
+		default:
 			ret = -FI_ENODATA;
-                        goto err;
-                }
+			goto err;
+		}
 
 		/*
 		 * check the mode field
 		 */
 
 		if (hints->mode) {
-		        if ((hints->mode & GNIX_FAB_MODES) != GNIX_FAB_MODES) {
-		        	ret = -FI_ENODATA;
-		        	goto err;
-		        }
+			if ((hints->mode & GNIX_FAB_MODES) != GNIX_FAB_MODES) {
+				ret = -FI_ENODATA;
+				goto err;
+			}
 			mode = hints->mode & ~GNIX_FAB_MODES_CLEAR;
-    		}
+		}
 
 		if ((hints->caps & GNIX_EP_RDM_CAPS) != hints->caps) {
 			goto err;
@@ -201,51 +202,53 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			if (hints->ep_attr->rx_ctx_cnt > 1) {
 				ret = -FI_ENODATA;
 				goto err;
-       	  		}
-   		}
+			}
+		}
 
 		if (hints->tx_attr &&
-			(hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
-				hints->tx_attr->op_flags) {
+		    (hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
+			hints->tx_attr->op_flags) {
 			ret = -FI_ENODATA;
 			goto err;
-    		}
+		}
 
 		if (hints->rx_attr &&
-			(hints->rx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
+		    (hints->rx_attr->op_flags & GNIX_EP_OP_FLAGS) !=
 			hints->rx_attr->op_flags) {
 			ret = -FI_ENODATA;
 			goto err;
 		}
 
 		if (hints->fabric_attr && hints->fabric_attr->name &&
-			strncmp(hints->fabric_attr->name, gnix_fab_name, strlen(gnix_fab_name))) {
+		    strncmp(hints->fabric_attr->name, gnix_fab_name,
+			    strlen(gnix_fab_name))) {
 			ret = -FI_ENODATA;
 			goto err;
 		}
 
 		/* TODO: use hardwared kgni const string */
 		if (hints->domain_attr && hints->domain_attr->name &&
-			strncmp(hints->domain_attr->name, gnix_dom_name, strlen(gnix_dom_name))) {
-                        ret = -FI_ENODATA;
-                        goto err;
+		    strncmp(hints->domain_attr->name, gnix_dom_name,
+			    strlen(gnix_dom_name))) {
+			ret = -FI_ENODATA;
+			goto err;
 		}
 
 		if (hints->ep_attr) {
-	                if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
-	                        ret = -FI_ENODATA;
-	                        goto err;
-	                }
-                	if (hints->ep_attr->inject_size > GNIX_INJECT_SIZE) {
-                        	ret = -FI_ENODATA;
-                        	goto err;
-                	}
-/*
- * TODO: tag matching
-                max_tag_value = fi_tag_bits(hints->ep_attr->mem_tag_format);
-*/
-        	}
-
+			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
+				ret = -FI_ENODATA;
+				goto err;
+			}
+			if (hints->ep_attr->inject_size > GNIX_INJECT_SIZE) {
+				ret = -FI_ENODATA;
+				goto err;
+			}
+			/*
+			 * TODO: tag matching
+			 max_tag_value =
+			 fi_tag_bits(hints->ep_attr->mem_tag_format);
+			 */
+		}
 	}
 
 	/*
@@ -255,15 +258,18 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info = fi_allocinfo_internal();
 	if (gnix_info == NULL) {
 		ret = -FI_ENOMEM;
-	        goto err;
+		goto err;
 	}
 
 	gnix_info->ep_attr->protocol = FI_PROTO_GNI;
 	gnix_info->ep_attr->max_msg_size = GNIX_MAX_MSG_SIZE;
 	gnix_info->ep_attr->inject_size = GNIX_INJECT_SIZE;
-	gnix_info->ep_attr->total_buffered_recv = ~(0ULL); /* TODO: need to work on this */
-	gnix_info->ep_attr->mem_tag_format = 0x0;          /* TODO: need to work on this */
-	gnix_info->ep_attr->msg_order = FI_ORDER_SAS;      /* TODO: remember this when implementing sends */
+	gnix_info->ep_attr->total_buffered_recv =
+	    ~(0ULL); /* TODO: need to work on this */
+	gnix_info->ep_attr->mem_tag_format =
+	    0x0; /* TODO: need to work on this */
+	gnix_info->ep_attr->msg_order =
+	    FI_ORDER_SAS; /* TODO: remember this when implementing sends */
 	gnix_info->ep_attr->comp_order = FI_ORDER_NONE;
 	gnix_info->ep_attr->tx_ctx_cnt = 1;
 	gnix_info->ep_attr->rx_ctx_cnt = 1;
@@ -271,7 +277,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->threading = FI_THREAD_COMPLETION;
 	gnix_info->domain_attr->control_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
-	gnix_info->domain_attr->name = strdup(gnix_dom_name);  /* only one aries per node */
+	gnix_info->domain_attr->name =
+	    strdup(gnix_dom_name); /* only one aries per node */
 
 	gnix_info->next = NULL;
 	gnix_info->ep_type = FI_EP_RDM;
@@ -283,26 +290,34 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->src_addr = src_addr;
 	gnix_info->dest_addr = dest_addr;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
-	gnix_info->fabric_attr->prov_name = strdup(gnix_fab_name); /* let's consider gni copyrighted :) */
+	gnix_info->fabric_attr->prov_name =
+	    strdup(gnix_fab_name); /* let's consider gni copyrighted :) */
 
 	gnix_info->tx_attr->caps = gnix_info->caps;
 	gnix_info->tx_attr->mode = gnix_info->mode;
-	gnix_info->tx_attr->op_flags = (hints && hints->tx_attr && hints->tx_attr->op_flags)
-                    ? hints->tx_attr->op_flags : GNIX_EP_OP_FLAGS;
+	gnix_info->tx_attr->op_flags =
+	    (hints && hints->tx_attr && hints->tx_attr->op_flags)
+		? hints->tx_attr->op_flags
+		: GNIX_EP_OP_FLAGS;
 	gnix_info->tx_attr->msg_order = gnix_info->ep_attr->msg_order;
 	gnix_info->tx_attr->comp_order = gnix_info->ep_attr->comp_order;
 	gnix_info->tx_attr->inject_size = gnix_info->ep_attr->inject_size;
-	gnix_info->tx_attr->size = UINT64_MAX;    /* TODO: probably something else here */
+	gnix_info->tx_attr->size =
+	    UINT64_MAX; /* TODO: probably something else here */
 	gnix_info->tx_attr->iov_limit = 1;
 
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
-	gnix_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
-                    ? hints->tx_attr->op_flags : GNIX_EP_OP_FLAGS;
+	gnix_info->rx_attr->op_flags =
+	    (hints && hints->rx_attr && hints->tx_attr->op_flags)
+		? hints->tx_attr->op_flags
+		: GNIX_EP_OP_FLAGS;
 	gnix_info->rx_attr->msg_order = gnix_info->ep_attr->msg_order;
 	gnix_info->rx_attr->comp_order = gnix_info->ep_attr->comp_order;
-	gnix_info->rx_attr->total_buffered_recv = gnix_info->ep_attr->total_buffered_recv;
-	gnix_info->rx_attr->size = UINT64_MAX;   /* TODO: probably something else here */
+	gnix_info->rx_attr->total_buffered_recv =
+	    gnix_info->ep_attr->total_buffered_recv;
+	gnix_info->rx_attr->size =
+	    UINT64_MAX; /* TODO: probably something else here */
 	gnix_info->rx_attr->iov_limit = 1;
 
 	*info = gnix_info;
@@ -311,21 +326,17 @@ err:
 	return ret;
 }
 
-
-
 static void gnix_fini(void)
 {
 }
 
 struct fi_provider gnix_prov = {
 	.name = "gni",
-	.version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION), 
+	.version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = gnix_getinfo,
 	.fabric = gnix_fabric,
-	.cleanup = gnix_fini
-};
-
+	.cleanup = gnix_fini};
 
 GNI_INI
 {
@@ -355,16 +366,17 @@ GNI_INI
 		return NULL;
 	}
 
-	assert(num_devices == 1);  /* sanity check that the 1 aries/node holds */
+	assert(num_devices == 1); /* sanity check that the 1 aries/node holds */
 
 	/*
-	 * don't register if available ugni is older than one libfabric was built against
+	 * don't register if available ugni is older than one libfabric was
+	 * built against
 	 */
 
 	status = GNI_GetVersionInformation(&lib_version);
 	if ((GNI_GET_MAJOR(lib_version.ugni_version) > GNI_MAJOR_REV) ||
-		((GNI_GET_MAJOR(lib_version.ugni_version) == GNI_MAJOR_REV) &&
-		GNI_GET_MINOR(lib_version.ugni_version) >= GNI_MINOR_REV)) {
+	    ((GNI_GET_MAJOR(lib_version.ugni_version) == GNI_MAJOR_REV) &&
+	     GNI_GET_MINOR(lib_version.ugni_version) >= GNI_MINOR_REV)) {
 		provider = &gnix_prov;
 	}
 
