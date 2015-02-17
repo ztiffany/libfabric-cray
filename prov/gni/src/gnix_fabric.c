@@ -380,6 +380,5 @@ GNI_INI
 		provider = &gnix_prov;
 	}
 
-        fprintf(stderr,"returning provider %p\n",provider);
 	return (provider);
 }
