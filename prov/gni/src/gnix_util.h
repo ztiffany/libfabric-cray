@@ -31,7 +31,7 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #ifndef _GNIX_UTIL_H_
@@ -45,26 +45,31 @@
 
 extern int gnix_log_level;
 
-#define GNIX_LOG_INFO(...) do {						\
-		if (gnix_log_level >= GNIX_INFO) {			\
-			fprintf(stderr, "[GNIX_INFO - %s:%d]: ", __func__, __LINE__); \
-			fprintf(stderr, __VA_ARGS__);			\
-		}							\
+#define GNIX_LOG_INFO(...)                                                     \
+	do {                                                                   \
+		if (gnix_log_level >= GNIX_INFO) {                             \
+			fprintf(stderr, "[GNIX_INFO - %s:%d]: ", __func__,     \
+				__LINE__);                                     \
+			fprintf(stderr, __VA_ARGS__);                          \
+		}                                                              \
 	} while (0)
 
-#define GNIX_LOG_WARN(...) do {						\
-		if (gnix_log_level >= GNIX_WARN) {			\
-			fprintf(stderr, "[GNIX_WARN - %s:%d]: ", __func__, __LINE__); \
-			fprintf(stderr, __VA_ARGS__);			\
-		}							\
+#define GNIX_LOG_WARN(...)                                                     \
+	do {                                                                   \
+		if (gnix_log_level >= GNIX_WARN) {                             \
+			fprintf(stderr, "[GNIX_WARN - %s:%d]: ", __func__,     \
+				__LINE__);                                     \
+			fprintf(stderr, __VA_ARGS__);                          \
+		}                                                              \
 	} while (0)
 
-#define GNIX_LOG_ERROR(...) do {					\
-		if (gnix_log_level >= GNIX_ERROR) {			\
-			fprintf(stderr, "[GNIX_ERROR - %s:%d]: ", __func__, __LINE__); \
-			fprintf(stderr, __VA_ARGS__);			\
-		}							\
+#define GNIX_LOG_ERROR(...)                                                    \
+	do {                                                                   \
+		if (gnix_log_level >= GNIX_ERROR) {                            \
+			fprintf(stderr, "[GNIX_ERROR - %s:%d]: ", __func__,    \
+				__LINE__);                                     \
+			fprintf(stderr, __VA_ARGS__);                          \
+		}                                                              \
 	} while (0)
 
 #endif
-
