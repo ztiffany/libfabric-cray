@@ -33,7 +33,7 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <stdlib.h>
@@ -45,6 +45,6 @@
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **dom, void *context)
 {
-	return -FI_ENOSYS;  /* TODO: need to implement */
+	/* TODO: need to implement */
+	return -FI_ENOSYS;
 }
-

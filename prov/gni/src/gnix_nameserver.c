@@ -33,7 +33,7 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <errno.h>
@@ -62,127 +62,136 @@
 #define BUF_SIZE 256
 
 /*
- * get gni nic addr from AF_INET  ip addr, also return local device id on same subnet
+ * get gni nic addr from AF_INET  ip addr, also return local device id on same
+ *subnet
  * as the input ip_addr.
  *
  * returns 0 if ipogif entry found
  * otherwise  -errno
  */
-
 static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
 {
-        int scount;
-        int ret = -FI_ENODATA;   /* return this if no ipgogif for this ip-addr found */
-        FILE *fd=NULL;
-        char line[BUF_SIZE], *tmp;
-        char dummy[64],iface[64],fnd_ip_addr[64];
-        char mac_str[64];
-        int w,x,y;
+	int scount;
+	/* return this if no ipgogif for this ip-addr found */
+	int ret = -FI_ENODATA;
+	FILE *fd = NULL;
+	char line[BUF_SIZE], *tmp;
+	char dummy[64], iface[64], fnd_ip_addr[64];
+	char mac_str[64];
+	int w, x, y;
 
-        fd = fopen("/proc/net/arp", "r");
-        if (fd == NULL) return -errno;
+	fd = fopen("/proc/net/arp", "r");
+	if (fd == NULL) {
+		return -errno;
+	}
 
-        if (fd == NULL) return -errno;
+	if (fd == NULL) {
+		return -errno;
+	}
 
-        while (1) {
-                tmp = fgets(line,BUF_SIZE,fd);
-                if (!tmp) break;
+	while (1) {
+		tmp = fgets(line, BUF_SIZE, fd);
+		if (!tmp) {
+			break;
+		}
 
-                /*
-                 * check for a match
-                 */
-
-                if ((strstr(line,ip_addr) != NULL) && (strstr(line,"ipogif") != NULL)) {
-
-                        ret = 0;
-                        scount = sscanf(line,"%s%s%s%s%s%s",fnd_ip_addr,dummy,
-					dummy,mac_str,dummy,iface);
-                        if (scount != 6) {
-                                ret = -EIO;
-                                goto err;
-                        }
+		/*
+		 * check for a match
+		 */
+		if ((strstr(line, ip_addr) != NULL) &&
+		    (strstr(line, "ipogif") != NULL)) {
+			ret = 0;
+			scount = sscanf(line, "%s%s%s%s%s%s", fnd_ip_addr,
+					dummy, dummy, mac_str, dummy, iface);
+			if (scount != 6) {
+				ret = -EIO;
+				goto err;
+			}
 
 			/*
 			 * check exact match of ip addr
 			 */
-			if(!strcmp(fnd_ip_addr,ip_addr)) {
+			if (!strcmp(fnd_ip_addr, ip_addr)) {
 
-	                        scount = sscanf(mac_str, "00:01:01:%02x:%02x:%02x", &w, &x, &y);
-	                        if (scount != 3) {
-	                                ret = -EIO;
-	                                goto err;
-	                        }
-	                        /*
-	                         * mysteries of XE/XC mac to nid mapping, see nid2mac in xt sysutils
-	                         */
-	                        *gni_nic_addr = (w << 16) | (x << 8) | y;
+				scount =
+				    sscanf(mac_str, "00:01:01:%02x:%02x:%02x",
+					   &w, &x, &y);
+				if (scount != 3) {
+					ret = -EIO;
+					goto err;
+				}
+
+				/*
+				 * mysteries of XE/XC mac to nid mapping, see
+				 * nid2mac in xt sysutils
+				 */
+				*gni_nic_addr = (w << 16) | (x << 8) | y;
 				ret = FI_SUCCESS;
 				break;
 			}
-                }
-        }
+		}
+	}
 
 err:
-        fclose(fd);
-        return ret;
+	fclose(fd);
+	return ret;
 }
 
 /*
  * gnixu name resolution function,
  */
-
 int gnix_resolve_name(const char *node, const char *service,
 		      struct gnix_ep_name *resolved_addr)
 {
-        int s, rc = 0;
-        struct addrinfo *result, *rp;
-        uint32_t pe = -1;
-        struct addrinfo hints;
-        struct sockaddr_in *sa;
+	int s, rc = 0;
+	struct addrinfo *result, *rp;
+	uint32_t pe = -1;
+	struct addrinfo hints;
+	struct sockaddr_in *sa;
 
-        if (resolved_addr == NULL) {
-                return -FI_EINVAL;
-        }
+	if (resolved_addr == NULL) {
+		return -FI_EINVAL;
+	}
 
-        memset(&hints,0,sizeof hints);
+	memset(&hints, 0, sizeof hints);
 
-        hints.ai_family = AF_INET;           /* don't support IPv6 on XC internal networks */
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_flags = AI_CANONNAME;
+	/* don't support IPv6 on XC internal networks */
+	hints.ai_family = AF_INET;
+	hints.ai_socktype = SOCK_DGRAM;
+	hints.ai_flags = AI_CANONNAME;
 
-        s = getaddrinfo(node, "domain", &hints, &result);
-        if (s != 0) {
-                fprintf(stderr, PFX"getaddrinfo: %s\n", gai_strerror(s));
-                rc = -FI_EINVAL;
-                goto err;
-        }
+	s = getaddrinfo(node, "domain", &hints, &result);
+	if (s != 0) {
+		fprintf(stderr, PFX "getaddrinfo: %s\n", gai_strerror(s));
+		rc = -FI_EINVAL;
+		goto err;
+	}
 
-        for (rp = result; rp != NULL; rp = rp->ai_next) {
-                assert (rp->ai_addr->sa_family == AF_INET);
-                sa = (struct sockaddr_in *)rp->ai_addr;
-                rc = gnixu_get_pe_from_ip(inet_ntoa(sa->sin_addr),&pe);
-                if (!rc) {
-                        break;
-                }
-        }
+	for (rp = result; rp != NULL; rp = rp->ai_next) {
+		assert(rp->ai_addr->sa_family == AF_INET);
+		sa = (struct sockaddr_in *)rp->ai_addr;
+		rc = gnixu_get_pe_from_ip(inet_ntoa(sa->sin_addr), &pe);
+		if (!rc) {
+			break;
+		}
+	}
 
-        if (pe == -1) {
-                rc = -FI_EADDRNOTAVAIL;
-                goto err;
-        }
+	if (pe == -1) {
+		rc = -FI_EADDRNOTAVAIL;
+		goto err;
+	}
 
-        /*
-         * try to fill in the gnix_ep_name struct with what we can now
-         */
+	/*
+	 * try to fill in the gnix_ep_name struct with what we can now
+	 */
+	memset(resolved_addr, 0, sizeof(struct gnix_ep_name));
 
-        memset(resolved_addr,0,sizeof(struct gnix_ep_name));
-
-        resolved_addr->gnix_addr.device_addr = pe;
-        resolved_addr->gnix_addr.cdm_id = 0; /* TODO: have to write a nameserver to get this info */
-        resolved_addr->name_type = 0;        /* TODO: likely depend on service? */
-        freeaddrinfo(result);
+	resolved_addr->gnix_addr.device_addr = pe;
+	/* TODO: have to write a nameserver to get this info */
+	resolved_addr->gnix_addr.cdm_id = 0;
+	/* TODO: likely depend on service? */
+	resolved_addr->name_type = 0;
+	freeaddrinfo(result);
 err:
-        return rc;
+	return rc;
 }
-
-

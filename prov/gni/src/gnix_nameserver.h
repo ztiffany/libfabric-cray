@@ -35,8 +35,7 @@
 #define _GNIX_NAMESERVER_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #include "gnix.h"
@@ -49,7 +48,8 @@ extern "C"
  * prototypes
  */
 
-int gnix_resolve_name(const char *node, const char *service, struct gnix_ep_name *dest_addr);
+int gnix_resolve_name(const char *node, const char *service,
+		      struct gnix_ep_name *dest_addr);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -34,4 +34,3 @@
 #include <string.h>
 
 #include "gnix.h"
-

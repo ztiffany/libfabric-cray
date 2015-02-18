@@ -33,11 +33,8 @@
 //
 // Endpoint common code
 //
-
 #include <stdlib.h>
 #include <string.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
-
-

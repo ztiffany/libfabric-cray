@@ -35,8 +35,7 @@
 #define _GNIX_H_
 
 #ifdef __cplusplus
-extern "C"
-{
+extern "C" {
 #endif
 
 #if HAVE_CONFIG_H
@@ -70,22 +69,21 @@ extern "C"
 /*
  * useful macros
  */
-
 #define PFX "libfabric:gni"
 
 #ifndef likely
-#define likely(x)   __builtin_expect((x),1)
+#define likely(x) __builtin_expect((x), 1)
 #endif
 #ifndef unlikely
-#define unlikely(x) __builtin_expect((x),0)
+#define unlikely(x) __builtin_expect((x), 0)
 #endif
 
 #ifndef FLOOR
-#define FLOOR(a,b)      ((long long)(a) - ( ((long long)(a)) %(b)))
+#define FLOOR(a, b) ((long long)(a) - (((long long)(a)) % (b)))
 #endif
 
 #ifndef CEILING
-#define CEILING(a,b)    ((long long)(a) <= 0LL ? 0 :  (FLOOR((a)-1,b) + (b)))
+#define CEILING(a, b) ((long long)(a) <= 0LL ? 0 : (FLOOR((a)-1, b) + (b)))
 #endif
 
 #ifndef IN
@@ -101,115 +99,90 @@ extern "C"
 #endif
 
 /*
- * Cray gni provider supported flags for fi_getinfo argument for now, needs refining (see fi_getinfo.3 man page)
+ * Cray gni provider supported flags for fi_getinfo argument for now, needs
+ * refining (see fi_getinfo.3 man page)
  */
+#define GNIX_SUPPORTED_FLAGS (FI_NUMERICHOST | FI_SOURCE)
 
-#define GNIX_SUPPORTED_FLAGS (  FI_NUMERICHOST | FI_SOURCE )
-
-#define GNIX_DEFAULT_FLAGS   (0)
+#define GNIX_DEFAULT_FLAGS (0)
 
 /*
- * Cray gni provider will try to support the fabric interface capabilities (see fi_getinfo.3 man page)
+ * Cray gni provider will try to support the fabric interface capabilities (see
+ * fi_getinfo.3 man page)
  * for RDM and MSG (future) endpoint types.
  */
 
 /*
  * see capabilities section in fi_getinfo.3
  */
-
-#define GNIX_EP_RDM_CAPS         (FI_MSG | \
-                                  FI_RMA | \
-                                  FI_TAGGED | \
-                                  FI_ATOMICS | \
-                                  FI_BUFFERED_RECV | \
-                                  FI_DIRECTED_RECV | \
-                                  FI_MULTI_RECV | \
-                                  FI_INJECT | \
-                                  FI_SOURCE | \
-                                  FI_READ | FI_WRITE | \
-                                  FI_SEND | FI_RECV | \
-                                  FI_REMOTE_READ | FI_REMOTE_WRITE | \
-                                  FI_REMOTE_COMPLETE | \
-                                  FI_CANCEL |\
-                                  FI_FENCE )
+#define GNIX_EP_RDM_CAPS                                                       \
+	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_BUFFERED_RECV |         \
+	 FI_DIRECTED_RECV | FI_MULTI_RECV | FI_INJECT | FI_SOURCE | FI_READ |  \
+	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |     \
+	 FI_REMOTE_COMPLETE | FI_CANCEL | FI_FENCE)
 
 /*
  * see Operations flags in fi_endpoint.3
  */
-
-#define GNIX_EP_OP_FLAGS          ( FI_MULTI_RECV |\
-                                    FI_BUFFERED_RECV |\
-                                    FI_COMPLETION |\
-                                    FI_REMOTE_COMPLETE |\
-                                    FI_READ |\
-                                    FI_WRITE |\
-                                    FI_SEND |\
-                                    FI_RECV |\
-                                    FI_REMOTE_READ |\
-                                    FI_REMOTE_WRITE) 
+#define GNIX_EP_OP_FLAGS                                                       \
+	(FI_MULTI_RECV | FI_BUFFERED_RECV | FI_COMPLETION |                    \
+	 FI_REMOTE_COMPLETE | FI_READ | FI_WRITE | FI_SEND | FI_RECV |         \
+	 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
 /*
  * if this has to be changed, check gnix_getinfo, etc.
  */
-#define GNIX_EP_MSG_CAPS          GNIX_EP_RDM_CAPS
+#define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
 
-#define GNIX_MAX_MSG_SIZE         ((0x1ULL << 32) - 1)
-#define GNIX_INJECT_SIZE          64
-
-/*
- * Cray gni provider will require the following fabric interface modes (see fi_getinfo.3 man page)
- */
-#define GNIX_FAB_MODES           (FI_CONTEXT |  \
-                                  FI_LOCAL_MR | \
-                                  FI_PROV_MR_ATTR)
+#define GNIX_MAX_MSG_SIZE ((0x1ULL << 32) - 1)
+#define GNIX_INJECT_SIZE 64
 
 /*
- * fabric modes that GNI provider doesn't need 
+ * Cray gni provider will require the following fabric interface modes (see
+ * fi_getinfo.3 man page)
  */
+#define GNIX_FAB_MODES (FI_CONTEXT | FI_LOCAL_MR | FI_PROV_MR_ATTR)
 
-#define GNIX_FAB_MODES_CLEAR      (FI_MSG_PREFIX | FI_ASYNC_IOV)
+/*
+ * fabric modes that GNI provider doesn't need
+ */
+#define GNIX_FAB_MODES_CLEAR (FI_MSG_PREFIX | FI_ASYNC_IOV)
 
 /*
  * gnix address format - used for fi_send/fi_recv, etc.
  */
-
 struct gnix_address {
-        uint32_t               device_addr;
-        uint32_t               cdm_id;
+	uint32_t device_addr;
+	uint32_t cdm_id;
 };
 
 /*
  * info returned by fi_getname/fi_getpeer - has enough
  * side band info for RDM ep's to be able to connect, etc.
  */
-
 struct gnix_ep_name {
-        struct gnix_address    gnix_addr;
-        struct {
-            uint32_t           name_type:8;
-            uint32_t           unused   :24;
-        };
-        uint64_t               reserved[4];
+	struct gnix_address gnix_addr;
+	struct {
+		uint32_t name_type : 8;
+		uint32_t unused : 24;
+	};
+	uint64_t reserved[4];
 };
 
-       
 /*
  * enum for blocking/non-blocking progress
  */
-
 enum gnix_progress_type {
-        GNIX_PRG_BLOCKING,
-        GNIX_PRG_NON_BLOCKING
+	GNIX_PRG_BLOCKING,
+	GNIX_PRG_NON_BLOCKING
 };
-
 
 /*
  * simple struct for gnix fabric, may add more stuff here later
  */
-
 struct gnix_fabric {
-    struct fid_fabric fab_fid;
-    atomic_t ref;
+	struct fid_fabric fab_fid;
+	atomic_t ref;
 };
 
 /*
@@ -217,119 +190,131 @@ struct gnix_fabric {
  * since a single cdm with a given cookie/cdm_id can only
  * be bound once to a given physical aries nic
  */
-
 struct gnix_domain {
-	struct fid_domain	domain_fid;
-	struct gnix_cdm 	*cdm;
-	struct gnix_nic 	*nic;
-        struct list_head        domain_wq;
-	uint32_t 		device_id;                 
- 	uint32_t		device_addr;
+	struct fid_domain domain_fid;
+	struct gnix_cdm *cdm;
+	struct gnix_nic *nic;
+	struct list_head domain_wq;
+	uint32_t device_id;
+	uint32_t device_addr;
 };
 
 struct gnix_cdm {
-        struct list_node        list;
-        gni_cdm_handle_t        gni_cdm_hndl;
-        struct list_head        nic_list;                  /* list nics this cdm is attached to, TODO: thread safety */
-        uint32_t                inst_id;
-        uint8_t                 ptag;
-        uint32_t                cookie;
-        uint32_t                modes;
-        int                     ref_cnt;                   /* TODO: thread safety */
+	struct list_node list;
+	gni_cdm_handle_t gni_cdm_hndl;
+	/* list nics this cdm is attached to, TODO: thread safety */
+	struct list_head nic_list;
+	uint32_t inst_id;
+	uint8_t ptag;
+	uint32_t cookie;
+	uint32_t modes;
+	/* TODO: thread safety */
+	int ref_cnt;
 };
 
 struct gnix_nic {
-        struct list_node        list;
-	gni_nic_handle_t 	gni_nic_hndl;
-        gni_cq_handle_t         rx_cq;                     /* receive completion queue for hndl */
-        gni_cq_handle_t         rx_cq_blk;                 /* receive completion queue for hndl (blocking) */
-        gni_cq_handle_t         tx_cq;                     /* local(tx) completion queue for hndl */
-        gni_cq_handle_t         tx_cq_blk;                 /* local(tx) completion queue for hndl (blocking) */
-        struct list_head        wqe_active_list;           /* list of wqe's */
-        struct gnix_wqe_list    *wqe_list;                 /* list for managing wqe's */
-        struct list_head        smsg_active_req_list;      /* list of active smsg req's */
-        struct gnix_smsg_req_list *smsg_req_list;            /* list for managing smsg req's */
-        struct list_head        datagram_active_list;      /* list of active datagrams */
-        struct list_head        datagram_free_list;        /* free list of datagrams   */
-        struct list_head        wc_datagram_active_list;   /* list of active wc datagrams   */
-        struct list_head        wc_datagram_free_list;     /* free list of wc datagrams   */
-        struct gnix_cdm         *cdm;                      /* pointer to cdm this nic is attached to */
-        struct gnix_datagram    *datagram_base;            
-        uint32_t                device_id;
-        uint32_t                device_addr;
-        int                     ref_cnt;
+	struct list_node list;
+	gni_nic_handle_t gni_nic_hndl;
+	/* receive completion queue for hndl */
+	gni_cq_handle_t rx_cq;
+	/* receive completion queue for hndl (blocking) */
+	gni_cq_handle_t rx_cq_blk;
+	/* local(tx) completion queue for hndl */
+	gni_cq_handle_t tx_cq;
+	/* local(tx) completion queue for hndl (blocking) */
+	gni_cq_handle_t tx_cq_blk;
+	/* list of wqe's */
+	struct list_head wqe_active_list;
+	/* list for managing wqe's */
+	struct gnix_wqe_list *wqe_list;
+	/* list of active smsg req's */
+	struct list_head smsg_active_req_list;
+	/* list for managing smsg req's */
+	struct gnix_smsg_req_list *smsg_req_list;
+	/* list of active datagrams */
+	struct list_head datagram_active_list;
+	/* free list of datagrams   */
+	struct list_head datagram_free_list;
+	/* list of active wc datagrams   */
+	struct list_head wc_datagram_active_list;
+	/* free list of wc datagrams */
+	struct list_head wc_datagram_free_list;
+	/* pointer to cdm this nic is attached to */
+	struct gnix_cdm *cdm;
+	struct gnix_datagram *datagram_base;
+	uint32_t device_id;
+	uint32_t device_addr;
+	int ref_cnt;
 };
 
 /*
  * CQE struct definitions
  */
-
 struct gnix_cq_entry {
-        struct list_node          list;
-        struct fi_cq_entry        the_entry;
+	struct list_node list;
+	struct fi_cq_entry the_entry;
 };
 
 struct gnix_cq_msg_entry {
-        struct list_node          list;
-        struct fi_cq_msg_entry    the_entry;
+	struct list_node list;
+	struct fi_cq_msg_entry the_entry;
 };
 
 struct gnix_cq_tagged_entry {
-        struct list_node          list;
-        struct fi_cq_tagged_entry the_entry;
+	struct list_node list;
+	struct fi_cq_tagged_entry the_entry;
 };
 
 struct gnix_cq {
-	struct fid_cq		fid;
-	uint64_t		flags;
-	struct gnix_domain	*domain;
-        void                    *free_list_base;
-        struct list_head        entry;
-        struct list_head        err_entry;
-        struct list_head        entry_free_list;
-        int                     (*progress_fn)(struct gnix_cq *);
-        enum fi_cq_format       format;
+	struct fid_cq fid;
+	uint64_t flags;
+	struct gnix_domain *domain;
+	void *free_list_base;
+	struct list_head entry;
+	struct list_head err_entry;
+	struct list_head entry_free_list;
+	int (*progress_fn)(struct gnix_cq *);
+	enum fi_cq_format format;
 };
 
 struct gnix_mem_desc {
-	struct fid_mr		mr_fid;
-	struct gnix_domain	*domain;
-	gni_mem_handle_t        mem_hndl;
+	struct fid_mr mr_fid;
+	struct gnix_domain *domain;
+	gni_mem_handle_t mem_hndl;
 };
 
 /*
  *   gnix_rdm_ep - FI_EP_RDM type ep
  */
-
 struct gnix_rdm_ep {
-	struct fid_ep		ep_fid;
-	struct gnix_domain	*domain;              
-        void                    *vc_cache_hndl; 
-        int                     (*progress_fn)(struct gnix_rdm_ep *, enum gnix_progress_type);        
-        int                     (*rx_progress_fn)(struct gnix_rdm_ep *, 
-                                                  gni_return_t *rc);  /* RX specific progress fn */
-        int                      enabled;
-        uint32_t                 active_post_descs;     /* num. active post descs associated with this ep */
+	struct fid_ep ep_fid;
+	struct gnix_domain *domain;
+	void *vc_cache_hndl;
+	int (*progress_fn)(struct gnix_rdm_ep *, enum gnix_progress_type);
+	/* RX specific progress fn */
+	int (*rx_progress_fn)(struct gnix_rdm_ep *, gni_return_t *rc);
+	int enabled;
+	/* num. active post descs associated with this ep */
+	uint32_t active_post_descs;
 };
 
 /*
  * globals
  */
-
 extern const char const gnix_fab_name[];
 
 /*
- * prototypes 
+ * prototypes
  */
-
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-                     struct fid_domain **domain, void *context);
+		     struct fid_domain **domain, void *context);
 int gnix_rdm_getinfo(uint32_t version, const char *node, const char *service,
-		     uint64_t flags, struct fi_info *hints, struct fi_info **info);
+		     uint64_t flags, struct fi_info *hints,
+		     struct fi_info **info);
 struct fi_info *gnix_fi_info(enum fi_ep_type ep_type, struct fi_info *hints);
 int gnix_verify_domain_attr(struct fi_domain_attr *attr);
 
-#ifdef __cplusplus 
+#ifdef __cplusplus
 } /* extern "C" */
 #endif
 
