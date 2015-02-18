@@ -295,10 +295,13 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->tx_attr->caps = gnix_info->caps;
 	gnix_info->tx_attr->mode = gnix_info->mode;
-	gnix_info->tx_attr->op_flags =
-	    (hints && hints->tx_attr && hints->tx_attr->op_flags)
-		? hints->tx_attr->op_flags
-		: GNIX_EP_OP_FLAGS;
+
+	if(hints && hints->tx_attr && hints->tx_attr->op_flags) {
+		gnix_info->tx_attr->op_flags = hints->tx_attr->op_flags;
+	} else {
+		gnix_info->tx_attr->op_flags = GNIX_EP_OP_FLAGS;
+	}
+
 	gnix_info->tx_attr->msg_order = gnix_info->ep_attr->msg_order;
 	gnix_info->tx_attr->comp_order = gnix_info->ep_attr->comp_order;
 	gnix_info->tx_attr->inject_size = gnix_info->ep_attr->inject_size;
@@ -308,10 +311,13 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
-	gnix_info->rx_attr->op_flags =
-	    (hints && hints->rx_attr && hints->tx_attr->op_flags)
-		? hints->tx_attr->op_flags
-		: GNIX_EP_OP_FLAGS;
+
+	if(hints && hints->rx_attr && hints->rx_attr->op_flags) {
+		gnix_info->rx_attr->op_flags = hints->rx_attr->op_flags;
+	} else {
+		gnix_info->rx_attr->op_flags = GNIX_EP_OP_FLAGS;
+	}
+
 	gnix_info->rx_attr->msg_order = gnix_info->ep_attr->msg_order;
 	gnix_info->rx_attr->comp_order = gnix_info->ep_attr->comp_order;
 	gnix_info->rx_attr->total_buffered_recv =
