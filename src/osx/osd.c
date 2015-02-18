@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,53 +30,20 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_EXT_USNIC_H_
-#define _FI_EXT_USNIC_H_
+#include "osx/osd.h"
 
-#include <stdint.h>
-#include <net/if.h>
+int clock_gettime(clockid_t clk_id, struct timespec *tp) {
+	int retval;
 
-#define FI_PROTO_RUDP 100
+	clock_serv_t cclock;
+	mach_timespec_t mts;
 
-#define FI_EXT_USNIC_INFO_VERSION 1
+	host_get_clock_service(mach_host_self(), clk_id, &cclock);
+	retval = clock_get_time(cclock, &mts);
+	mach_port_deallocate(mach_task_self(), cclock);
 
-/*
- * usNIC specific info
- */
-struct fi_usnic_info_v1 {
-	uint32_t ui_link_speed;
-	uint32_t ui_netmask_be;
-	char ui_ifname[IFNAMSIZ];
+	tp->tv_sec = mts.tv_sec;
+	tp->tv_nsec = mts.tv_nsec;
 
-	uint32_t ui_num_vf;
-	uint32_t ui_qp_per_vf;
-	uint32_t ui_cq_per_vf;
-};
-
-struct fi_usnic_info {
-	uint32_t ui_version;
-	union {
-		struct fi_usnic_info_v1 v1;
-	} ui;
-};
-
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_FABRIC_OPS_1 "fabric_ops 1"
-struct fi_usnic_ops_fabric {
-	size_t size;
-	int (*getinfo)(uint32_t version, struct fid_fabric *fabric,
-				struct fi_usnic_info *info);
-};
-
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_AV_OPS_1 "av_ops 1"
-struct fi_usnic_ops_av {
-	size_t size;
-	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
-};
-
-#endif /* _FI_EXT_USNIC_H_ */
+	return retval;
+}

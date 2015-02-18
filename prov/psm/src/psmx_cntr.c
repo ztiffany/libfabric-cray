@@ -165,6 +165,7 @@ void psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr)
 		}
 
 		free(trigger);
+		trigger = cntr->trigger;
 	}
 
 	pthread_mutex_unlock(&cntr->trigger_lock);
@@ -322,7 +323,7 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 
 	case FI_GETOPSFLAG:
 		if (!arg)
-			return -EINVAL;
+			return -FI_EINVAL;
 		*(uint64_t *)arg = cntr->flags;
 		break;
 
@@ -331,7 +332,7 @@ static int psmx_cntr_control(fid_t fid, int command, void *arg)
 		break;
 
 	default:
-		return -ENOSYS;
+		return -FI_ENOSYS;
 	}
 
 	return ret;
@@ -377,7 +378,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 	default:
 		PSMX_DEBUG("%s: attr->events=%d, supported=%d\n", __func__,
 				attr->events, FI_CNTR_EVENTS_COMP);
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	switch (attr->wait_obj) {
@@ -413,7 +414,7 @@ int psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr_priv = (struct psmx_fid_cntr *) calloc(1, sizeof *cntr_priv);
 	if (!cntr_priv)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->events = events;

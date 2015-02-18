@@ -140,7 +140,6 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
         struct psmx_cq_event *event;
 	struct psmx_epaddr_context *epaddr_context;
 	struct psmx_fid_domain *domain;
-	int msg_len;
 	int copy_len;
 	uint64_t offset;
 	int cmd, eom;
@@ -150,8 +149,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	epaddr_context = psm_epaddr_getctxt(epaddr);
 	if (!epaddr_context) {
-		fprintf(stderr, "%s: NULL context for epaddr %p\n", __func__, epaddr);
-		return -EIO;
+		PSMX_WARN("%s: NULL context for epaddr %p\n", __func__, epaddr);
+		return -FI_EIO;
 	}
 
 	domain = epaddr_context->domain;
@@ -161,9 +160,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 
 	switch (cmd) {
 	case PSMX_AM_REQ_SEND:
-		msg_len = args[0].u32w1;
+		assert(len == args[0].u32w1);
                 offset = args[3].u64;
-                assert(len == msg_len);
 		if (offset == 0) {
 			/* this is the first packet */
 			req = psmx_am_search_and_dequeue_recv(domain, (const void *)epaddr);
@@ -175,7 +173,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			else {
 				unexp = malloc(sizeof(*unexp) + len);
 				if (!unexp) {
-					op_error = -ENOBUFS;
+					op_error = -FI_ENOSPC;
 				}
 				else  {
 					memcpy(unexp->buf, src, len);
@@ -212,8 +210,8 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				req->recv.len_received += copy_len;
 			}
 			else {
-				fprintf(stderr, "%s: NULL recv_req in follow-up packets.\n", __func__);
-				op_error = -EBADMSG;
+				PSMX_WARN("%s: NULL recv_req in follow-up packets.\n", __func__);
+				op_error = -FI_ENOMSG;
 			}
 		}
 
@@ -232,7 +230,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				if (event)
 					psmx_cq_enqueue_event(req->ep->recv_cq, event);
 				else
-					err = -ENOMEM;
+					err = -FI_ENOMEM;
 			}
 
 			if (req->ep->recv_cntr)
@@ -286,7 +284,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				if (event)
 					psmx_cq_enqueue_event(req->ep->send_cq, event);
 				else
-					err = -ENOMEM;
+					err = -FI_ENOMEM;
 			}
 
 			if (req->ep->send_cntr)
@@ -300,7 +298,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 		break;
 
 	default:
-		err = -EINVAL;
+		err = -FI_EINVAL;
 	}
 
 	return err;
@@ -369,20 +367,23 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 
         ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
-        if (src_addr) {
+        if ((ep_priv->caps & FI_DIRECTED_RECV) && src_addr != FI_ADDR_UNSPEC) {
 		av = ep_priv->av;
 		if (av && av->type == FI_AV_TABLE) {
 			idx = (size_t)src_addr;
 			if (idx >= av->last)
-				return -EINVAL;
+				return -FI_EINVAL;
 
 			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
 		}
 	}
+	else {
+		src_addr = 0;
+	}
 
 	req = calloc(1, sizeof(*req));
 	if (!req)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	req->op = PSMX_AM_REQ_SEND;
 	req->recv.buf = (void *)buf;
@@ -437,7 +438,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 			if (event)
 				psmx_cq_enqueue_event(req->ep->recv_cq, event);
 			else
-				err = -ENOMEM;
+				err = -FI_ENOMEM;
 		}
 
 		if (req->ep->recv_cntr)
@@ -465,7 +466,7 @@ static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 	size_t len;
 
 	if (!msg || msg->iov_count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
@@ -488,7 +489,7 @@ static ssize_t psmx_recvv2(struct fid_ep *ep, const struct iovec *iov,
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;
@@ -518,18 +519,18 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 	ep_priv = container_of(ep, struct psmx_fid_ep, ep);
 
 	if (!buf)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	av = ep_priv->av;
 	if (av && av->type == FI_AV_TABLE) {
 		idx = dest_addr;
 		if (idx >= av->last)
-			return -EINVAL;
+			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
 	}
 	else if (!dest_addr) {
-		return -EINVAL;
+		return -FI_EINVAL;
 	}
 
 	chunk_size = MIN(PSMX_AM_CHUNK_SIZE, psmx_am_param.max_request_short);
@@ -537,7 +538,7 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 
 	req = calloc(1, sizeof(*req));
 	if (!req)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	req->op = PSMX_AM_REQ_SEND;
 	req->send.buf = (void *)buf;
@@ -591,7 +592,7 @@ static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 	size_t len;
 
 	if (!msg || msg->iov_count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
@@ -614,7 +615,7 @@ static ssize_t psmx_sendv2(struct fid_ep *ep, const struct iovec *iov,
 	size_t len;
 
 	if (!iov || count > 1)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (count) {
 		buf = iov[0].iov_base;

@@ -108,14 +108,19 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 	dlist_remove(&pe_entry->ctx_entry);
 
 	if (pe_entry->type == SOCK_PE_TX)
-		pe_entry->conn->tx_pe_entry = NULL;
-	else
+	{
+		if (pe_entry->conn->tx_pe_entry == pe_entry)
+			pe_entry->conn->tx_pe_entry = NULL;
+	} else {
 		pe_entry->conn->rx_pe_entry = NULL;
+	}
 
 	pe->num_free_entries++;
 	pe_entry->conn = NULL;
+
 	memset(&pe_entry->pe.rx, 0, sizeof(pe_entry->pe.rx));
 	memset(&pe_entry->pe.tx, 0, sizeof(pe_entry->pe.tx));
+	memset(&pe_entry->msg_hdr, 0, sizeof(pe_entry->msg_hdr));
 	memset(&pe_entry->response, 0, sizeof(pe_entry->response));
 
 	pe_entry->type =0;
@@ -124,6 +129,7 @@ static void sock_pe_release_entry(struct sock_pe *pe,
 	pe_entry->total_len = 0;
 	pe_entry->data_len = 0;
 	pe_entry->buf = 0;
+	pe_entry->flags = 0;
 
 	dlist_remove(&pe_entry->entry);
 	dlist_insert_head(&pe_entry->entry, &pe->free_list);
@@ -1133,6 +1139,8 @@ int sock_pe_progress_buffered_rx(struct sock_rx_ctx *rx_ctx)
 		rem = rx_buffered->iov[0].iov.len;
 		rx_ctx->buffered_len -= rem;
 		used_len = rx_posted->used;
+		pe_entry.data_len = 0;
+		pe_entry.buf = 0L;
 		for (i = 0; i < rx_posted->rx_op.dest_iov_len && rem > 0; i++) {
 			if (used_len >= rx_posted->rx_op.dest_iov_len) {
 				used_len -= rx_posted->rx_op.dest_iov_len;

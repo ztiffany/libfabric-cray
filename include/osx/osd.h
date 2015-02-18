@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2013-2014 Intel Corporation. All rights reserved.
+ * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,53 +30,42 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_EXT_USNIC_H_
-#define _FI_EXT_USNIC_H_
+#ifndef _MACH_CLOCK_GETTIME_H_
+#define _MACH_CLOCK_GETTIME_H_
 
-#include <stdint.h>
-#include <net/if.h>
+#include <sys/time.h>
+#include <time.h>
+#include <mach/clock.h>
+#include <mach/mach.h>
 
-#define FI_PROTO_RUDP 100
+#include <machine/endian.h>
+#include <libkern/OSByteOrder.h>
 
-#define FI_EXT_USNIC_INFO_VERSION 1
+#include <pthread.h>
 
-/*
- * usNIC specific info
- */
-struct fi_usnic_info_v1 {
-	uint32_t ui_link_speed;
-	uint32_t ui_netmask_be;
-	char ui_ifname[IFNAMSIZ];
+#define CLOCK_REALTIME CALENDAR_CLOCK
+#define CLOCK_MONOTONIC SYSTEM_CLOCK
 
-	uint32_t ui_num_vf;
-	uint32_t ui_qp_per_vf;
-	uint32_t ui_cq_per_vf;
-};
+#define pthread_yield pthread_yield_np
 
-struct fi_usnic_info {
-	uint32_t ui_version;
-	union {
-		struct fi_usnic_info_v1 v1;
-	} ui;
-};
+#define bswap_64 OSSwapInt64
 
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_FABRIC_OPS_1 "fabric_ops 1"
-struct fi_usnic_ops_fabric {
-	size_t size;
-	int (*getinfo)(uint32_t version, struct fid_fabric *fabric,
-				struct fi_usnic_info *info);
-};
+#ifdef _POSIX_HOST_NAME_MAX
+#define HOST_NAME_MAX _POSIX_HOST_NAME_MAX
+#else
+#define HOST_NAME_MAX 255
+#endif
 
-/*
- * usNIC-specific AV ops
- */
-#define FI_USNIC_AV_OPS_1 "av_ops 1"
-struct fi_usnic_ops_av {
-	size_t size;
-	int (*get_distance)(struct fid_av *av, void *addr, int *metric);
-};
+typedef int clockid_t;
 
-#endif /* _FI_EXT_USNIC_H_ */
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif

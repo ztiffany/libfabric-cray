@@ -95,18 +95,18 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct psmx_fid_domain *domain_priv;
 	struct psm_ep_open_opts opts;
 	psm_uuid_t uuid;
-	int err = -ENOMEM;
+	int err = -FI_ENOMEM;
 
 	PSMX_DEBUG("%s\n", __func__);
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
 		PSMX_DEBUG("%s: a domain has been opened for the fabric\n");
-		return -EBUSY;
+		return -FI_EBUSY;
 	}
 
 	if (!info->domain_attr->name || strncmp(info->domain_attr->name, "psm", 3))
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	psmx_query_mpi();
 
@@ -128,7 +128,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	err = psm_ep_open(uuid, &opts,
 			  &domain_priv->psm_ep, &domain_priv->psm_epid);
 	if (err != PSM_OK) {
-		fprintf(stderr, "%s: psm_ep_open returns %d, errno=%d\n",
+		PSMX_WARN("%s: psm_ep_open returns %d, errno=%d\n",
 			__func__, err, errno);
 		err = psmx_errno(err);
 		goto err_out_free_domain;
@@ -137,7 +137,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	err = psm_mq_init(domain_priv->psm_ep, PSM_MQ_ORDERMASK_ALL,
 			  NULL, 0, &domain_priv->psm_mq);
 	if (err != PSM_OK) {
-		fprintf(stderr, "%s: psm_mq_init returns %d, errno=%d\n",
+		PSMX_WARN("%s: psm_mq_init returns %d, errno=%d\n",
 			__func__, err, errno);
 		err = psmx_errno(err);
 		goto err_out_close_ep;
@@ -181,23 +181,23 @@ err_out:
 int psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap)
 {
 	if ((ep_cap & PSMX_CAPS) != ep_cap)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if ((ep_cap & FI_TAGGED) && domain->tagged_ep &&
 	    fi_recv_allowed(ep_cap))
-		return -EBUSY;
+		return -FI_EBUSY;
 
 	if ((ep_cap & FI_MSG) && domain->msg_ep &&
 	    fi_recv_allowed(ep_cap))
-		return -EBUSY;
+		return -FI_EBUSY;
 
 	if ((ep_cap & FI_RMA) && domain->rma_ep &&
 	    fi_rma_target_allowed(ep_cap))
-		return -EBUSY;
+		return -FI_EBUSY;
 
 	if ((ep_cap & FI_ATOMICS) && domain->atomics_ep &&
 	    fi_rma_target_allowed(ep_cap))
-		return -EBUSY;
+		return -FI_EBUSY;
 
 	return 0;
 }

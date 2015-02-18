@@ -40,9 +40,11 @@ extern "C" {
 #include "fi_list.h"
 #include "fi_log.h"
 
-#define PSMX_PROVNAME "PSM"
+#define PSMX_PROVNAME "psm"
+#define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
 
 #define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
+#define PSMX_WARN(...)	FI_WARN(PSMX_PROVNAME, __VA_ARGS__)
 
 #define PSMX_TIME_OUT	120
 
@@ -59,6 +61,8 @@ extern "C" {
 			 FI_CANCEL | FI_TRIGGER | \
 			 FI_DYNAMIC_MR | \
 			 PSMX_CAP_EXT)
+
+#define PSMX_CAPS2	((PSMX_CAPS | FI_DIRECTED_RECV) & ~FI_TAGGED)
 
 #define PSMX_MODE	(FI_CONTEXT)
 
@@ -84,8 +88,13 @@ enum psmx_context_type {
 	PSMX_REMOTE_READ_CONTEXT,
 };
 
+union psmx_pi {
+	void	*p;
+	int	i;
+};
+
 #define PSMX_CTXT_REQ(fi_context)	((fi_context)->internal[0])
-#define PSMX_CTXT_TYPE(fi_context)	(*(int *)&(fi_context)->internal[1])
+#define PSMX_CTXT_TYPE(fi_context)	(((union psmx_pi *)&(fi_context)->internal[1])->i)
 #define PSMX_CTXT_USER(fi_context)	((fi_context)->internal[2])
 #define PSMX_CTXT_EP(fi_context)	((fi_context)->internal[3])
 

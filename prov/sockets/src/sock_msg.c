@@ -93,7 +93,8 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uint64_t)msg->context;
-	rx_entry->addr = msg->addr;
+	rx_entry->addr = (rx_ctx->attr.caps & FI_DIRECTED_RECV) ? 
+		msg->addr : FI_ADDR_UNSPEC;
 	rx_entry->data = msg->data;
 	rx_entry->ignore = 0xFFFFFFFF;
 
@@ -239,6 +240,7 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	return 0;
 
 err:
+	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }
@@ -356,7 +358,8 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 
 	rx_entry->flags = flags;
 	rx_entry->context = (uint64_t)msg->context;
-	rx_entry->addr = msg->addr;
+	rx_entry->addr = (rx_ctx->attr.caps & FI_DIRECTED_RECV) ? 
+		msg->addr : FI_ADDR_UNSPEC;
 	rx_entry->data = msg->data;
 	rx_entry->tag = msg->tag;
 	rx_entry->ignore = msg->ignore;
@@ -445,14 +448,19 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
+	memset(&tx_op, 0, sizeof(struct sock_op));
+	tx_op.op = SOCK_OP_TSEND;
+
 	total_len = 0;
 	if (SOCK_INJECT_OK(flags)) {
 		for (i=0; i< msg->iov_count; i++) {
 			total_len += msg->msg_iov[i].iov_len;
 		}
+		tx_op.src_iov_len = total_len;
 		assert(total_len <= SOCK_EP_MAX_INJECT_SZ);
 	} else {
 		total_len = msg->iov_count * sizeof(union sock_iov);
+		tx_op.src_iov_len = msg->iov_count;
 	}
 
 	total_len += sizeof(struct sock_op_tsend);
@@ -466,10 +474,6 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	}
 
 	flags |= tx_ctx->attr.op_flags;
-	memset(&tx_op, 0, sizeof(struct sock_op));
-	tx_op.op = SOCK_OP_TSEND;
-	tx_op.src_iov_len = msg->iov_count;
-
 	sock_tx_ctx_write(tx_ctx, &tx_op, sizeof(struct sock_op));
 	sock_tx_ctx_write(tx_ctx, &flags, sizeof(uint64_t));
 	sock_tx_ctx_write(tx_ctx, &msg->context, sizeof(uint64_t));
@@ -500,6 +504,7 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	return 0;
 
 err:
+	SOCK_LOG_INFO("Not enough space for TX entry, try again\n");
 	sock_tx_ctx_abort(tx_ctx);
 	return ret;
 }

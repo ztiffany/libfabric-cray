@@ -497,15 +497,19 @@ static void fi_tostr_version(char *buf)
 }
 
 __attribute__((visibility ("default")))
-char *fi_tostr_(const void *data, enum fi_type datatype)
+char *DEFAULT_SYMVER_PRE(fi_tostr)(const void *data, enum fi_type datatype)
 {
 	static char *buf = NULL;
-	uint64_t val64 = *(const uint64_t *) data;
-	uint32_t val32 = *(const uint32_t *) data;
-	int enumval = *(const int *) data;
+	uint64_t val64;
+	uint32_t val32;
+	int enumval;
 
 	if (!data)
 		return NULL;
+
+	val64 = *(const uint64_t *) data;
+	val32 = *(const uint32_t *) data;
+	enumval = *(const int *) data;
 
 	if (!buf) {
 		buf = calloc(BUFSIZ, 1);
@@ -578,7 +582,7 @@ char *fi_tostr_(const void *data, enum fi_type datatype)
 	}
 	return buf;
 }
-default_symver(fi_tostr_, fi_tostr);
+DEFAULT_SYMVER(fi_tostr_, fi_tostr);
 
 #undef CASEENUMSTR
 #undef IFFLAGSTR
