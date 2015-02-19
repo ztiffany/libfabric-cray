@@ -1,5 +1,6 @@
 /*
- * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,28 +31,18 @@
  * SOFTWARE.
  */
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif /* HAVE_CONFIG_H */
+//
+// CQ common code
+//
+#include <stdlib.h>
+#include <string.h>
 
-#ifndef _GNIX_UTIL_H_
-#define _GNIX_UTIL_H_
+#include "gnix.h"
+#include "gnix_util.h"
 
-#include <stdio.h>
-#include "fi_log.h"
-
-#define GNIX_DEBUG (2)
-
-extern const char gnix_fab_name[];
-extern const char gnix_dom_name[];
-
-#define GNIX_LOG_INFO(...) FI_LOG(GNIX_DEBUG, gnix_fab_name, __VA_ARGS__)
-#define GNIX_LOG_WARN(...) FI_WARN(gnix_fab_name, __VA_ARGS__)
-#define GNIX_LOG_ERROR(...) FI_WARN(gnix_fab_name, __VA_ARGS__)
-
-/*
- * prototypes
- */
-int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie);
-
-#endif
+int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
+		 struct fid_cq **cq, void *context)
+{
+	/* TODO: implement this puppy */
+	return -FI_ENOSYS;
+}
