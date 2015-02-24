@@ -299,7 +299,7 @@ struct gnix_cq_tagged_entry {
 };
 
 struct gnix_cq {
-	struct fid_cq fid;
+	struct fid_cq cq_fid;
 	uint64_t flags;
 	struct gnix_domain *domain;
 	void *free_list_base;
@@ -317,16 +317,31 @@ struct gnix_mem_desc {
 };
 
 /*
- *   gnix_rdm_ep - FI_EP_RDM type ep
+ * TODO: need a lot more fields for AV support
  */
-struct gnix_rdm_ep {
-	struct fid_ep ep_fid;
+
+struct gnix_av {
+	struct fid_av av_fid;
 	struct gnix_domain *domain;
-	void *vc_cache_hndl;
-	int (*progress_fn)(struct gnix_rdm_ep *, enum gnix_progress_type);
+};
+
+/*
+ *   gnix endpoint structure
+ */
+struct gnix_ep {
+	struct fid_ep ep_fid;
+	enum fi_ep_type type;
+	struct gnix_domain *domain;
+	struct gnix_cq *send_cq;
+	struct gnix_cq *recv_cq;
+	struct gnix_av *av;
+	void *vc_hash_hndl;
+	void *vc;
+	int (*progress_fn)(struct gnix_ep *, enum gnix_progress_type);
 	/* RX specific progress fn */
-	int (*rx_progress_fn)(struct gnix_rdm_ep *, gni_return_t *rc);
+	int (*rx_progress_fn)(struct gnix_ep *, gni_return_t *rc);
 	int enabled;
+	int no_want_cqes;
 	/* num. active post descs associated with this ep */
 	uint32_t active_post_descs;
 };
@@ -368,6 +383,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 int gnix_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr, void *context);
+
 
 #ifdef __cplusplus
 } /* extern "C" */
