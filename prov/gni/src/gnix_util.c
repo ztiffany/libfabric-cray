@@ -88,23 +88,25 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 	 */
 	ret = alps_app_lli_put_request(ALPS_APP_LLI_ALPS_REQ_APID, NULL, 0);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli put failed, ret=%s\n", strerror(ret));
+		GNIX_LOG_ERROR("lli put failed, ret=%d(%s)\n", ret,
+			       strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response(&alps_status, &alps_count);
 	if (alps_status != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli get response failed, ret=%s\n",
-			       strerror(ret));
+		GNIX_LOG_ERROR("lli get response failed, "
+			       "alps_status=%d(%s)\n",alps_status,
+			       strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response_bytes(&apid, sizeof(apid));
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli get response failed, ret=%s\n",
-			       strerror(ret));
+		GNIX_LOG_ERROR("lli get response failed, ret=%d(%s)\n",
+			       ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -114,15 +116,16 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 	 */
 	ret = alps_app_lli_put_request(ALPS_APP_LLI_ALPS_REQ_GNI, NULL, 0);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli put failed, ret=%s\n", strerror(ret));
+		GNIX_LOG_ERROR("lli put failed, ret=%d(%s)\n",
+			       ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response(&alps_status, &alps_count);
 	if (alps_status != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli get response failed, ret=%s\n",
-			       strerror(ret));
+		GNIX_LOG_ERROR("lli get response failed, alps_status=%d(%s)\n",
+			       alps_status, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -137,8 +140,8 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 
 	ret = alps_app_lli_get_response_bytes(rdmacred_rsp, alps_count);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_LOG_ERROR("lli get response failed, ret=%s\n",
-			       strerror(ret));
+		GNIX_LOG_ERROR("lli get response failed, ret=%d(%s)\n",
+			       ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
