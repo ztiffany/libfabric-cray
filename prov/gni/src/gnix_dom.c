@@ -40,6 +40,8 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
+LIST_HEAD(cm_nic_list);
+
 static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
@@ -49,42 +51,50 @@ static int gnix_domain_close(fid_t fid)
 	gni_return_t status;
 
 	domain = container_of(fid, struct gnix_domain, domain_fid.fid);
-	if (domain->ref_cnt) {
-		--domain->ref_cnt;
+
+	/*
+	 * if non-zero refcnt, there are eps and/or an eq associated
+	 * with this domain which have not been closed.
+	 */
+
+	if (atomic_get(&domain->ref_cnt) != 0) {
+		ret = -FI_EBUSY;
+		goto err;
 	}
 
 	GNIX_LOG_INFO("gnix_domain_close invoked.\n");
 
-	if (domain->ref_cnt == 0) {
-		if (domain->cm_nic) {
-			cm_nic = domain->cm_nic;
-			if (cm_nic->gni_cdm_hndl) {
-				status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
-				if (status != GNI_RC_SUCCESS) {
-					GNIX_LOG_ERROR("oops, cdm destroy"
-						       "failed\n");
-				}
+	if (domain->cm_nic) {
+		cm_nic = domain->cm_nic;
+		atomic_dec(&domain->cm_nic->ref_cnt);
+		if (cm_nic->gni_cdm_hndl &&
+		    (atomic_get(&cm_nic->ref_cnt) == 0)) {
+			status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_LOG_ERROR("oops, cdm destroy"
+					       "failed\n");
 			}
 			free(domain->cm_nic);
 		}
-
-		list_for_each_safe(&domain->nic_list, p, next, list)
-		{
-			list_del(&p->list);
-			gnix_list_node_init(&p->list);
-			/* TODO: free nic here */
-		}
-
-		/*
-		 * remove from the list of cdms attached to fabric
-		 */
-		gnix_list_del_init(&domain->list);
-
-		memset(domain, 0, sizeof *domain);
-		free(domain);
 	}
 
+	list_for_each_safe(&domain->nic_list, p, next, list)
+	{
+		list_del(&p->list);
+		gnix_list_node_init(&p->list);
+		/* TODO: free nic here */
+	}
+
+	/*
+	 * remove from the list of cdms attached to fabric
+	 */
+	gnix_list_del_init(&domain->list);
+
+	memset(domain, 0, sizeof *domain);
+	free(domain);
+
 	GNIX_LOG_INFO("gnix_domain_close invoked returning %d\n", ret);
+err:
 	return ret;
 }
 
@@ -119,7 +129,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	int ret = FI_SUCCESS;
 	uint8_t ptag;
 	uint32_t cookie, device_addr;
-	struct gnix_cm_nic *cm_nic = NULL;
+	struct gnix_cm_nic *cm_nic = NULL, *elem;
 	struct gnix_fabric *fabric_priv;
 	gni_return_t status;
 
@@ -130,7 +140,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	    strncmp(info->domain_attr->name, gnix_dom_name,
 		    strlen(gnix_dom_name))) {
 		ret = -FI_EINVAL;
-		goto fn_err;
+		goto err;
 	}
 
 	/*
@@ -145,7 +155,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		if (ret) {
 			GNIX_LOG_ERROR("gnixu_get_rdma_credentials returned"
 				       "ptag %d cookie 0x%x\n", ptag, cookie);
-			goto fn_err;
+			goto err;
 		}
 	} else {
 		ret = gnixu_get_rdma_credentials(NULL, &ptag, &cookie);
@@ -156,57 +166,84 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain = calloc(1, sizeof *domain);
 	if (domain == NULL) {
 		ret = -FI_ENOMEM;
-		goto fn_err;
+		goto err;
 	}
 
 	list_head_init(&domain->nic_list);
 	gnix_list_node_init(&domain->list);
 
-	list_add_tail(&fabric_priv->cdm_list, &domain->list);
+	list_add_tail(&fabric_priv->domain_list, &domain->list);
 
 	list_head_init(&domain->domain_wq);
 
 	/*
-	 * Set up the connection management nic for this domain
+	 * look for the cm_nic for this ptag/cookie in the list
+	 * TODO: thread safety, this iterator is not thread safe
 	 */
-	cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof *cm_nic);
-	if (cm_nic == NULL) {
-		ret = -FI_ENOMEM;
-		goto fn_err;
-	}
 
-	gnix_list_node_init(&cm_nic->list);
-	list_head_init(&cm_nic->datagram_free_list);
-	list_head_init(&cm_nic->wc_datagram_active_list);
-	list_head_init(&cm_nic->wc_datagram_free_list);
-
-	status = GNI_CdmCreate(getpid(), ptag, cookie, gnix_cdm_modes,
-			       &cm_nic->gni_cdm_hndl);
-	if (status != GNI_RC_SUCCESS) {
-		GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
-			       gni_err_str[status]);
-		/* TODO: need a translater from gni to fi errors */
-		ret = -FI_EACCES;
-		goto fn_err;
+        list_for_each(&cm_nic_list,elem,list) {
+		if ((elem->ptag == ptag) &&
+			(elem->cookie == cookie) &&
+			(elem->inst_id == getpid())) {
+			cm_nic = elem;
+			atomic_inc(&cm_nic->ref_cnt);
+			break;
+		}
 	}
 
 	/*
-	 * Okay, now go for the attach
+	 * no matching cm_nic found in the list, so create one for this
+	 * domain and add to the list.
 	 */
-	status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
-			       &cm_nic->gni_nic_hndl);
-	if (status != GNI_RC_SUCCESS) {
-		GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
+
+	if (cm_nic == NULL) {
+
+		GNIX_LOG_INFO("creating cm_nic for ptag %d cookie 0x%x id %d\n",
+		      ptag, cookie, getpid());
+		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof *cm_nic);
+		if (cm_nic == NULL) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		gnix_list_node_init(&cm_nic->list);
+		atomic_set(&cm_nic->ref_cnt,1);
+		list_head_init(&cm_nic->datagram_free_list);
+		list_head_init(&cm_nic->wc_datagram_active_list);
+		list_head_init(&cm_nic->wc_datagram_free_list);
+		cm_nic->inst_id = getpid();
+		cm_nic->ptag = ptag;
+		cm_nic->cookie = cookie;
+
+		status = GNI_CdmCreate(cm_nic->inst_id, ptag, cookie,
+				       gnix_cdm_modes,
+				       &cm_nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
+				       gni_err_str[status]);
+			/* TODO: need a translater from gni to fi errors */
+			ret = -FI_EACCES;
+			goto err;
+		}
+
+		/*
+		 * Okay, now go for the attach
+		 */
+		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
+				       &cm_nic->gni_nic_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
 			       gni_err_str[status]);
-		ret = -FI_EACCES;
-		goto fn_err;
+			ret = -FI_EACCES;
+			goto err;
+		}
+	        list_add_tail(&cm_nic_list,&cm_nic->list);
 	}
 
 	domain->cm_nic = cm_nic;
-	domain->ptag = ptag;
-	domain->cookie = cookie;
-	domain->ref_cnt = 1;
-	cm_nic->domain = domain;
+	domain->ptag = cm_nic->ptag;
+	domain->cookie = cm_nic->cookie;
+	atomic_set(&domain->ref_cnt,0);
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	domain->domain_fid.fid.context = context;
@@ -217,7 +254,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	*dom = &domain->domain_fid;
 	return FI_SUCCESS;
 
-fn_err:
+err:
 	if (cm_nic && cm_nic->gni_cdm_hndl) {
 		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
 	}

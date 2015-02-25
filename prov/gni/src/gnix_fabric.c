@@ -85,7 +85,11 @@ static int gnix_fabric_close(fid_t fid)
 	struct gnix_fabric *fab;
 	fab = container_of(fid, struct gnix_fabric, fab_fid);
 
-	if (!list_empty(&fab->cdm_list)) {
+	/*
+ 	 * TODO: is this really right thing to do?
+ 	 */
+
+	if (!list_empty(&fab->domain_list)) {
 		return -FI_EBUSY;
 	}
 
@@ -122,7 +126,7 @@ static int gnix_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &gnix_fab_fi_ops;
 	fab->fab_fid.ops = &gnix_fab_ops;
-	list_head_init(&fab->cdm_list);
+	list_head_init(&fab->domain_list);
 	*fabric = &fab->fab_fid;
 
 	return FI_SUCCESS;

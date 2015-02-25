@@ -183,8 +183,8 @@ enum gnix_progress_type {
  */
 struct gnix_fabric {
 	struct fid_fabric fab_fid;
-	/* llist of cdm's opened from fabric */
-	struct list_head cdm_list;
+	/* llist of domains's opened from fabric */
+	struct list_head domain_list;
 };
 
 /*
@@ -204,7 +204,7 @@ struct gnix_domain {
 	uint32_t cookie;
 	/* work queue for domain */
 	struct list_head domain_wq;
-	int ref_cnt;
+	atomic_t ref_cnt;
 };
 
 struct gnix_cdm {
@@ -238,9 +238,11 @@ struct gnix_cm_nic {
 	struct gnix_domain *domain;
 	struct gnix_datagram *datagram_base;
 	uint32_t inst_id;
+	uint8_t ptag;
+	uint32_t cookie;
 	uint32_t device_id;
 	uint32_t device_addr;
-	int ref_cnt;
+	atomic_t ref_cnt;
 };
 
 struct gnix_nic {
@@ -277,7 +279,7 @@ struct gnix_nic {
 	struct gnix_datagram *datagram_base;
 	uint32_t device_id;
 	uint32_t device_addr;
-	int ref_cnt;
+	atomic_t ref_cnt;
 };
 
 /*
