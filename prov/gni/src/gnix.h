@@ -207,19 +207,6 @@ struct gnix_domain {
 	int ref_cnt;
 };
 
-struct gnix_cdm {
-	struct list_node list;
-	gni_cdm_handle_t gni_cdm_hndl;
-	/* list nics this cdm is attached to, TODO: thread safety */
-	struct list_head nic_list;
-	uint32_t inst_id;
-	uint8_t ptag;
-	uint32_t cookie;
-	uint32_t modes;
-	/* TODO: thread safety */
-	int ref_cnt;
-};
-
 /*
  * gnix cm nic struct - to be used only for GNI_EpPostData, etc.
  */
@@ -272,8 +259,6 @@ struct gnix_nic {
 	struct list_head wc_datagram_active_list;
 	/* free list of wc datagrams */
 	struct list_head wc_datagram_free_list;
-	/* pointer to cdm this nic is attached to */
-	struct gnix_cdm *cdm;
 	struct gnix_datagram *datagram_base;
 	uint32_t device_id;
 	uint32_t device_addr;
