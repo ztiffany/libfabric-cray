@@ -274,11 +274,18 @@ struct fi_ops_tagged gnix_ep_tagged_ops = {
 static int gnix_ep_close(fid_t fid)
 {
 	struct gnix_ep *ep;
+	struct gnix_domain *domain;
 
 	ep = container_of(fid, struct gnix_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
 
+	domain = ep->domain;
+	assert(domain != NULL);
+
+	atomic_dec(&domain->ref_cnt);
+
 	free(ep);
+
 	return FI_SUCCESS;
 }
 
@@ -389,6 +396,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
  	 *  fi_tx_context, etc. is invoked on this endpoing
  	 */
 
+	atomic_inc(&domain_priv->ref_cnt);
         *ep = &ep_priv->ep_fid;
         return FI_SUCCESS;
 }
