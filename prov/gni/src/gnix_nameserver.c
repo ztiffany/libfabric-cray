@@ -57,6 +57,7 @@
 #include <sys/socket.h>
 #include <netdb.h>
 #include <arpa/inet.h>
+#include <assert.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
@@ -158,7 +159,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	struct addrinfo *result = NULL;
 	struct addrinfo *rp = NULL;
 
-	struct ifreq ifr = {0};
+	struct ifreq ifr = {{{0}}};
 
 	struct sockaddr_in *sa = NULL;
 	struct sockaddr_in *sin = NULL;

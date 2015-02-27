@@ -1,6 +1,7 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <stdio.h>
+#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -138,7 +140,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret = 0;
 	int mode = GNIX_FAB_MODES;
-	struct fi_info *gnix_info;
+	struct fi_info *gnix_info = NULL;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
 	struct gnix_ep_name *addr = NULL;
@@ -261,8 +263,19 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	/*
 	 * fill in the gnix_info struct
 	 */
-	gnix_info = fi_allocinfo_internal();
+	gnix_info = calloc(1, sizeof(*info));
 	if (gnix_info == NULL) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	gnix_info->tx_attr = calloc(1, sizeof(*gnix_info->tx_attr));
+	gnix_info->rx_attr = calloc(1, sizeof(*gnix_info->rx_attr));
+	gnix_info->ep_attr = calloc(1, sizeof(*gnix_info->ep_attr));
+	gnix_info->domain_attr = calloc(1, sizeof(*gnix_info->domain_attr));
+	gnix_info->fabric_attr = calloc(1, sizeof(*gnix_info->fabric_attr));
+	if (!gnix_info->tx_attr|| !gnix_info->rx_attr || !gnix_info->ep_attr ||
+	    !gnix_info->domain_attr || !gnix_info->fabric_attr) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
@@ -329,6 +342,14 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	*info = gnix_info;
 	return 0;
 err:
+	if (gnix_info) {
+		if (gnix_info->tx_attr) free(gnix_info->tx_attr);
+		if (gnix_info->rx_attr) free(gnix_info->rx_attr);
+		if (gnix_info->ep_attr) free(gnix_info->ep_attr);
+		if (gnix_info->domain_attr) free(gnix_info->domain_attr);
+		if (gnix_info->fabric_attr) free(gnix_info->fabric_attr);
+		free(gnix_info);
+	}
 	return ret;
 }
 
