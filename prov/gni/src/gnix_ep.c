@@ -352,7 +352,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if ((domain == NULL) || (info == NULL) || (ep == NULL))
 		return -FI_EINVAL;
 
-	if (info->ep_type != FI_EP_RDM)
+	if (info->ep_attr->type != FI_EP_RDM)
 		return -FI_ENOSYS;
 
 	domain_priv = container_of(domain, struct gnix_domain, domain_fid);
@@ -368,7 +368,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.fid.ops = &gnix_ep_fi_ops;
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
 	ep_priv->domain = domain_priv;
-	ep_priv->type = info->ep_type;
+	ep_priv->type = info->ep_attr->type;
 
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;

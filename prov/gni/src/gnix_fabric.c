@@ -173,13 +173,15 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		/*
 		 * check for endpoint type, only support FI_EP_RDM for now
 		 */
-		switch (hints->ep_type) {
-		case FI_EP_UNSPEC:
-		case FI_EP_RDM:
-			break;
-		default:
-			ret = -FI_ENODATA;
-			goto err;
+		if (hints->ep_attr) {
+			switch (hints->ep_attr->type) {
+			case FI_EP_UNSPEC:
+			case FI_EP_RDM:
+				break;
+			default:
+				ret = -FI_ENODATA;
+				goto err;
+			}
 		}
 
 		/*
@@ -297,7 +299,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 
 	gnix_info->next = NULL;
-	gnix_info->ep_type = FI_EP_RDM;
+	gnix_info->ep_attr->type = FI_EP_RDM;
 	gnix_info->caps = GNIX_EP_RDM_CAPS;
 	gnix_info->mode = mode;
 	gnix_info->addr_format = FI_ADDR_GNI;
