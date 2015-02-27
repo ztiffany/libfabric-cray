@@ -40,6 +40,9 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
+static LIST_HEAD(gnix_nic_list);
+static atomic_t gnix_id_counter;
+
 /*
  * Prototypes for method structs below
  */
@@ -276,14 +279,20 @@ static int gnix_ep_close(fid_t fid)
 {
 	struct gnix_ep *ep;
 	struct gnix_domain *domain;
+	struct gnix_nic *nic;
 
 	ep = container_of(fid, struct gnix_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
 
 	domain = ep->domain;
 	assert(domain != NULL);
-
 	atomic_dec(&domain->ref_cnt);
+	assert(domain->ref_cnt > 0);
+
+	nic = ep->nic;
+	assert(nic != NULL);
+	atomic_dec(&nic->ref_cnt);
+	assert(nic->ref_cnt > 0);
 
 	free(ep);
 
@@ -339,15 +348,20 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	}
 
 err:
-        return ret;
+	return ret;
 }
 
 
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
+	int ret = FI_SUCCESS;
 	struct gnix_domain *domain_priv;
 	struct gnix_ep *ep_priv;
+	struct gnix_nic *elem, *nic = NULL;
+	gni_return_t status;
+	uint32_t device_addr;
+	uint32_t fake_cdm_id;
 
 	if ((domain == NULL) || (info == NULL) || (ep == NULL))
 		return -FI_EINVAL;
@@ -393,11 +407,170 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->rx_progress_fn = NULL;
 
 	/*
- 	 * TODO: hookup a nic to this ep, may add more later if
- 	 *  fi_tx_context, etc. is invoked on this endpoing
- 	 */
+	 * TODO: hookup a nic to this ep, may add more later if
+	 *  fi_tx_context, etc. is invoked on this endpoing
+	 */
+
+        list_for_each(&gnix_nic_list,elem,list) {
+		if ((elem->ptag == domain_priv->ptag) &&
+			(elem->cookie == domain_priv->cookie)
+			&& (elem->cdm_id == domain_priv->cdm_id)) {
+			nic = elem;
+			atomic_inc(&nic->ref_cnt);
+			break;
+		}
+	}
+
+	/*
+	 * move this nic to the end of the list, this allows
+	 * for balancing use of nics across ep's for this domain
+	 */
+
+	if (nic) {
+		gnix_list_del_init(&nic->list);
+		list_add_tail(&gnix_nic_list, &nic->list);
+	}
+
+	/*
+	 * no nic found create a cdm and attach
+	 */
+	if (!nic) {
+		nic = calloc(1,sizeof(struct gnix_nic));
+		if (nic == NULL) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		/*
+		 * cook up a fake cdm_id, use the 16 LSB of my pid
+		 * with 16 MSBs being obtained from atomic increment of
+		 * a local variable.
+		 */
+		atomic_inc(&gnix_id_counter);
+		fake_cdm_id = (domain_priv->cdm_id & 0x0000FFFF) |
+				((uint32_t)atomic_get(&gnix_id_counter) << 16);
+		status = GNI_CdmCreate(fake_cdm_id,
+					domain_priv->ptag,
+					domain_priv->cookie,
+					gnix_cdm_modes,
+					&nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
+					gni_err_str[status]);
+			/* TODO: need a translater from gni to fi errors */
+			ret = -FI_EACCES;
+			goto err_w_inc;
+		}
+
+		/*
+		 * Okay, now go for the attach
+		*/
+		status = GNI_CdmAttach(nic->gni_cdm_hndl,
+					0,
+					&device_addr,
+					&nic->gni_nic_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
+					gni_err_str[status]);
+			ret = -FI_EACCES;
+			goto err_w_inc;
+		}
+
+		/*
+		 * create TX CQs - first polling, then blocking
+		 */
+
+		status = GNI_CqCreate(nic->gni_nic_hndl,
+					domain_priv->gni_tx_cq_size,
+					0,                    /* no delay count */
+					GNI_CQ_NOBLOCK |
+						domain_priv->gni_cq_modes,
+					NULL,                 /* useless handler */
+					NULL,                 /* useless handler context */
+					&nic->tx_cq);
+		if (status != GNI_RC_SUCCESS) {
+			ret = -FI_EINVAL;  /* TODO: better processing */
+			goto err_w_inc;
+		}
+
+		status = GNI_CqCreate(nic->gni_nic_hndl,
+					domain_priv->gni_tx_cq_size,
+					0,                    /* no delay count */
+					GNI_CQ_BLOCKING |
+						domain_priv->gni_cq_modes,
+					NULL,                 /* useless handler */
+					NULL,                 /* useless handler context */
+					&nic->tx_cq_blk);
+		if (status != GNI_RC_SUCCESS) {
+			ret = -FI_EINVAL;  /* TODO: better processing */
+			goto err_w_inc;
+		}
+
+		/*
+		 * create RX CQs - first polling, then blocking
+		 */
+
+		status = GNI_CqCreate(nic->gni_nic_hndl,
+					domain_priv->gni_rx_cq_size,
+					0,                    /* no delay count */
+					GNI_CQ_NOBLOCK |
+						domain_priv->gni_cq_modes,
+					NULL,                 /* useless handler */
+					NULL,                 /* useless handler context */
+					&nic->rx_cq);
+		if (status != GNI_RC_SUCCESS) {
+			ret = -FI_EINVAL;  /* TODO: better processing */
+			goto err_w_inc;
+		}
+
+		status = GNI_CqCreate(nic->gni_nic_hndl,
+					domain_priv->gni_rx_cq_size,
+					0,                    /* no delay count */
+					GNI_CQ_BLOCKING |
+						domain_priv->gni_cq_modes,
+					NULL,                 /* useless handler */
+					NULL,                 /* useless handler context */
+					&nic->rx_cq_blk);
+		if (status != GNI_RC_SUCCESS) {
+			ret = -FI_EINVAL;  /* TODO: better processing */
+			goto err_w_inc;
+		}
+
+		/*
+		 * TODO: set up work queue
+		 */
+
+		atomic_set(&nic->ref_cnt,1);
+		list_add_tail(&gnix_nic_list,&nic->list);
+	}
+
+	ep_priv->nic = nic;
 
 	atomic_inc(&domain_priv->ref_cnt);
-        *ep = &ep_priv->ep_fid;
-        return FI_SUCCESS;
+	*ep = &ep_priv->ep_fid;
+	return ret;
+
+err_w_inc:
+	atomic_dec(&gnix_id_counter);
+err:
+	if (nic != NULL) {
+		if (nic->rx_cq_blk != NULL) {
+			GNI_CqDestroy(nic->rx_cq_blk);
+		}
+		if (nic->rx_cq != NULL) {
+			GNI_CqDestroy(nic->rx_cq);
+		}
+		if (nic->tx_cq_blk != NULL) {
+			GNI_CqDestroy(nic->tx_cq_blk);
+		}
+		if (nic->tx_cq != NULL) {
+			GNI_CqDestroy(nic->tx_cq);
+		}
+		if (nic->gni_cdm_hndl != NULL) {
+			GNI_CdmDestroy(nic->gni_cdm_hndl);
+		}
+	}
+
+	if (nic != NULL) free(nic);
+	return ret;
 }

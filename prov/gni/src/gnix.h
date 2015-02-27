@@ -201,8 +201,15 @@ struct gnix_domain {
 	struct gnix_cm_nic *cm_nic;
 	uint8_t ptag;
 	uint32_t cookie;
+	uint32_t cdm_id;
 	/* work queue for domain */
 	struct list_head domain_wq;
+	/* size of gni tx cqs for this domain */
+	uint32_t gni_tx_cq_size;
+	/* size of gni rx cqs for this domain */
+	uint32_t gni_rx_cq_size;
+	/* additional gni cq modes to use for this domain */
+	gni_cq_mode_t gni_cq_modes;
 	atomic_t ref_cnt;
 };
 
@@ -223,7 +230,7 @@ struct gnix_cm_nic {
 	/* pointer to domain this nic is attached to */
 	struct gnix_domain *domain;
 	struct gnix_datagram *datagram_base;
-	uint32_t inst_id;
+	uint32_t cdm_id;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t device_id;
@@ -252,15 +259,9 @@ struct gnix_nic {
 	struct list_head smsg_active_req_list;
 	/* list for managing smsg req's */
 	struct gnix_smsg_req_list *smsg_req_list;
-	/* list of active datagrams */
-	struct list_head datagram_active_list;
-	/* free list of datagrams   */
-	struct list_head datagram_free_list;
-	/* list of active wc datagrams   */
-	struct list_head wc_datagram_active_list;
-	/* free list of wc datagrams */
-	struct list_head wc_datagram_free_list;
-	struct gnix_datagram *datagram_base;
+	uint8_t ptag;
+	uint32_t cookie;
+	uint32_t cdm_id;
 	uint32_t device_id;
 	uint32_t device_addr;
 	atomic_t ref_cnt;
@@ -321,6 +322,7 @@ struct gnix_ep {
 	struct gnix_cq *send_cq;
 	struct gnix_cq *recv_cq;
 	struct gnix_av *av;
+	struct gnix_nic *nic;
 	void *vc_hash_hndl;
 	void *vc;
 	int (*progress_fn)(struct gnix_ep *, enum gnix_progress_type);

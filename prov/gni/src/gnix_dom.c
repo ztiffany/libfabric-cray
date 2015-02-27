@@ -42,6 +42,12 @@
 
 LIST_HEAD(cm_nic_list);
 
+uint32_t gnix_def_gni_tx_cq_size = 2048;
+/* rx cq bigger to avoid having to deal with rx overruns so much */
+uint32_t gnix_def_gni_rx_cq_size = 16384;
+/* TODO: should we use physical pages for gni cq rings? This is a question for Zach */
+gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
+
 static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
@@ -215,7 +221,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
         list_for_each(&cm_nic_list,elem,list) {
 		if ((elem->ptag == ptag) &&
 			(elem->cookie == cookie) &&
-			(elem->inst_id == getpid())) {
+			(elem->cdm_id == getpid())) {
 			cm_nic = elem;
 			atomic_inc(&cm_nic->ref_cnt);
 			break;
@@ -242,11 +248,11 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		list_head_init(&cm_nic->datagram_free_list);
 		list_head_init(&cm_nic->wc_datagram_active_list);
 		list_head_init(&cm_nic->wc_datagram_free_list);
-		cm_nic->inst_id = getpid();
+		cm_nic->cdm_id = getpid();
 		cm_nic->ptag = ptag;
 		cm_nic->cookie = cookie;
 
-		status = GNI_CdmCreate(cm_nic->inst_id, ptag, cookie,
+		status = GNI_CdmCreate(cm_nic->cdm_id, ptag, cookie,
 				       gnix_cdm_modes,
 				       &cm_nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
@@ -274,6 +280,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->cm_nic = cm_nic;
 	domain->ptag = cm_nic->ptag;
 	domain->cookie = cm_nic->cookie;
+	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
+	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
+	domain->gni_cq_modes = gnix_def_gni_cq_modes;
 	atomic_set(&domain->ref_cnt,0);
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
