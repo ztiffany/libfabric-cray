@@ -51,6 +51,10 @@ static int gnix_domain_close(fid_t fid)
 	gni_return_t status;
 
 	domain = container_of(fid, struct gnix_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	/*
 	 * if non-zero refcnt, there are eps and/or an eq associated
@@ -98,11 +102,38 @@ err:
 	return ret;
 }
 
+/*
+ * gnix_domain_ops will provide means for an application to
+ * better control allocation of underlying aries resources associated
+ * with the domain.  Examples will include controlling size of underlying
+ * hardware CQ sizes, max size of RX ring buffers, etc.
+ * 
+ * Currently this function is not implemented, so just return -FI_ENOSYS
+ */
+
+static int
+gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
+			void **ops, void *context)
+{
+	int ret = -FI_ENOSYS;
+	struct gnix_domain *domain;
+
+	domain = container_of(fid, struct gnix_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+err:
+	return ret;
+}
+
 static struct fi_ops gnix_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_domain_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control
+	.control = fi_no_control,
+	.ops_open = gnix_domain_ops_open
 };
 
 static struct fi_ops_domain gnix_domain_ops = {
