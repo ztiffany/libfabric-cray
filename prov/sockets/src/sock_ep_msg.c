@@ -58,6 +58,7 @@
 #include "sock_util.h"
 
 const struct fi_ep_attr sock_msg_ep_attr = {
+	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
@@ -692,6 +693,14 @@ static void *sock_msg_ep_listener_thread (void *data)
 		case SOCK_CONN_REJECT:
 			SOCK_LOG_INFO("Received SOCK_CONN_REJECT\n");
 			
+			fid_ep = container_of(conn_response->hdr.c_fid, 
+					      struct fid_ep, fid);
+			sock_ep = container_of(fid_ep, struct sock_ep, ep);
+
+			if (sock_ep->is_disabled || 
+			    sock_ep->cm.shutdown_received)
+				break;
+
 			cm_err_entry = calloc(1, sizeof(*cm_err_entry) + user_data_sz);
 			if (!cm_err_entry) {
 				SOCK_LOG_ERROR("cannot allocate memory\n");
@@ -701,14 +710,6 @@ static void *sock_msg_ep_listener_thread (void *data)
 			memset(cm_err_entry, 0, sizeof(*cm_err_entry) + user_data_sz);
 			cm_err_entry->fid = conn_response->hdr.c_fid;
 			cm_err_entry->err = -FI_ECONNREFUSED;
-
-			fid_ep = container_of(conn_response->hdr.c_fid, 
-					      struct fid_ep, fid);
-			sock_ep = container_of(fid_ep, struct sock_ep, ep);
-
-			if (sock_ep->is_disabled || 
-			    sock_ep->cm.shutdown_received)
-				break;
 
 			if (user_data_sz > 0)
 				memcpy(cm_err_entry->err_data, 
@@ -771,8 +772,7 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	if (!_eq || paramlen > SOCK_EP_MAX_CM_DATA_SZ) 
 		return -FI_EINVAL;
 
-	req = (struct sock_conn_req*)calloc(1, 
-					    sizeof(*req) + paramlen);
+	req = (struct sock_conn_req*)calloc(1, sizeof(*req) + paramlen);
 	if (!req)
 		return -FI_ENOMEM;
 
@@ -786,14 +786,14 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	req->ep_id = _ep->ep_id;
 	req->hdr.c_fid = &ep->fid;
 	req->hdr.s_fid = 0;
-	memcpy(&req->info, &_ep->info, sizeof(struct fi_info));
+	req->info = _ep->info;
 	memcpy(&req->src_addr, _ep->src_addr, sizeof(struct sockaddr_in));
 	memcpy(&req->dest_addr, _ep->info.dest_addr, sizeof(struct sockaddr_in));
-	memcpy(&req->tx_attr, _ep->info.tx_attr, sizeof(struct fi_tx_attr));
-	memcpy(&req->rx_attr, _ep->info.rx_attr, sizeof(struct fi_rx_attr));
-	memcpy(&req->ep_attr, _ep->info.ep_attr, sizeof(struct fi_ep_attr));
-	memcpy(&req->domain_attr, _ep->info.domain_attr, sizeof(struct fi_domain_attr));
-	memcpy(&req->fabric_attr, _ep->info.fabric_attr, sizeof(struct fi_fabric_attr));
+	req->tx_attr = *_ep->info.tx_attr;
+	req->rx_attr = *_ep->info.rx_attr;
+	req->ep_attr = *_ep->info.ep_attr;
+	req->domain_attr = *_ep->info.domain_attr;
+	req->fabric_attr = *_ep->info.fabric_attr;
 	if (param && paramlen)
 		memcpy(&req->user_data, param, paramlen);
 	
