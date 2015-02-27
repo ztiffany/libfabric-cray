@@ -116,7 +116,7 @@ extern "C" {
  * see capabilities section in fi_getinfo.3
  */
 #define GNIX_EP_RDM_CAPS                                                       \
-	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS | FI_BUFFERED_RECV |         \
+	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
 	 FI_DIRECTED_RECV | FI_MULTI_RECV | FI_INJECT | FI_SOURCE | FI_READ |  \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |     \
 	 FI_REMOTE_COMPLETE | FI_CANCEL | FI_FENCE)
@@ -125,7 +125,7 @@ extern "C" {
  * see Operations flags in fi_endpoint.3
  */
 #define GNIX_EP_OP_FLAGS                                                       \
-	(FI_MULTI_RECV | FI_BUFFERED_RECV | FI_COMPLETION |                    \
+	(FI_MULTI_RECV | FI_COMPLETION |                                       \
 	 FI_REMOTE_COMPLETE | FI_READ | FI_WRITE | FI_SEND | FI_RECV |         \
 	 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
@@ -135,7 +135,6 @@ extern "C" {
 #define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
 
 #define GNIX_MAX_MSG_SIZE ((0x1ULL << 32) - 1)
-#define GNIX_INJECT_SIZE 64
 
 /*
  * Cray gni provider will require the following fabric interface modes (see
