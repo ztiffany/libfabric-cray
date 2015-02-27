@@ -1,6 +1,5 @@
 /*
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,28 +30,19 @@
  * SOFTWARE.
  */
 
-#ifndef _GNIX_NAMESERVER_H_
-#define _GNIX_NAMESERVER_H_
-
-#ifdef __cplusplus
-extern "C" {
-#endif
+//
+// memory registration common code
+//
+#include <stdlib.h>
+#include <string.h>
 
 #include "gnix.h"
+#include "gnix_util.h"
 
-/*
- * defines, data structs, and prototypes for gnix nameserver
- */
-
-/*
- * prototypes
- */
-
-int gnix_resolve_name(const char *node, const char *service,
-		      struct gnix_ep_name *dest_addr);
-
-#ifdef __cplusplus
-} /* extern "C" */
-#endif
-
-#endif /* _GNIX_NAMESERVER_H_ */
+int gnix_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
+		uint64_t access, uint64_t offset, uint64_t requested_key,
+		uint64_t flags, struct fid_mr **mr, void *context)
+{
+	/* TODO: implement this puppy */
+	return -FI_ENOSYS;
+}

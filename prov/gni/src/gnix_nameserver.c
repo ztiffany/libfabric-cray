@@ -33,7 +33,7 @@
  */
 
 #if HAVE_CONFIG_H
-#  include <config.h>
+#include <config.h>
 #endif /* HAVE_CONFIG_H */
 
 #include <errno.h>
@@ -41,6 +41,7 @@
 #include <netdb.h>
 #include <netinet/in.h>
 #include <netinet/tcp.h>
+#include <net/if.h>
 #include <poll.h>
 #include <stdarg.h>
 #include <stddef.h>
@@ -50,6 +51,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 #include <sys/time.h>
+#include <sys/ioctl.h>
 #include <unistd.h>
 #include <stdlib.h>
 #include <sys/socket.h>
@@ -62,127 +64,204 @@
 #define BUF_SIZE 256
 
 /*
- * get gni nic addr from AF_INET  ip addr, also return local device id on same subnet
+ * get gni nic addr from AF_INET  ip addr, also return local device id on same
+ *subnet
  * as the input ip_addr.
  *
  * returns 0 if ipogif entry found
  * otherwise  -errno
  */
-
 static int gnixu_get_pe_from_ip(const char *ip_addr, uint32_t *gni_nic_addr)
 {
-        int scount;
-        int ret = -FI_ENODATA;   /* return this if no ipgogif for this ip-addr found */
-        FILE *fd=NULL;
-        char line[BUF_SIZE], *tmp;
-        char dummy[64],iface[64],fnd_ip_addr[64];
-        char mac_str[64];
-        int w,x,y;
+	int scount;
+	/* return this if no ipgogif for this ip-addr found */
+	int ret = -FI_ENODATA;
+	FILE *fd = NULL;
+	char line[BUF_SIZE], *tmp;
+	char dummy[64], iface[64], fnd_ip_addr[64];
+	char mac_str[64];
+	int w, x, y;
 
-        fd = fopen("/proc/net/arp", "r");
-        if (fd == NULL) return -errno;
+	fd = fopen("/proc/net/arp", "r");
+	if (fd == NULL) {
+		return -errno;
+	}
 
-        if (fd == NULL) return -errno;
+	if (fd == NULL) {
+		return -errno;
+	}
 
-        while (1) {
-                tmp = fgets(line,BUF_SIZE,fd);
-                if (!tmp) break;
+	while (1) {
+		tmp = fgets(line, BUF_SIZE, fd);
+		if (!tmp) {
+			break;
+		}
 
-                /*
-                 * check for a match
-                 */
-
-                if ((strstr(line,ip_addr) != NULL) && (strstr(line,"ipogif") != NULL)) {
-
-                        ret = 0;
-                        scount = sscanf(line,"%s%s%s%s%s%s",fnd_ip_addr,dummy,
-					dummy,mac_str,dummy,iface);
-                        if (scount != 6) {
-                                ret = -EIO;
-                                goto err;
-                        }
+		/*
+		 * check for a match
+		 */
+		if ((strstr(line, ip_addr) != NULL) &&
+		    (strstr(line, "ipogif") != NULL)) {
+			ret = 0;
+			scount = sscanf(line, "%s%s%s%s%s%s", fnd_ip_addr,
+					dummy, dummy, mac_str, dummy, iface);
+			if (scount != 6) {
+				ret = -EIO;
+				goto err;
+			}
 
 			/*
 			 * check exact match of ip addr
 			 */
-			if(!strcmp(fnd_ip_addr,ip_addr)) {
+			if (!strcmp(fnd_ip_addr, ip_addr)) {
+				scount =
+				    sscanf(mac_str, "00:01:01:%02x:%02x:%02x",
+					   &w, &x, &y);
+				if (scount != 3) {
+					ret = -EIO;
+					goto err;
+				}
 
-	                        scount = sscanf(mac_str, "00:01:01:%02x:%02x:%02x", &w, &x, &y);
-	                        if (scount != 3) {
-	                                ret = -EIO;
-	                                goto err;
-	                        }
-	                        /*
-	                         * mysteries of XE/XC mac to nid mapping, see nid2mac in xt sysutils
-	                         */
-	                        *gni_nic_addr = (w << 16) | (x << 8) | y;
+				/*
+				 * mysteries of XE/XC mac to nid mapping, see
+				 * nid2mac in xt sysutils
+				 */
+				*gni_nic_addr = (w << 16) | (x << 8) | y;
 				ret = FI_SUCCESS;
 				break;
 			}
-                }
-        }
+		}
+	}
 
 err:
-        fclose(fd);
-        return ret;
+	fclose(fd);
+	return ret;
 }
 
 /*
- * gnixu name resolution function,
+ * gnix_resolve_name: given a node hint and a valid pointer to a gnix_ep_name
+ * will resolve the gnix specific address of node and fill the provided
+ * gnix_ep_name pointer with the information.
+ *
+ * node (IN) : Node name being resolved to gnix specific address
+ * resolved_addr (IN/OUT) : Pointer that must be provided to contain the
+ *	resolved address.
+ *
+ * TODO: consider a use for service.
  */
-
-int gnix_resolve_name(const char *node, const char *service,
-		      struct gnix_ep_name *resolved_addr)
+int gnix_resolve_name(IN const char *node, IN const char *service,
+		      INOUT struct gnix_ep_name *resolved_addr)
 {
-        int s, rc = 0;
-        struct addrinfo *result, *rp;
-        uint32_t pe = -1;
-        struct addrinfo hints;
-        struct sockaddr_in *sa;
+	int sock = -1;
+	uint32_t pe = -1;
+	uint32_t cpu_id = -1;
+	struct addrinfo *result = NULL;
+	struct addrinfo *rp = NULL;
 
-        if (resolved_addr == NULL) {
-                return -FI_EINVAL;
-        }
+	struct ifreq ifr = {0};
 
-        memset(&hints,0,sizeof hints);
+	struct sockaddr_in *sa = NULL;
+	struct sockaddr_in *sin = NULL;
 
-        hints.ai_family = AF_INET;           /* don't support IPv6 on XC internal networks */
-        hints.ai_socktype = SOCK_DGRAM;
-        hints.ai_flags = AI_CANONNAME;
+	int ret = FI_SUCCESS;
+	gni_return_t status = GNI_RC_SUCCESS;
 
-        s = getaddrinfo(node, "domain", &hints, &result);
-        if (s != 0) {
-                fprintf(stderr, PFX"getaddrinfo: %s\n", gai_strerror(s));
-                rc = -FI_EINVAL;
-                goto err;
-        }
+	struct addrinfo hints = {
+		.ai_family = AF_INET,
+		.ai_socktype = SOCK_DGRAM,
+		.ai_flags = AI_CANONNAME
+	};
 
-        for (rp = result; rp != NULL; rp = rp->ai_next) {
-                assert (rp->ai_addr->sa_family == AF_INET);
-                sa = (struct sockaddr_in *)rp->ai_addr;
-                rc = gnixu_get_pe_from_ip(inet_ntoa(sa->sin_addr),&pe);
-                if (!rc) {
-                        break;
-                }
-        }
+	if (!resolved_addr) {
+		GNIX_LOG_ERROR("Resolved_addr must be a valid pointer.\n");
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
-        if (pe == -1) {
-                rc = -FI_EADDRNOTAVAIL;
-                goto err;
-        }
+	sock = socket(AF_INET, SOCK_DGRAM, 0);
 
-        /*
-         * try to fill in the gnix_ep_name struct with what we can now
-         */
+	if (sock == -1) {
+		GNIX_LOG_ERROR("Socket creation failed: %s\n", strerror(errno));
+		ret = -FI_EIO;
+		goto err;
+	}
 
-        memset(resolved_addr,0,sizeof(struct gnix_ep_name));
+	/* Get the address for the ipogif0 interface */
+	ifr.ifr_addr.sa_family = AF_INET;
+	snprintf(ifr.ifr_name, sizeof(ifr.ifr_name), "%s", "ipogif0");
 
-        resolved_addr->gnix_addr.device_addr = pe;
-        resolved_addr->gnix_addr.cdm_id = 0; /* TODO: have to write a nameserver to get this info */
-        resolved_addr->name_type = 0;        /* TODO: likely depend on service? */
-        freeaddrinfo(result);
+	ret = ioctl(sock, SIOCGIFADDR, &ifr);
+	if (ret == -1) {
+		GNIX_LOG_ERROR("Failed to get address for ipogif0: %s\n",
+			       strerror(errno));
+		ret = -FI_EIO;
+		goto sock_cleanup;
+	}
+
+	sin = (struct sockaddr_in *) &ifr.ifr_addr;
+
+	ret = getaddrinfo(node, "domain", &hints, &result);
+	if (ret != 0) {
+		GNIX_LOG_ERROR("Failed to get address for node provided: %s\n",
+			       strerror(errno));
+		ret = -FI_EINVAL;
+		goto sock_cleanup;
+	}
+
+	for (rp = result; rp != NULL; rp = rp->ai_next) {
+		assert(rp->ai_addr->sa_family == AF_INET);
+		sa = (struct sockaddr_in *) rp->ai_addr;
+
+		/*
+		 * If we are trying to resolve localhost then use
+		 * CdmGetNicAddress.
+		 */
+		if (sa->sin_addr.s_addr == sin->sin_addr.s_addr) {
+			status = GNI_CdmGetNicAddress(0, &pe, &cpu_id);
+			if(status == GNI_RC_SUCCESS) {
+				break;
+			} else {
+				GNIX_LOG_ERROR("Unable to get NIC address.");
+				ret = -FI_EINVAL;
+				goto sock_cleanup;
+			}
+		} else {
+			ret =
+			    gnixu_get_pe_from_ip(inet_ntoa(sa->sin_addr), &pe);
+			if (ret == 0) {
+				break;
+			}
+		}
+	}
+
+	/*
+	 * Make sure address is valid.
+	 */
+	if (pe == -1) {
+		GNIX_LOG_ERROR("Unable to acquire valid address for node %s\n",
+			       node);
+		ret = -FI_EADDRNOTAVAIL;
+		goto sock_cleanup;
+	}
+
+	/*
+	 * Fill the INOUT parameter resolved_addr with the address information
+	 * acquired for the provided node parameter.
+	 */
+	memset(resolved_addr, 0, sizeof(struct gnix_ep_name));
+
+	resolved_addr->gnix_addr.device_addr = pe;
+	/* TODO: have to write a nameserver to get this info */
+	resolved_addr->gnix_addr.cdm_id = 0;
+	/* TODO: likely depend on service? */
+	resolved_addr->name_type = 0;
+sock_cleanup:
+	if(close(sock) == -1) {
+		GNIX_LOG_ERROR("Unable to close socket: %s\n", strerror(errno));
+	}
 err:
-        return rc;
+	if (result != NULL) {
+		freeaddrinfo(result);
+	}
+	return ret;
 }
-
-
