@@ -366,9 +366,9 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
 
-int gnix_mr_reg(struct fid_domain *domain, const void *buf, size_t len,
+int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
-		uint64_t flags, struct fid_mr **mr, void *context);
+		uint64_t flags, struct fid_mr **mr_o, void *context);
 
 
 #ifdef __cplusplus
