@@ -82,7 +82,7 @@ static int sock_wait_init(struct sock_wait *wait, enum fi_wait_obj type)
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, wait->wobj.fd))
 			return -errno;
 		
-		fcntl(wait->wobj.fd[WAIT_READ_FD], F_GETFL, &flags);
+		flags = fcntl(wait->wobj.fd[WAIT_READ_FD], F_GETFL, 0);
 		if (fcntl(wait->wobj.fd[WAIT_READ_FD], F_SETFL, flags | O_NONBLOCK)) {
 			close(wait->wobj.fd[WAIT_READ_FD]);
 			close(wait->wobj.fd[WAIT_WRITE_FD]);
@@ -170,12 +170,15 @@ void sock_wait_signal(struct fid_wait *wait_fid)
 {
 	struct sock_wait *wait;
 	static char c = 'a';
+	int ret;
 
 	wait = container_of(wait_fid, struct sock_wait, wait_fid);
 
 	switch (wait->type) {
 	case FI_WAIT_FD:
-		write(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
+		ret = write(wait->wobj.fd[WAIT_WRITE_FD], &c, 1);
+		if (ret != 1)
+			SOCK_LOG_ERROR("failed to signal\n");
 		break;
 		
 	case FI_WAIT_MUTEX_COND:
@@ -273,6 +276,8 @@ int sock_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	fab = container_of(fabric, struct sock_fabric, fab_fid);
 	if (!attr || attr->wait_obj == FI_WAIT_UNSPEC)
 		wait_obj_type = FI_WAIT_FD;
+	else 
+		wait_obj_type = attr->wait_obj;
 	
 	wait = calloc(1, sizeof(*wait));
 	if (!wait)

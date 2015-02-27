@@ -34,6 +34,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <assert.h>
 #include <errno.h>
 #include <fcntl.h>
 #include <netdb.h>
@@ -127,7 +128,7 @@ static ssize_t sock_ep_recv(struct fid_ep *ep, void *buf, size_t len, void *desc
 	msg.iov_count = 1;
 	msg.addr = src_addr;
 	msg.context = context;
-
+	msg.data = 0;
 	return sock_ep_recvmsg(ep, &msg, 0);
 }
 
@@ -142,6 +143,7 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	msg.iov_count = count;
 	msg.addr = src_addr;
 	msg.context = context;
+	msg.data = 0;
 	return sock_ep_recvmsg(ep, &msg, 0);
 }
 
@@ -392,7 +394,7 @@ static ssize_t sock_ep_trecv(struct fid_ep *ep, void *buf, size_t len, void *des
 	msg.context = context;
 	msg.tag = tag;
 	msg.ignore = ignore;
-
+	msg.data = 0;
 	return sock_ep_trecvmsg(ep, &msg, 0);
 }
 
@@ -409,6 +411,7 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 	msg.context = context;
 	msg.tag = tag;
 	msg.ignore = ignore;
+	msg.data = 0;
 	return sock_ep_trecvmsg(ep, &msg, 0);
 }
 

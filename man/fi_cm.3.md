@@ -117,26 +117,30 @@ Outbound data transfers cannot be initiated on a connection-oriented
 endpoint until an FI_CONNECTED event has been generated.  However, receive
 buffers may be associated with an endpoint anytime.
 
-For connection-oriented endpoints, the param buffer will be sent as
-part of the connection request or response, subject to the constraints of
-the underlying connection protocol.  Applications may use fi_control
-to determine the size of application data that may be exchanged as
-part of a connection request or response.  The fi_connect, fi_accept, and
-fi_reject calls will silently truncate any application data which cannot
-fit into underlying protocol messages.
-
 ## fi_shutdown
 
 The fi_shutdown call is used to gracefully disconnect an endpoint from
-its peer.  If shutdown flags are 0, the endpoint is fully disconnected,
-and no additional data transfers will be possible.  Flags may also be
-used to indicate that only outbound (FI_WRITE) or inbound (FI_READ) data
-transfers should be disconnected.  Regardless of the shutdown option
-selected, any queued completions associated with asynchronous operations
-may still be retrieved from the corresponding event queues.
+its peer.  The flags parameter is reserved and must be 0.
+
+Outstanding operations posted to the endpoint when fi_shutdown is
+called will be canceled or discarded.  Notification of canceled operations
+will be reported by the provider to the corresponding completion
+queue(s).  Discarded operations will silently be dropped, with no
+completions generated.  The choice of canceling, versus discarding
+operations, is provider dependent.  However, all canceled completions
+will be written before fi_shutdown returns.
+
+When called, fi_shutdown does not affect completions already written to a
+completion queue.  Any queued completions associated with asynchronous
+operations posted to the endpoint may still be retrieved from the
+corresponding completion queue(s) after an endpoint has been shutdown.
 
 An FI_SHUTDOWN event will be generated for an endpoint when the remote
 peer issues a disconnect using fi_shutdown or abruptly closes the endpoint.
+Note that in the abrupt close case, an FI_SHUTDOWN event will only be
+generated if the peer system is reachable and a service or kernel agent
+on the peer system is able to notify the local endpoint that the connection
+has been aborted.
 
 ## fi_getname / fi_getpeer
 
@@ -162,6 +166,17 @@ errno is returned. Fabric errno values are defined in
 
 # NOTES
 
+For connection-oriented endpoints, the buffer referenced by param
+will be sent as part of the connection request or response, subject
+to the constraints of the underlying connection protocol.
+Applications may use fi_getopt with the FI_OPT_CM_DATA_SIZE endpoint
+option to determine the size of application data that may be exchanged as
+part of a connection request or response.  The fi_connect, fi_accept, and
+fi_reject calls will silently truncate any application data which cannot
+fit into underlying protocol messages.  User data exchanged as part of
+the connection process is available as part of the fi_eq_cm_entry
+structure, for FI_CONNREQ and FI_CONNECTED events, or as additional
+err_data to fi_eq_err_entry, in the case of a rejected connection.
 
 # SEE ALSO
 

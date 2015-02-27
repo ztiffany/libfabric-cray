@@ -58,8 +58,6 @@
 const struct fi_ep_attr sock_dgram_ep_attr = {
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
-	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
@@ -155,13 +153,6 @@ int sock_dgram_verify_ep_attr(struct fi_ep_attr *ep_attr,
 		if (ep_attr->max_msg_size > sock_dgram_ep_attr.max_msg_size)
 			return -FI_ENODATA;
 
-		if (ep_attr->inject_size > sock_dgram_ep_attr.inject_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->total_buffered_recv > 
-		   sock_dgram_ep_attr.total_buffered_recv)
-			return -FI_ENODATA;
-
 		if (ep_attr->max_order_raw_size >
 		   sock_dgram_ep_attr.max_order_raw_size)
 			return -FI_ENODATA;
@@ -213,23 +204,20 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	int ret;
-	int udp_sock;
+	int udp_sock = 0;
 	socklen_t len;
 	struct fi_info *_info;
 	struct addrinfo sock_hints;
-	struct addrinfo *result = NULL;
+	struct addrinfo *result = NULL, *result_ptr = NULL;
 	struct sockaddr_in *src_addr = NULL, *dest_addr = NULL;
 	char sa_ip[INET_ADDRSTRLEN];
 	char hostname[HOST_NAME_MAX];
 
 	if (!info)
-		return -FI_EBADFLAGS;
+		return -FI_EINVAL;
 
 	*info = NULL;
 	
-	if (!node && !service && !hints)
-		return -FI_EBADFLAGS;
-
 	if (version != FI_VERSION(SOCK_MAJOR_VERSION, 
 				 SOCK_MINOR_VERSION))
 		return -FI_ENODATA;
@@ -264,13 +252,14 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		ret = getaddrinfo(node ? node : hostname, service, 
-				  &sock_hints, &result);
+				  &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
 
+		result = result_ptr;
 		while (result) {
 			if (result->ai_family == AF_INET && 
 			    result->ai_addrlen == sizeof(struct sockaddr_in))
@@ -290,16 +279,18 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		memcpy(src_addr, result->ai_addr, result->ai_addrlen);
-		freeaddrinfo(result); 
-	} else if (node || service) {
+		freeaddrinfo(result_ptr); 
+		result_ptr = NULL;
+	} else {
 
-		ret = getaddrinfo(node, service, &sock_hints, &result);
+		ret = getaddrinfo(node, service, &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
 		
+		result = result_ptr;
 		while (result) {
 			if (result->ai_family == AF_INET && 
 			    result->ai_addrlen == sizeof(struct sockaddr_in))
@@ -321,11 +312,16 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 		memcpy(dest_addr, result->ai_addr, result->ai_addrlen);
 		
 		udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (udp_sock < 0) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+			
 		ret = connect(udp_sock, result->ai_addr, 
 			      result->ai_addrlen);
 		if ( ret != 0) {
 			SOCK_LOG_ERROR("Failed to create udp socket\n");
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 
@@ -338,27 +334,26 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 		ret = getsockname(udp_sock, (struct sockaddr*)src_addr, &len);
 		if (ret != 0) {
 			SOCK_LOG_ERROR("getsockname failed\n");
-			close(udp_sock);
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 		close(udp_sock);
-		freeaddrinfo(result); 
+		udp_sock = 0;
+		freeaddrinfo(result_ptr); 
+		result_ptr = NULL;
 	}
 
-	if (hints->src_addr) {
-		if (!src_addr) {
-			src_addr = calloc(1, sizeof(struct sockaddr_in));				
-			if (!src_addr) {
-				ret = -FI_ENOMEM;
-				goto err;
-			}
+	if (hints && hints->src_addr) {
+		if(hints->src_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->src_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
 		}
-		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
 
-	if (hints->dest_addr) {
+	if (hints && hints->dest_addr) {
 		if (!dest_addr) {
 			dest_addr = calloc(1, sizeof(struct sockaddr_in));
 			if (!dest_addr) {
@@ -366,7 +361,12 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 		}
-		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		if(hints->dest_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->dest_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
@@ -384,7 +384,7 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 
 	_info = sock_dgram_fi_info(hints, src_addr, dest_addr);
 	if (!_info) {
-		ret = FI_ENOMEM;
+		ret = -FI_ENOMEM;
 		goto err;
 	}
 
@@ -396,10 +396,15 @@ int sock_dgram_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 
 err:
+	if (udp_sock > 0)
+		close(udp_sock);
 	if (src_addr)
 		free(src_addr);
 	if (dest_addr)
 		free(dest_addr);
+	if (result_ptr)
+		freeaddrinfo(result_ptr);
+
 	SOCK_LOG_ERROR("fi_getinfo failed\n");
 	return ret;	
 }

@@ -59,8 +59,6 @@
 const struct fi_ep_attr sock_rdm_ep_attr = {
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
-	.inject_size = SOCK_EP_MAX_INJECT_SZ,
-	.total_buffered_recv = SOCK_EP_MAX_BUFF_RECV,
 	.max_order_raw_size = SOCK_EP_MAX_ORDER_RAW_SZ,
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
@@ -93,23 +91,35 @@ static int sock_rdm_verify_rx_attr(const struct fi_rx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported RDM rx caps\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+		SOCK_LOG_INFO("Unsuported rx message order\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv)
+	if (attr->total_buffered_recv > sock_rdm_rx_attr.total_buffered_recv) {
+		SOCK_LOG_INFO("Buffered receive size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->size > sock_rdm_rx_attr.size)
+	if (attr->size > sock_rdm_rx_attr.size) {
+		SOCK_LOG_INFO("Rx size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->iov_limit > sock_rdm_rx_attr.iov_limit)
+	if (attr->iov_limit > sock_rdm_rx_attr.iov_limit) {
+		SOCK_LOG_INFO("Rx iov limit too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -119,23 +129,35 @@ static int sock_rdm_verify_tx_attr(const struct fi_tx_attr *attr)
 	if (!attr)
 		return 0;
 
-	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->caps | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported RDM tx caps\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP)
+	if ((attr->op_flags | SOCK_EP_RDM_CAP) != SOCK_EP_RDM_CAP) {
+		SOCK_LOG_INFO("Unsupported rx op_flags\n");
 		return -FI_ENODATA;
+	}
 
-	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+	if ((attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+		SOCK_LOG_INFO("Unsupported tx message order\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->inject_size > sock_rdm_tx_attr.inject_size)
+	if (attr->inject_size > sock_rdm_tx_attr.inject_size) {
+		SOCK_LOG_INFO("Inject size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->size > sock_rdm_tx_attr.size)
+	if (attr->size > sock_rdm_tx_attr.size) {
+		SOCK_LOG_INFO("Tx size too large\n");
 		return -FI_ENODATA;
+	}
 
-	if (attr->iov_limit > sock_rdm_tx_attr.iov_limit)
+	if (attr->iov_limit > sock_rdm_tx_attr.iov_limit) {
+		SOCK_LOG_INFO("Tx iov limit too large\n");
 		return -FI_ENODATA;
+	}
 
 	return 0;
 }
@@ -144,39 +166,45 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			    struct fi_tx_attr *tx_attr,
 			    struct fi_rx_attr *rx_attr)
 {
+	int ret;
+
 	if (ep_attr) {
 		switch (ep_attr->protocol) {
 		case FI_PROTO_UNSPEC:
 		case FI_PROTO_SOCK_TCP:
 			break;
 		default:
+			SOCK_LOG_INFO("Unsupported protocol\n");
 			return -FI_ENODATA;
 		}
 
-		if (ep_attr->max_msg_size > sock_rdm_ep_attr.max_msg_size)
+		if (ep_attr->max_msg_size > sock_rdm_ep_attr.max_msg_size) {
+			SOCK_LOG_INFO("Message size too large\n");
 			return -FI_ENODATA;
-
-		if (ep_attr->inject_size > sock_rdm_ep_attr.inject_size)
-			return -FI_ENODATA;
-
-		if (ep_attr->total_buffered_recv > 
-		   sock_rdm_ep_attr.total_buffered_recv)
-			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_raw_size >
-		   sock_rdm_ep_attr.max_order_raw_size)
+		   sock_rdm_ep_attr.max_order_raw_size) {
+			SOCK_LOG_INFO("RAW order size too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_war_size >
-		   sock_rdm_ep_attr.max_order_war_size)
+		   sock_rdm_ep_attr.max_order_war_size) {
+			SOCK_LOG_INFO("WAR order size too large\n");
 			return -FI_ENODATA;
+		}
 
 		if (ep_attr->max_order_waw_size > 
-		   sock_rdm_ep_attr.max_order_waw_size)
+		   sock_rdm_ep_attr.max_order_waw_size) {
+			SOCK_LOG_INFO("WAW order size too large\n");
 			return -FI_ENODATA;
+		}
 
-		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
+		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER) {
+			SOCK_LOG_INFO("Unsupported message ordering\n");
 			return -FI_ENODATA;
+		}
 
 		if ((ep_attr->tx_ctx_cnt > SOCK_EP_MAX_TX_CNT) &&
 		    ep_attr->tx_ctx_cnt != FI_SHARED_CONTEXT)
@@ -187,8 +215,13 @@ int sock_rdm_verify_ep_attr(struct fi_ep_attr *ep_attr,
 			return -FI_ENODATA;
 	}
 
-	if (sock_rdm_verify_tx_attr(tx_attr) || sock_rdm_verify_rx_attr(rx_attr))
-		return -FI_ENODATA;
+	ret = sock_rdm_verify_tx_attr(tx_attr);
+	if (ret)
+		return ret;
+
+	ret = sock_rdm_verify_rx_attr(rx_attr);
+	if (ret)
+		return ret;
 
 	return 0;
 }
@@ -215,27 +248,29 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		     uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
 	int ret;
-	int udp_sock;
+	int udp_sock = 0;
 	socklen_t len;
 	struct fi_info *_info;
 	struct addrinfo sock_hints;
-	struct addrinfo *result = NULL;
+	struct addrinfo *result = NULL, *result_ptr = NULL;
 	struct sockaddr_in *src_addr = NULL, *dest_addr = NULL;
 	char sa_ip[INET_ADDRSTRLEN];
 	char hostname[HOST_NAME_MAX];
 
 	if (!info)
-		return -FI_EBADFLAGS;
+		return -FI_EINVAL;
 
 	*info = NULL;
 	
 	if (version != FI_VERSION(SOCK_MAJOR_VERSION, 
-				 SOCK_MINOR_VERSION))
+				 SOCK_MINOR_VERSION)) {
+		SOCK_LOG_INFO("Unsupported version\n");
 		return -FI_ENODATA;
+	}
 
 	if (hints) {
 		if ((SOCK_EP_RDM_CAP | hints->caps) != SOCK_EP_RDM_CAP) {
-			SOCK_LOG_INFO("Cannot support requested options!\n");
+			SOCK_LOG_INFO("Unsupported capabilities\n");
 			return -FI_ENODATA;
 		}
 		
@@ -262,13 +297,14 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		ret = getaddrinfo(node ? node : hostname, service, 
-				  &sock_hints, &result);
+				  &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
 
+		result = result_ptr;
 		while (result) {
 			if (result->ai_family == AF_INET && 
 			    result->ai_addrlen == sizeof(struct sockaddr_in))
@@ -288,16 +324,18 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 		memcpy(src_addr, result->ai_addr, result->ai_addrlen);
-		freeaddrinfo(result); 
-	} else if (node || service) {
+		freeaddrinfo(result_ptr); 
+		result_ptr = NULL;
+	} else {
 
-		ret = getaddrinfo(node, service, &sock_hints, &result);
+		ret = getaddrinfo(node, service, &sock_hints, &result_ptr);
 		if (ret != 0) {
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			SOCK_LOG_INFO("getaddrinfo failed!\n");
 			goto err;
 		}
 		
+		result = result_ptr;
 		while (result) {
 			if (result->ai_family == AF_INET && 
 			    result->ai_addrlen == sizeof(struct sockaddr_in))
@@ -319,11 +357,16 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		memcpy(dest_addr, result->ai_addr, result->ai_addrlen);
 		
 		udp_sock = socket(AF_INET, SOCK_DGRAM, 0);
+		if (udp_sock < 0) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
 		ret = connect(udp_sock, result->ai_addr, 
 			      result->ai_addrlen);
 		if ( ret != 0) {
 			SOCK_LOG_ERROR("Failed to create udp socket\n");
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 
@@ -336,27 +379,26 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 		ret = getsockname(udp_sock, (struct sockaddr*)src_addr, &len);
 		if (ret != 0) {
 			SOCK_LOG_ERROR("getsockname failed\n");
-			close(udp_sock);
-			ret = FI_ENODATA;
+			ret = -FI_ENODATA;
 			goto err;
 		}
 		close(udp_sock);
-		freeaddrinfo(result); 
+		udp_sock = 0;
+		freeaddrinfo(result_ptr); 
+		result_ptr = NULL;
 	}
 
-	if (hints->src_addr) {
-		if (!src_addr) {
-			src_addr = calloc(1, sizeof(struct sockaddr_in));				
-			if (!src_addr) {
-				ret = -FI_ENOMEM;
-				goto err;
-			}
+	if (hints && hints->src_addr) {
+		if(hints->src_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires src_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->src_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
 		}
-		assert(hints->src_addrlen == sizeof(struct sockaddr_in));
 		memcpy(src_addr, hints->src_addr, hints->src_addrlen);
 	}
 
-	if (hints->dest_addr) {
+	if (hints && hints->dest_addr) {
 		if (!dest_addr) {
 			dest_addr = calloc(1, sizeof(struct sockaddr_in));
 			if (!dest_addr) {
@@ -364,7 +406,12 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 		}
-		assert(hints->dest_addrlen == sizeof(struct sockaddr_in));
+		if(hints->dest_addrlen != sizeof(struct sockaddr_in)){
+			SOCK_LOG_ERROR("Sockets provider requires dest_addrlen to be sizeof(struct sockaddr_in); got %zu\n", 
+					hints->dest_addrlen);
+			ret = -FI_ENODATA;
+			goto err;
+		}
 		memcpy(dest_addr, hints->dest_addr, hints->dest_addrlen);
 	}
 
@@ -382,7 +429,7 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 
 	_info = sock_rdm_fi_info(hints, src_addr, dest_addr);
 	if (!_info) {
-		ret = FI_ENOMEM;
+		ret = -FI_ENOMEM;
 		goto err;
 	}
 
@@ -394,10 +441,15 @@ int sock_rdm_getinfo(uint32_t version, const char *node, const char *service,
 	return 0;
 
 err:
+	if (udp_sock > 0)
+		close(udp_sock);
 	if (src_addr)
 		free(src_addr);
 	if (dest_addr)
 		free(dest_addr);
+	if (result_ptr)
+		freeaddrinfo(result_ptr);
+
 	SOCK_LOG_ERROR("fi_getinfo failed\n");
 	return ret;	
 }

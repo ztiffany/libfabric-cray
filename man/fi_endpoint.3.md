@@ -212,6 +212,12 @@ receive contexts associated with the scalable endpoint.  If resources are still
 associated with the scalable endpoint when attempting to close, the call will
 return -FI_EBUSY.
 
+Outstanding operations posted to the endpoint when fi_close is
+called will be discarded.  Discarded operations will silently be dropped,
+with no completions reported.  Additionally, a provider may discard previously
+completed operations from the associated completion queue(s).  The
+behavior to discard completed operations is provider specific.
+
 ## fi_ep_bind
 
 fi_ep_bind is used to associate an endpoint with hardware resources.
@@ -399,6 +405,12 @@ The following option levels and option names and parameters are defined.
   that applications that want to override the default MIN_MULTI_RECV
   value set this option before enabling the corresponding endpoint.
 
+- *FI_OPT_CM_DATA_SIZE - size_t*
+: Defines the size of available space in CM messages for user-defined
+  data.  This value limits the amount of data that applications can
+  exchange between peer endpoints using the fi_connect, fi_accept,
+  and fi_reject operations.  This option is read only.
+
 ## fi_rx_size_left
 
 The fi_rx_size_left call returns a lower bound on the number of receive
@@ -427,8 +439,6 @@ struct fi_ep_attr {
 	uint32_t  protocol;
 	uint32_t  protocol_version;
 	size_t    max_msg_size;
-	size_t    inject_size;
-	size_t    total_buffered_recv;
 	size_t    msg_prefix_size;
 	size_t    max_order_raw_size;
 	size_t    max_order_war_size;
@@ -492,16 +502,6 @@ capabilities defined for the lesser version.
 
 Defines the maximum size for an application data transfer as a single
 operation.
-
-## inject_size - Inject Size
-
-Defines the default inject operation size (see the FI_INJECT flag)
-that an endpoint will support.  This value applies per send operation.
-
-## total_buffered_recv - Total Buffered Receive
-
-Defines the total available space allocated by the provider to buffer
-received messages (see the FI_BUFFERED_RECV flag).
 
 ## msg_prefix_size - Message Prefix Size
 
@@ -811,9 +811,7 @@ struct fi_tx_attr {
 
 *inject_size*
 : The requested inject operation size (see the FI_INJECT flag) that
-  the context will support.  This value must be equal to or less than
-  the inject_size of the associated endpoint.  See the fi_endpoint
-  Inject Size section.
+  the context will support.  See the fi_endpoint Inject Size section.
 
 *size*
 : The size of the context, in bytes.  The size is usually used as an
@@ -905,9 +903,9 @@ struct fi_rx_attr {
 
 *total_buffered_recv*
 : Defines the total available space allocated by the provider to
-  buffer received messages on the context.  This value must be less
-  than or equal to that specified for the associated endpoint.  See
-  the fi_endpoint Total Buffered Receive section.
+  buffer messages that are received for which there is no matching
+  receive operation.  If set to 0, any messages that arrive before a
+  receive buffer has been posted are lost.
 
 *size*
 : The size of the context, in bytes.  The size is usually used as an
@@ -982,14 +980,12 @@ transfer operations that take flags as input override the op_flags
 value of an endpoint.
 
 *FI_INJECT*
-: Indicates that all outbound data buffer should be returned to the
+: Indicates that all outbound data buffers should be returned to the
   user's control immediately after a data transfer call returns, even
   if the operation is handled asynchronously.  This may require that
   the provider copy the data into a local buffer and transfer out of
   that buffer.  A provider may limit the total amount of send data
-  that may be buffered and/or the size of a single send.  Applications
-  may discover and modify these limits using the endpoint's getopt and
-  setopt interfaces.
+  that may be buffered and/or the size of a single send.
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to

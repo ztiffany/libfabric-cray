@@ -219,7 +219,8 @@ takes a struct fi_msg_tagged as input.
 The function fi_tsearch determines if a message with the specified tag
 with ignore mask from an optionally supplied source address has been
 received and is buffered by the provider.  The fi_tsearch call is only
-available on endpoints with FI_BUFFERED_RECV enabled.  The fi_tsearch
+available on endpoints with provider allocated buffering enabled (see
+fi_rx_attr total_buffered_recv).  The fi_tsearch
 operation may complete asynchronously or immediately, depending on the
 underlying provider implementation.
 
@@ -329,24 +330,6 @@ src_addr, and src_addrlen parameters.
 
 *-FI_EOTHER*
 : Indicates that an unspecified error occurred.
-
-# NOTES
-
-## Ordering
-
-The order in which tags are matched is only defined for a pair of
-sending and receiving endpoints.  The ordering is defined by the
-underlying protocol.  If a specific protocol is not selected for an
-endpoint, the libfabric implementation will choose a protocol that
-satisfies the following requirement from the MPI-3.0 specification
-(page 41, lines 1-5):
-
-> If a sender sends two messages in succession to the same
-> destination, and both match the same receive, then this operation
-> cannot receive the second message if the first one is still pending.
-> If a receiver posts two receives in succession, and both match the
-> same message, then the second receive operation cannot be satisfied
-> by this message, if the first one is still pending.
 
 # SEE ALSO
 

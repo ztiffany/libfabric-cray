@@ -81,7 +81,7 @@ usdf_cm_msg_connreq_cleanup(struct usdf_connreq *crp)
 	}
 
 	if (crp->cr_pollitem.pi_rtn != NULL) {
-		epoll_ctl(fp->fab_epollfd, EPOLL_CTL_DEL, crp->cr_sockfd, NULL);
+		(void) epoll_ctl(fp->fab_epollfd, EPOLL_CTL_DEL, crp->cr_sockfd, NULL);
 		crp->cr_pollitem.pi_rtn = NULL;
 	}
 	if (crp->cr_sockfd != -1) {
@@ -234,6 +234,7 @@ usdf_cm_msg_connreq_failed(struct usdf_connreq *crp, int error)
         err.err = -error;
         err.prov_errno = 0;
         err.err_data = NULL;
+        err.err_data_size = 0;
         usdf_eq_write_internal(eq, 0, &err, sizeof(err), USDF_EVENT_FLAG_ERROR);
 
         usdf_cm_msg_connreq_cleanup(crp);

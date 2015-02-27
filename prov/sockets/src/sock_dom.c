@@ -34,6 +34,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <assert.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -118,7 +119,8 @@ static int sock_dom_close(struct fid *fid)
 {
 	struct sock_domain *dom;
 	void *res;
-	int c;
+	int ret;
+	char c = 0;
 
 	dom = container_of(fid, struct sock_domain, dom_fid.fid);
 	if (atomic_get(&dom->ref)) {
@@ -126,7 +128,12 @@ static int sock_dom_close(struct fid *fid)
 	}
 
 	dom->listening = 0;
-	write(dom->signal_fds[0], &c, 1);
+	ret = write(dom->signal_fds[0], &c, 1);
+	if (ret != 1) {
+		SOCK_LOG_ERROR("Failed to signal\n");
+		return -FI_EINVAL;
+	}
+
 	if (pthread_join(dom->listen_thread, &res)) {
 		SOCK_LOG_ERROR("could not join listener thread, errno = %d\n", errno);
 		return -FI_EBUSY;
@@ -241,13 +248,21 @@ struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 	return sock_mr_verify_key(domain, key, buf, len, access);
 }
 
-static int sock_regattr(struct fid_domain *domain, const struct fi_mr_attr *attr,
+static int sock_regattr(struct fid *fid, const struct fi_mr_attr *attr,
 		uint64_t flags, struct fid_mr **mr)
 {
 	struct fi_eq_entry eq_entry;
 	struct sock_domain *dom;
 	struct sock_mr *_mr;
 	uint64_t key;
+	struct fid_domain *domain;
+
+	if (fid->fclass != FI_CLASS_DOMAIN) {
+		SOCK_LOG_ERROR("memory registration only supported "
+				"for struct fid_domain\n");
+		return -FI_EINVAL;
+	}
+	domain = container_of(fid, struct fid_domain, fid);
 
 	dom = container_of(domain, struct sock_domain, dom_fid);
 	if (!(dom->info.mode & FI_PROV_MR_ATTR) && 
@@ -300,7 +315,7 @@ err:
 	return -errno;
 }
 
-static int sock_regv(struct fid_domain *domain, const struct iovec *iov,
+static int sock_regv(struct fid *fid, const struct iovec *iov,
 		size_t count, uint64_t access,
 		uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr, void *context)
@@ -313,10 +328,10 @@ static int sock_regv(struct fid_domain *domain, const struct iovec *iov,
 	attr.offset = offset;
 	attr.requested_key = requested_key;
 	attr.context = context;
-	return sock_regattr(domain, &attr, flags, mr);
+	return sock_regattr(fid, &attr, flags, mr);
 }
 
-static int sock_reg(struct fid_domain *domain, const void *buf, size_t len,
+static int sock_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr, void *context)
 {
@@ -324,7 +339,7 @@ static int sock_reg(struct fid_domain *domain, const void *buf, size_t len,
 
 	iov.iov_base = (void *) buf;
 	iov.iov_len = len;
-	return sock_regv(domain, &iov, 1, access,  offset, requested_key,
+	return sock_regv(fid, &iov, 1, access,  offset, requested_key,
 			 flags, mr, context);
 }
 
@@ -462,7 +477,9 @@ int sock_domain(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 
 	flags = fcntl(sock_domain->signal_fds[1], F_GETFL, 0);
-	fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK);
+	if (fcntl(sock_domain->signal_fds[1], F_SETFL, flags | O_NONBLOCK))
+		SOCK_LOG_ERROR("fcntl failed\n");
+
 	sock_conn_listen(sock_domain);
 
 	while(!(volatile int)sock_domain->listening)
