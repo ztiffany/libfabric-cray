@@ -84,8 +84,8 @@ static struct fi_ops_fabric gnix_fab_ops = {
 
 static int gnix_fabric_close(fid_t fid)
 {
-	struct gnix_fabric *fab;
-	fab = container_of(fid, struct gnix_fabric, fab_fid);
+	struct gnix_fid_fabric *fab;
+	fab = container_of(fid, struct gnix_fid_fabric, fab_fid);
 
 	/*
  	 * TODO: is this really right thing to do?
@@ -110,10 +110,11 @@ static struct fi_ops gnix_fab_fi_ops = {
 /*
  * define methods needed for the GNI fabric provider
  */
-static int gnix_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		       void *context)
+static int gnix_fabric_open(struct fi_fabric_attr *attr,
+			    struct fid_fabric **fabric,
+			    void *context)
 {
-	struct gnix_fabric *fab;
+	struct gnix_fid_fabric *fab;
 
 	if (strcmp(attr->name, gnix_fab_name)) {
 		return -FI_ENODATA;
@@ -353,7 +354,7 @@ struct fi_provider gnix_prov = {
 	.version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = gnix_getinfo,
-	.fabric = gnix_fabric,
+	.fabric = gnix_fabric_open,
 	.cleanup = gnix_fini
 };
 

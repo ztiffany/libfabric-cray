@@ -51,12 +51,12 @@ gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *p, *next;
 	gni_return_t status;
 
-	domain = container_of(fid, struct gnix_domain, domain_fid.fid);
+	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
 	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
 		ret = -FI_EINVAL;
 		goto err;
@@ -122,9 +122,9 @@ gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			void **ops, void *context)
 {
 	int ret = -FI_ENOSYS;
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 
-	domain = container_of(fid, struct gnix_domain, domain_fid.fid);
+	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
 	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
 		ret = -FI_EINVAL;
 		goto err;
@@ -162,17 +162,17 @@ static struct fi_ops_mr gnix_domain_mr_ops = {
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **dom, void *context)
 {
-	struct gnix_domain *domain = NULL;
+	struct gnix_fid_domain *domain = NULL;
 	int ret = FI_SUCCESS;
 	uint8_t ptag;
 	uint32_t cookie, device_addr;
 	struct gnix_cm_nic *cm_nic = NULL, *elem;
-	struct gnix_fabric *fabric_priv;
+	struct gnix_fid_fabric *fabric_priv;
 	gni_return_t status;
 
 	GNIX_LOG_INFO("%s\n", __func__);
 
-	fabric_priv = container_of(fabric, struct gnix_fabric, fab_fid);
+	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
 	if (!info->domain_attr->name ||
 	    strncmp(info->domain_attr->name, gnix_dom_name,
 		    strlen(gnix_dom_name))) {
