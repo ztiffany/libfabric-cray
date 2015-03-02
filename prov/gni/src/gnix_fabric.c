@@ -265,19 +265,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	/*
 	 * fill in the gnix_info struct
 	 */
-	gnix_info = calloc(1, sizeof(*info));
+	gnix_info = fi_allocinfo();
 	if (gnix_info == NULL) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	gnix_info->tx_attr = calloc(1, sizeof(*gnix_info->tx_attr));
-	gnix_info->rx_attr = calloc(1, sizeof(*gnix_info->rx_attr));
-	gnix_info->ep_attr = calloc(1, sizeof(*gnix_info->ep_attr));
-	gnix_info->domain_attr = calloc(1, sizeof(*gnix_info->domain_attr));
-	gnix_info->fabric_attr = calloc(1, sizeof(*gnix_info->fabric_attr));
-	if (!gnix_info->tx_attr|| !gnix_info->rx_attr || !gnix_info->ep_attr ||
-	    !gnix_info->domain_attr || !gnix_info->fabric_attr) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
