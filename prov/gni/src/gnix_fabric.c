@@ -75,11 +75,11 @@ static struct fi_ops_fabric gnix_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = gnix_domain_open,
 	/* TODO: need to define for FI_EP_MSG */
-	.passive_ep = NULL,
+	.passive_ep = fi_no_passive_ep,
 	/* TODO: need to define for FI_EP_MSG */
-	.eq_open = NULL,
+	.eq_open = fi_no_eq_open,
 	/* TODO: what's this about */
-	.wait_open = NULL,
+	.wait_open = fi_no_wait_open,
 };
 
 static int gnix_fabric_close(fid_t fid)
