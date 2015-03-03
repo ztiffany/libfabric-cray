@@ -180,18 +180,21 @@ enum gnix_progress_type {
 /*
  * simple struct for gnix fabric, may add more stuff here later
  */
-struct gnix_fabric {
+struct gnix_fid_fabric {
 	struct fid_fabric fab_fid;
 	/* llist of domains's opened from fabric */
 	struct list_head domain_list;
 };
 
 /*
- * a gnix_domain is associated with one cdm and one nic
- * since a single cdm with a given cookie/cdm_id can only
- * be bound once to a given physical aries nic
+ * a gnix_fid_domain is associated with one or more gnix_nic's.
+ * the gni_nics are in turn associated with ep's opened off of the
+ * domain.  The gni_nic's are use for data motion - sending/receivng
+ * messages, rma ops, etc.  Each gnix_fid_domain is associated with
+ * a single gnix_cm_nic.  The gnix_cm_nic is used for building internal
+ * connections between the endpoints at different addresses.
  */
-struct gnix_domain {
+struct gnix_fid_domain {
 	struct fid_domain domain_fid;
 	/* used for fabric object llist of domains*/
 	struct list_node list;
@@ -228,7 +231,7 @@ struct gnix_cm_nic {
 	/* free list of wc datagrams   */
 	struct list_head wc_datagram_free_list;
 	/* pointer to domain this nic is attached to */
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 	struct gnix_datagram *datagram_base;
 	uint32_t cdm_id;
 	uint8_t ptag;
@@ -255,7 +258,7 @@ struct gnix_nic {
 	/* list for managing wqe's */
 	struct gnix_wqe_list *wqe_list;
 	/* pointer to domain this nic is attached to */
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 	struct list_head smsg_active_req_list;
 	/* list for managing smsg req's */
 	struct gnix_smsg_req_list *smsg_req_list;
@@ -285,21 +288,21 @@ struct gnix_cq_tagged_entry {
 	struct fi_cq_tagged_entry the_entry;
 };
 
-struct gnix_cq {
+struct gnix_fid_cq {
 	struct fid_cq cq_fid;
 	uint64_t flags;
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 	void *free_list_base;
 	struct list_head entry;
 	struct list_head err_entry;
 	struct list_head entry_free_list;
-	int (*progress_fn)(struct gnix_cq *);
+	int (*progress_fn)(struct gnix_fid_cq *);
 	enum fi_cq_format format;
 };
 
-struct gnix_mem_desc {
+struct gnix_fid_mem_desc {
 	struct fid_mr mr_fid;
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 	gni_mem_handle_t mem_hndl;
 };
 
@@ -307,27 +310,27 @@ struct gnix_mem_desc {
  * TODO: need a lot more fields for AV support
  */
 
-struct gnix_av {
+struct gnix_fid_av {
 	struct fid_av av_fid;
-	struct gnix_domain *domain;
+	struct gnix_fid_domain *domain;
 };
 
 /*
  *   gnix endpoint structure
  */
-struct gnix_ep {
+struct gnix_fid_ep {
 	struct fid_ep ep_fid;
 	enum fi_ep_type type;
-	struct gnix_domain *domain;
-	struct gnix_cq *send_cq;
-	struct gnix_cq *recv_cq;
-	struct gnix_av *av;
+	struct gnix_fid_domain *domain;
+	struct gnix_fid_cq *send_cq;
+	struct gnix_fid_cq *recv_cq;
+	struct gnix_fid_av *av;
 	struct gnix_nic *nic;
 	void *vc_hash_hndl;
 	void *vc;
-	int (*progress_fn)(struct gnix_ep *, enum gnix_progress_type);
+	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
 	/* RX specific progress fn */
-	int (*rx_progress_fn)(struct gnix_ep *, gni_return_t *rc);
+	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
 	int enabled;
 	int no_want_cqes;
 	/* num. active post descs associated with this ep */

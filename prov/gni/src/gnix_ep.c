@@ -277,11 +277,11 @@ struct fi_ops_tagged gnix_ep_tagged_ops = {
 
 static int gnix_ep_close(fid_t fid)
 {
-	struct gnix_ep *ep;
-	struct gnix_domain *domain;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 
-	ep = container_of(fid, struct gnix_ep, ep_fid.fid);
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
 
 	domain = ep->domain;
@@ -302,11 +302,11 @@ static int gnix_ep_close(fid_t fid)
 static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_ep  *ep;
-	struct gnix_av  *av;
-	struct gnix_cq  *cq;
+	struct gnix_fid_ep  *ep;
+	struct gnix_fid_av  *av;
+	struct gnix_fid_cq  *cq;
 
-	ep = container_of(fid, struct gnix_ep, ep_fid.fid);
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 
 	if (!bfid)
 		return -FI_EINVAL;
@@ -317,7 +317,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		goto err;
 		break;
 	case FI_CLASS_CQ:
-		cq = container_of(bfid, struct gnix_cq, cq_fid.fid);
+		cq = container_of(bfid, struct gnix_fid_cq, cq_fid.fid);
 		if (ep->domain != cq->domain) {
 			ret = -FI_EINVAL;
 			break;
@@ -333,7 +333,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		}
 		break;
 	case FI_CLASS_AV:
-		av = container_of(bfid, struct gnix_av, av_fid.fid);
+		av = container_of(bfid, struct gnix_fid_av, av_fid.fid);
 		if (ep->domain != av->domain) {
 			ret = -FI_EINVAL;
 			break;
@@ -356,8 +356,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_domain *domain_priv;
-	struct gnix_ep *ep_priv;
+	struct gnix_fid_domain *domain_priv;
+	struct gnix_fid_ep *ep_priv;
 	struct gnix_nic *elem, *nic = NULL;
 	gni_return_t status;
 	uint32_t device_addr;
@@ -369,7 +369,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (info->ep_attr->type != FI_EP_RDM)
 		return -FI_ENOSYS;
 
-	domain_priv = container_of(domain, struct gnix_domain, domain_fid);
+	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
 	ep_priv = calloc(1, sizeof *ep_priv);
 	if (!ep) {
