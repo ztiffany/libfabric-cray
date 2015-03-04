@@ -536,6 +536,9 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			goto err_w_inc;
 		}
 
+		nic->cdm_id = ep_priv->domain->cm_nic->cdm_id;
+		nic->device_addr = ep_priv->domain->cm_nic->device_addr;
+
 		/*
 		 * TODO: set up work queue
 		 */
