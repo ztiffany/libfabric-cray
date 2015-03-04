@@ -351,7 +351,6 @@ err:
 	return ret;
 }
 
-
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -389,12 +388,13 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
 	ep_priv->ep_fid.atomic = NULL;
 
+	ep_priv->ep_fid.cm = &gnix_cm_ops;
+
 	/*
 	 * TODO, initialize vc hash table
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ep_priv->vc_hash_hndl = NULL;
-		ep_priv->ep_fid.cm = NULL;
 	} else {
 		ep_priv->vc = NULL;
 	}

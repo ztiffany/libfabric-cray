@@ -69,8 +69,6 @@ extern "C" {
 /*
  * useful macros
  */
-#define PFX "libfabric:gni"
-
 #ifndef likely
 #define likely(x) __builtin_expect((x), 1)
 #endif
@@ -185,6 +183,8 @@ struct gnix_fid_fabric {
 	/* llist of domains's opened from fabric */
 	struct list_head domain_list;
 };
+
+extern struct fi_ops_cm gnix_cm_ops;
 
 /*
  * a gnix_fid_domain is associated with one or more gnix_nic's.
