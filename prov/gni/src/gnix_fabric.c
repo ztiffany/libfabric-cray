@@ -285,6 +285,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->threading = FI_THREAD_COMPLETION;
 	gnix_info->domain_attr->control_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
 	/* only one aries per node */
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 
