@@ -274,6 +274,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			ret = -FI_EACCES;
 			goto err;
 		}
+
+		cm_nic->device_addr = device_addr;
+
 	        list_add_tail(&cm_nic_list,&cm_nic->list);
 	}
 
