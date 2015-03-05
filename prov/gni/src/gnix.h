@@ -323,8 +323,11 @@ struct gnix_fid_av {
 	enum fi_av_type type;
 	struct addr_entry* table;
 	size_t addrlen;
+	/* How many addresses AV can hold before it needs to be resized */
 	size_t capacity;
+	/* How many address are currently stored in AV */
 	size_t count;
+	atomic_t ref_cnt;
 };
 
 /*

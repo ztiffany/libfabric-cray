@@ -52,18 +52,6 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	int ret = FI_SUCCESS;
 	size_t copy_len;
 
-	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-	if (!ep || !ep->nic) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
-	/*
-	 * Retrieve the cdm_id & device_addr from the gnix_nic structure.
-	 */
-	name.gnix_addr.cdm_id = ep->nic->cdm_id;
-	name.gnix_addr.device_addr = ep->nic->device_addr;
-
 	copy_len = sizeof(struct gnix_ep_name);
 
 	/*
@@ -75,6 +63,23 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 		*addrlen = sizeof(struct gnix_ep_name);
 		ret = -FI_ETOOSMALL;
 	}
+
+	if (!addr) {
+		ret = -FI_ETOOSMALL;
+		goto err;
+	}
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+	if (!ep || !ep->nic) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	/*
+	 * Retrieve the cdm_id & device_addr from the gnix_nic structure.
+	 */
+	name.gnix_addr.cdm_id = ep->nic->cdm_id;
+	name.gnix_addr.device_addr = ep->nic->device_addr;
 
 	memcpy(addr, &name, copy_len);
 

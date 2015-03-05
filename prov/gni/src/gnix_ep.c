@@ -339,6 +339,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			break;
 		}
 		ep->av = av;
+		atomic_inc(&av->ref_cnt);
 		break;
 	case FI_CLASS_MR:/*TODO: got to figure this one out */
 	case FI_CLASS_CNTR: /* TODO: need to support cntrs someday */
