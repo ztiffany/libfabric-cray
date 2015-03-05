@@ -42,6 +42,8 @@ extern "C" {
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdbool.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
@@ -306,13 +308,23 @@ struct gnix_fid_mem_desc {
 	gni_mem_handle_t mem_hndl;
 };
 
+struct addr_entry {
+	struct gnix_address* addr;
+	bool valid;
+};
+
 /*
  * TODO: need a lot more fields for AV support
+ * TODO: Support shared named AVs
  */
-
 struct gnix_fid_av {
 	struct fid_av av_fid;
 	struct gnix_fid_domain *domain;
+	enum fi_av_type type;
+	struct addr_entry* table;
+	size_t addrlen;
+	size_t capacity;
+	size_t count;
 };
 
 /*
