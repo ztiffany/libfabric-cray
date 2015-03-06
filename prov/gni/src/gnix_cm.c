@@ -47,7 +47,7 @@
  */
 static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 {
-	struct gnix_ep_name name;
+	struct gnix_ep_name name = {{0}};
 	struct gnix_fid_ep *ep;
 	int ret = FI_SUCCESS;
 	size_t copy_len;
@@ -80,6 +80,7 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	 */
 	name.gnix_addr.cdm_id = ep->nic->cdm_id;
 	name.gnix_addr.device_addr = ep->nic->device_addr;
+	name.cookie = ep->domain->cookie;
 
 	memcpy(addr, &name, copy_len);
 

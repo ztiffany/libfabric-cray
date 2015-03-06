@@ -120,7 +120,7 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 			void *context)
 {
 	struct gnix_ep_name *temp;
-	int ret = FI_SUCCESS;
+	int ret = count;
 	size_t index;
 	size_t i;
 
@@ -230,7 +230,7 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		((struct gnix_address *)fi_addr)[i] = temp->gnix_addr;
 	}
 
-	return FI_SUCCESS;
+	return count;
 }
 
 /*
@@ -250,7 +250,7 @@ static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 		      size_t *addrlen)
 {
-	struct gnix_ep_name *out;
+	struct gnix_ep_name out = {{0}};
 	struct gnix_address *given;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
@@ -268,11 +268,13 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 		goto err;
 	}
 
-	given = (struct gnix_address *)fi_addr;
+	given = (struct gnix_address *) &fi_addr;
 
-	out = container_of(given, struct gnix_ep_name, gnix_addr);
+	out.gnix_addr.device_addr = given->device_addr;
+	out.gnix_addr.cdm_id = given->cdm_id;
+	out.cookie = int_av->domain->cookie;
 
-	memcpy(addr, out, copy_size);
+	memcpy(addr, &out, copy_size);
 
 err:
 	return ret;
