@@ -42,6 +42,8 @@ extern "C" {
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
+#include <stdbool.h>
+
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
@@ -69,8 +71,6 @@ extern "C" {
 /*
  * useful macros
  */
-#define PFX "libfabric:gni"
-
 #ifndef likely
 #define likely(x) __builtin_expect((x), 1)
 #endif
@@ -185,6 +185,8 @@ struct gnix_fid_fabric {
 	/* llist of domains's opened from fabric */
 	struct list_head domain_list;
 };
+
+extern struct fi_ops_cm gnix_cm_ops;
 
 /*
  * a gnix_fid_domain is associated with one or more gnix_nic's.
@@ -306,13 +308,26 @@ struct gnix_fid_mem_desc {
 	gni_mem_handle_t mem_hndl;
 };
 
+struct addr_entry {
+	struct gnix_address* addr;
+	bool valid;
+};
+
 /*
  * TODO: need a lot more fields for AV support
+ * TODO: Support shared named AVs
  */
-
 struct gnix_fid_av {
 	struct fid_av av_fid;
 	struct gnix_fid_domain *domain;
+	enum fi_av_type type;
+	struct addr_entry* table;
+	size_t addrlen;
+	/* How many addresses AV can hold before it needs to be resized */
+	size_t capacity;
+	/* How many address are currently stored in AV */
+	size_t count;
+	atomic_t ref_cnt;
 };
 
 /*
