@@ -48,29 +48,37 @@
 static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 {
 	struct gnix_ep_name name = {{0}};
-	struct gnix_fid_ep *ep;
+	struct gnix_fid_ep *ep = NULL;
 	int ret = FI_SUCCESS;
-	size_t copy_len;
+	size_t copy_size;
 
-	copy_len = sizeof(struct gnix_ep_name);
+	copy_size = sizeof(struct gnix_ep_name);
 
 	/*
 	 * If addrlen is less than the size necessary then continue copying with
 	 * truncation and return error value -FI_ETOOSMALL.
 	 */
-	if (*addrlen < copy_len) {
-		copy_len = *addrlen;
+	if (*addrlen < copy_size) {
+		copy_size = *addrlen;
 		*addrlen = sizeof(struct gnix_ep_name);
 		ret = -FI_ETOOSMALL;
 	}
 
 	if (!addr) {
-		ret = -FI_ETOOSMALL;
+		if (copy_size >= *addrlen) {
+			ret = -FI_EINVAL;
+		}
+
+		goto err;
+	}
+
+	if (!fid) {
+		ret = -FI_EINVAL;
 		goto err;
 	}
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-	if (!ep || !ep->nic) {
+	if (!ep || !ep->nic || !ep->domain) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -82,7 +90,7 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	name.gnix_addr.device_addr = ep->nic->device_addr;
 	name.cookie = ep->domain->cookie;
 
-	memcpy(addr, &name, copy_len);
+	memcpy(addr, &name, copy_size);
 
 err:
 	return ret;

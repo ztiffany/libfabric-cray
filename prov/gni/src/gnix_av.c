@@ -37,6 +37,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <assert.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
@@ -73,11 +74,11 @@ static int gnix_verify_av_attr(struct fi_av_attr *attr)
 /*
  * Check the capacity of the internal table used to represent FI_AV_TABLE type
  * address vectors. Initially the table starts with a capacity and count of 0
- * and the capacity increases by roughly double each time.
+ * and the capacity increases by roughly double each time a resize is necessary.
  */
 static int gnix_check_capacity(struct gnix_fid_av *av, size_t count)
 {
-	struct addr_entry *addrs;
+	struct addr_entry *addrs = NULL;
 	size_t capacity = av->capacity;
 
 	/*
@@ -119,16 +120,26 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 			size_t count, fi_addr_t *fi_addr, uint64_t flags,
 			void *context)
 {
-	struct gnix_ep_name *temp;
+	struct gnix_ep_name *temp = NULL;
 	int ret = count;
 	size_t index;
 	size_t i;
+
+	/*
+	 * fi_addr may only be null in the case that the item being inserted
+	 * will be inserted at position 0. See fi_av(3).
+	 */
+	if (!fi_addr && int_av->count) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	if (gnix_check_capacity(int_av, count)) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
+	assert(int_av->table);
 	for (index = int_av->count, i = 0; i < count; index++, i++) {
 		temp = &((struct gnix_ep_name *)addr)[i];
 		int_av->table[index].addr = &temp->gnix_addr;
@@ -145,21 +156,28 @@ err:
 /*
  * TODO: Actually free memory.
  * Currently only marks as 'not valid'. Should actually free memory.
+ * If any of the given address fail to be removed (are already marked removed)
+ * then the return value will be -FI_EINVAL.
  */
 static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 			size_t count, uint64_t flags)
 {
+	int ret = FI_SUCCESS;
 	size_t index;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
 		index = (size_t) fi_addr[i];
 		if (index < int_av->count) {
-			int_av->table[index].valid = false;
+			if (!int_av->table[index].valid) {
+				ret = -FI_EINVAL;
+			} else {
+				int_av->table[index].valid = false;
+			}
 		}
 	}
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 /*
@@ -169,23 +187,26 @@ static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 			void *addr, size_t *addrlen)
 {
-	struct gnix_ep_name *out;
-	struct gnix_address *found;
-	struct addr_entry *entry;
+	struct gnix_address *found = NULL;
+	struct gnix_ep_name *out = NULL;
+	struct addr_entry *entry = NULL;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
 	size_t index;
 
-	copy_size = sizeof(struct gnix_ep_name);
+	copy_size = sizeof(*out);
 
 	if (*addrlen < copy_size) {
 		copy_size = *addrlen;
-		*addrlen = sizeof(struct gnix_ep_name);
+		*addrlen = sizeof(*out);
 		ret = -FI_ETOOSMALL;
 	}
 
 	if (!addr) {
-		ret = -FI_ETOOSMALL;
+		if (copy_size >= *addrlen) {
+			ret = -FI_EINVAL;
+		}
+
 		goto err;
 	}
 
@@ -195,6 +216,7 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 		goto err;
 	}
 
+	assert(int_av->table);
 	entry = &int_av->table[index];
 
 	if (entry && !entry->valid) {
@@ -202,7 +224,15 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 		goto err;
 	}
 
-	found = entry->addr;
+	if (entry) {
+		if (!entry->valid) {
+			ret = -FI_EINVAL;
+			goto err;
+		} else {
+			found = entry->addr;
+		}
+	}
+
 	out = container_of(found, struct gnix_ep_name, gnix_addr);
 	memcpy(addr, out, copy_size);
 
@@ -222,7 +252,7 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		      size_t count, fi_addr_t *fi_addr, uint64_t flags,
 		      void *context)
 {
-	struct gnix_ep_name *temp;
+	struct gnix_ep_name *temp = NULL;
 	size_t i;
 
 	for (i = 0; i < count; i++) {
@@ -250,16 +280,16 @@ static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 		      size_t *addrlen)
 {
+	struct gnix_address *given = NULL;
 	struct gnix_ep_name out = {{0}};
-	struct gnix_address *given;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
 
-	copy_size = sizeof(struct gnix_ep_name);
+	copy_size = sizeof(out);
 
 	if (*addrlen < copy_size) {
 		copy_size = *addrlen;
-		*addrlen = sizeof(struct gnix_ep_name);
+		*addrlen = sizeof(out);
 		ret = -FI_ETOOSMALL;
 	}
 
@@ -286,7 +316,7 @@ err:
 static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
-	struct gnix_fid_av *int_av;
+	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
 	if (!av || !fi_addr) {
@@ -295,6 +325,11 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	}
 
 	int_av = container_of(av, struct gnix_fid_av, av_fid);
+
+	if (!int_av) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	switch (int_av->type) {
 	case FI_AV_TABLE:
@@ -319,7 +354,7 @@ err:
 static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
-	struct gnix_fid_av *int_av;
+	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
 	if (!av || !addr) {
@@ -327,16 +362,12 @@ static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
 		goto err;
 	}
 
-	/*
-	 * fi_addr parameter may be NULL only if the count is 0. Otherwise it
-	 * must reference an array of fi_addr_t.
-	 */
-	if (!fi_addr && count) {
+	int_av = container_of(av, struct gnix_fid_av, av_fid);
+
+	if (!int_av) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
-
-	int_av = container_of(av, struct gnix_fid_av, av_fid);
 
 	switch (int_av->type) {
 	case FI_AV_TABLE:
@@ -358,7 +389,7 @@ err:
 static int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 			  uint64_t flags)
 {
-	struct gnix_fid_av *int_av;
+	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
 	if (!av || !fi_addr) {
@@ -367,6 +398,11 @@ static int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	}
 
 	int_av = container_of(av, struct gnix_fid_av, av_fid);
+
+	if (!int_av) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	switch (int_av->type) {
 	case FI_AV_TABLE:
@@ -412,13 +448,27 @@ static const char *gnix_av_straddr(struct fid_av *av, const void *addr,
  */
 static int gnix_av_close(fid_t fid)
 {
-	struct gnix_fid_av *av;
+	struct gnix_fid_av *av = NULL;
+	int ret = FI_SUCCESS;
+
+	if (!fid) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 	av = container_of(fid, struct gnix_fid_av, av_fid.fid);
+
+	if (atomic_get(&av->ref_cnt) != 0) {
+		ret = -FI_EBUSY;
+		goto err;
+	}
+
 	if (av->table) {
 		free(av->table);
 	}
 	free(av);
-	return 0;
+
+err:
+	return ret;
 }
 
 /*
@@ -427,22 +477,34 @@ static int gnix_av_close(fid_t fid)
 int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		 struct fid_av **av, void *context)
 {
-	struct gnix_fid_domain *int_dom;
-	struct gnix_fid_av *int_av;
+	struct gnix_fid_domain *int_dom = NULL;
+	struct gnix_fid_av *int_av = NULL;
 
 	enum fi_av_type type = FI_AV_TABLE;
 	size_t count = 128;
+	int ret = FI_SUCCESS;
+
+	if (!domain) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	int_dom = container_of(domain, struct gnix_fid_domain, domain_fid);
+	if (!int_dom) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	int_av = calloc(1, sizeof(*int_av));
 	if (!int_av) {
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto err;
 	}
 
 	if (attr) {
 		if (gnix_verify_av_attr(attr)) {
-			return -FI_EINVAL;
+			ret = -FI_EINVAL;
+			goto cleanup;
 		}
 
 		type = attr->type;
@@ -461,7 +523,12 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 
 	*av = &int_av->av_fid;
 
-	return FI_SUCCESS;
+	return ret;
+
+cleanup:
+	free(int_av);
+err:
+	return ret;
 }
 
 /*******************************************************************************
