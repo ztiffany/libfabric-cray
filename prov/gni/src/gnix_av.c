@@ -78,7 +78,7 @@ static int gnix_verify_av_attr(struct fi_av_attr *attr)
  */
 static int gnix_check_capacity(struct gnix_fid_av *av, size_t count)
 {
-	struct addr_entry *addrs = NULL;
+	struct gnix_addr_entry *addrs = NULL;
 	size_t capacity = av->capacity;
 
 	/*
@@ -189,7 +189,7 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 {
 	struct gnix_address *found = NULL;
 	struct gnix_ep_name *out = NULL;
-	struct addr_entry *entry = NULL;
+	struct gnix_addr_entry *entry = NULL;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
 	size_t index;
