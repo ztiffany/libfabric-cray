@@ -252,7 +252,7 @@ struct gnix_fid_ep {
 		void *vc_hash_hndl;  /*used for FI_AV_MAP */
 		void *vc_table;      /* used for FI_AV_TABLE */
 		void *vc;
-	} u;
+	};
 	/* used for unexpected receives */
 	struct slist unexp_recv_queue;
 	/* used for posted receives */
