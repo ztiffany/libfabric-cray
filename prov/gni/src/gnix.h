@@ -209,6 +209,8 @@ struct gnix_fid_domain {
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id;
+	/* work queue for domain */
+	struct list_head domain_wq;
 	/* size of gni tx cqs for this domain */
 	uint32_t gni_tx_cq_size;
 	/* size of gni rx cqs for this domain */
@@ -233,15 +235,6 @@ struct gnix_fid_mem_desc {
 	struct fid_mr mr_fid;
 	struct gnix_fid_domain *domain;
 	gni_mem_handle_t mem_hndl;
-};
-
-/*
- * TODO: need a lot more fields for AV support
- */
-
-struct gnix_fid_av {
-	struct fid_av av_fid;
-	struct gnix_fid_domain *domain;
 };
 
 /*
@@ -275,6 +268,31 @@ struct gnix_fid_ep {
 	atomic_t active_fab_reqs;
 };
 
+struct addr_entry {
+	struct gnix_address* addr;
+	bool valid;
+};
+
+/*
+ * TODO: Support shared named AVs
+ */
+struct gnix_fid_av {
+	struct fid_av av_fid;
+	struct gnix_fid_domain *domain;
+	enum fi_av_type type;
+	struct addr_entry* table;
+	size_t addrlen;
+	/* How many addresses AV can hold before it needs to be resized */
+	size_t capacity;
+	/* How many address are currently stored in AV */
+	size_t count;
+	atomic_t ref_cnt;
+};
+
+
+/*
+ * work queue struct, used for handling delay ops, etc. in a generic wat
+ */
 /*
  * gnix cm nic struct - to be used only for GNI_EpPostData, etc.
  */
@@ -465,28 +483,6 @@ struct gnix_fab_req {
 	uint32_t id;
 };
 
-struct addr_entry {
-	struct gnix_address* addr;
-	bool valid;
-};
-
-/*
- * TODO: need a lot more fields for AV support
- * TODO: Support shared named AVs
- */
-struct gnix_fid_av {
-	struct fid_av av_fid;
-	struct gnix_fid_domain *domain;
-	enum fi_av_type type;
-	struct addr_entry* table;
-	size_t addrlen;
-	/* How many addresses AV can hold before it needs to be resized */
-	size_t capacity;
-	/* How many address are currently stored in AV */
-	size_t count;
-	atomic_t ref_cnt;
-};
-
 /*
  * work queue struct, used for handling delay ops, etc. in a generic wat
  */
@@ -504,7 +500,7 @@ struct gnix_work_req {
 	int (*completer_func)(void *);
 	/* data for completer function */
 	void *completer_data;
-}
+};
 
 /*
  * CQE struct definitions
