@@ -294,7 +294,10 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 	}
 
 	if (!addr) {
-		ret = -FI_ETOOSMALL;
+		if (copy_size >= *addrlen) {
+			ret = -FI_EINVAL;
+		}
+
 		goto err;
 	}
 
