@@ -331,6 +331,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		if (flags & FI_COMPLETION) {
 			ep->no_want_cqes = 1;
 		}
+		atomic_inc(&cq->ref_cnt);
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct gnix_fid_av, av_fid.fid);

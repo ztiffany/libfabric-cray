@@ -289,6 +289,33 @@ struct gnix_fid_av {
 	atomic_t ref_cnt;
 };
 
+struct gnix_cq_entry {
+	struct slist_entry item;
+	struct fi_cq_entry the_entry;
+};
+
+struct gnix_cq_msg_entry {
+	struct slist_entry item;
+	struct fi_cq_msg_entry the_entry;
+};
+
+struct gnix_cq_tagged_entry {
+	struct slist_entry item;
+	struct fi_cq_tagged_entry the_entry;
+};
+
+struct gnix_fid_cq {
+	struct fid_cq cq_fid;
+	uint64_t flags;
+	struct gnix_fid_domain *domain;
+	struct slist event_queue;
+	struct slist err_event_queue;
+	struct slist free_list;
+	void *free_list_base;
+	size_t entry_size;
+	enum fi_cq_format format;
+	atomic_t ref_cnt;
+}
 
 /*
  * work queue struct, used for handling delay ops, etc. in a generic wat
@@ -453,6 +480,7 @@ enum gnix_fab_req_type {
 	GNIX_FAB_RQ_RECV,
 	GNIX_FAB_RQ_TRECV
 };
+
 
 /*
  * Fabric request layout, there is a one to one
