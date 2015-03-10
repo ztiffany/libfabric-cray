@@ -268,7 +268,7 @@ struct gnix_fid_ep {
 	atomic_t active_fab_reqs;
 };
 
-struct addr_entry {
+struct gnix_addr_entry {
 	struct gnix_address* addr;
 	bool valid;
 };
@@ -280,7 +280,7 @@ struct gnix_fid_av {
 	struct fid_av av_fid;
 	struct gnix_fid_domain *domain;
 	enum fi_av_type type;
-	struct addr_entry* table;
+	struct gnix_addr_entry* table;
 	size_t addrlen;
 	/* How many addresses AV can hold before it needs to be resized */
 	size_t capacity;
