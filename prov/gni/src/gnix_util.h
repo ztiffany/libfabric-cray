@@ -53,5 +53,6 @@ extern const char gnix_dom_name[];
  * prototypes
  */
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie);
+int gnixu_to_fi_errno(int err);
 
 #endif

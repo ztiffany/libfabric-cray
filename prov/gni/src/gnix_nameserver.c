@@ -223,7 +223,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 				break;
 			} else {
 				GNIX_LOG_ERROR("Unable to get NIC address.");
-				ret = -FI_EINVAL;
+				ret = gnixu_to_fi_errno(status);
 				goto sock_cleanup;
 			}
 		} else {

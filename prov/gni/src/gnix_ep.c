@@ -458,8 +458,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
 					gni_err_str[status]);
-			/* TODO: need a translater from gni to fi errors */
-			ret = -FI_EACCES;
+			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
 
@@ -473,7 +472,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
 					gni_err_str[status]);
-			ret = -FI_EACCES;
+			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
 
@@ -490,7 +489,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->tx_cq);
 		if (status != GNI_RC_SUCCESS) {
-			ret = -FI_EINVAL;  /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
+
 			goto err_w_inc;
 		}
 
@@ -503,7 +503,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->tx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
-			ret = -FI_EINVAL;  /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
 			goto err_w_inc;
 		}
 
@@ -520,8 +520,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->rx_cq);
 		if (status != GNI_RC_SUCCESS) {
-			ret = -FI_EINVAL;  /* TODO: better processing */
-			goto err_w_inc;
+			ret = gnixu_to_fi_errno(status); /* TODO: better processing */	
+		goto err_w_inc;
 		}
 
 		status = GNI_CqCreate(nic->gni_nic_hndl,
@@ -533,7 +533,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->rx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
-			ret = -FI_EINVAL;  /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
 			goto err_w_inc;
 		}
 

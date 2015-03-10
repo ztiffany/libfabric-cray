@@ -258,8 +258,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
 				       gni_err_str[status]);
-			/* TODO: need a translater from gni to fi errors */
-			ret = -FI_EACCES;
+			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
 
@@ -271,7 +270,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
 			       gni_err_str[status]);
-			ret = -FI_EACCES;
+			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
 
