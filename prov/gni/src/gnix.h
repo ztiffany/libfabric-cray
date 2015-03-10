@@ -135,6 +135,8 @@ extern "C" {
 #define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
 
 #define GNIX_MAX_MSG_SIZE ((0x1ULL << 32) - 1)
+#define GNIX_CACHELINE_SIZE (64)
+#define GNIX_INJECT_SIZE GNIX_CACHELINE_SIZE
 
 /*
  * Cray gni provider will require the following fabric interface modes (see
@@ -218,6 +220,79 @@ struct gnix_fid_domain {
 	atomic_t ref_cnt;
 };
 
+struct gnix_fid_cq {
+	struct fid_cq cq_fid;
+	uint64_t flags;
+	struct gnix_fid_domain *domain;
+	void *free_list_base;
+	struct list_head entry;
+	struct list_head err_entry;
+	struct list_head entry_free_list;
+	enum fi_cq_format format;
+};
+
+struct gnix_fid_mem_desc {
+	struct fid_mr mr_fid;
+	struct gnix_fid_domain *domain;
+	gni_mem_handle_t mem_hndl;
+};
+
+/*
+ *   gnix endpoint structure
+ */
+struct gnix_fid_ep {
+	struct fid_ep ep_fid;
+	enum fi_ep_type type;
+	struct gnix_fid_domain *domain;
+	struct gnix_fid_cq *send_cq;
+	struct gnix_fid_cq *recv_cq;
+	struct gnix_fid_av *av;
+	struct gnix_nic *nic;
+	union {
+		void *vc_hash_hndl;  /*used for FI_AV_MAP */
+		void *vc_table;      /* used for FI_AV_TABLE */
+		void *vc;
+	};
+	/* used for unexpected receives */
+	struct slist unexp_recv_queue;
+	/* used for posted receives */
+	struct slist posted_recv_queue;
+	/* pointer to tag matching engine */
+	void *tag_matcher;
+	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
+	/* RX specific progress fn */
+	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
+	int enabled;
+	int no_want_cqes;
+	/* num. active fab_reqs associated with this ep */
+	atomic_t active_fab_reqs;
+};
+
+struct addr_entry {
+	struct gnix_address* addr;
+	bool valid;
+};
+
+/*
+ * TODO: Support shared named AVs
+ */
+struct gnix_fid_av {
+	struct fid_av av_fid;
+	struct gnix_fid_domain *domain;
+	enum fi_av_type type;
+	struct addr_entry* table;
+	size_t addrlen;
+	/* How many addresses AV can hold before it needs to be resized */
+	size_t capacity;
+	/* How many address are currently stored in AV */
+	size_t count;
+	atomic_t ref_cnt;
+};
+
+
+/*
+ * work queue struct, used for handling delay ops, etc. in a generic wat
+ */
 /*
  * gnix cm nic struct - to be used only for GNI_EpPostData, etc.
  */
@@ -234,6 +309,8 @@ struct gnix_cm_nic {
 	struct list_head wc_datagram_free_list;
 	/* pointer to domain this nic is attached to */
 	struct gnix_fid_domain *domain;
+	/* work queue for cm nic */
+	struct list_head cm_nic_wq;
 	struct gnix_datagram *datagram_base;
 	uint32_t cdm_id;
 	uint8_t ptag;
@@ -242,6 +319,11 @@ struct gnix_cm_nic {
 	uint32_t device_addr;
 	atomic_t ref_cnt;
 };
+
+/*
+ * gnix nic struct - to be used for GNI_PostRdma/PostFma,
+ *                   GNI_CqGetEvent, etc.
+ */
 
 struct gnix_nic {
 	struct list_node list;
@@ -255,21 +337,169 @@ struct gnix_nic {
 	gni_cq_handle_t tx_cq;
 	/* local(tx) completion queue for hndl (blocking) */
 	gni_cq_handle_t tx_cq_blk;
-	/* list of wqe's */
-	struct list_head wqe_active_list;
-	/* list for managing wqe's */
-	struct gnix_wqe_list *wqe_list;
 	/* pointer to domain this nic is attached to */
 	struct gnix_fid_domain *domain;
-	struct list_head smsg_active_req_list;
-	/* list for managing smsg req's */
-	struct gnix_smsg_req_list *smsg_req_list;
+	/* list of active gnix tx desc's */
+	struct list_head active_tx_desc_list;
+	/* list for managing gnix tx desc's */
+	struct gnix_tx_descriptor_list *tx_desc_list;
+	/* number of outstanding fab_reqs associated with this nic including rma ops, etc.*/
+	atomic_t outstanding_fab_reqs_nic;
+	/* work queue for this nic */
+	struct list_head nic_wq;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id;
 	uint32_t device_id;
 	uint32_t device_addr;
 	atomic_t ref_cnt;
+};
+
+/*
+ * defines for connection state for gnix VC
+ */
+
+enum gnix_vc_conn_state {
+	GNIX_VC_CONN_NONE = 1,
+	GNIX_VC_CONNECTING,
+	GNIX_VC_CONNECTED,
+	GNIX_VC_CONN_TERMINATING,
+	GNIX_VC_CONN_TERMINATED
+};
+
+/*
+ * gnix vc struct - internal struc for managing send/recv,
+ * rma, amo ops between endpoints.  For FI_EP_RDM, many vc's
+ * may map to a single RDM depending on how many remote ep's have
+ * been targeted for send/recv, rma, or amo ops.  For FI_EP_MSG
+ * endpoint types, there is a one-to-one mapping between the ep
+ * and a vc.
+ *
+ * Notes: This structure needs to be as small as possible as the
+ *        as the number of gnix_vc's scales linearly with
+ *        the number of peers in a domain with which a process sends/
+ *        receives messages.
+ *        these structs should be allocated out of a slab allocator
+ *        using large pages to potentially reduce cpu and i/o mmu
+ *        TlB pressure.
+ */
+
+struct gnix_vc {
+	struct gnix_address peer_addr;
+	void *smsg_mbox;
+	gni_ep_handle_t gni_ep;
+	/* used for send fab_reqs, these must go in order, hence an slist */
+	struct slist send_queue;
+	/* number of outstanding fab_reqs posted to this vc including rma ops, etc.*/
+	atomic_t outstanding_fab_reqs_vc;
+	/* connection status of this VC */
+	enum gnix_vc_conn_state conn_state;
+	atomic_t ref_cnt;
+} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
+
+/*
+ * two structure below are to help in optimized use of GNI_SmsgSendWTag
+ */
+
+struct gnix_smsg_hdr {
+	size_t len;
+	uint64_t imm;
+};
+
+struct gnix_smsg_descriptor {
+	struct gnix_smsg_hdr hdr;
+	void    *buf;         /* may point to inject buffer */
+	uint8_t  tag;
+};
+
+/*
+ * what's going on here is we're making sure that
+ * gni_tx descriptor ends up being cacheline aligned
+ */
+
+union gnix_tx_descriptor0 {
+	struct {
+		struct list_node          list;
+		gni_post_descriptor_t       gni_desc;
+		struct gnix_smsg_descriptor gnix_smsg_desc;
+		struct gnix_vc *vc;
+		struct gnix_nic *nic;
+		struct gnix_fid_ep *ep;
+	};
+	char padding[GNIX_CACHELINE_SIZE];
+} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
+
+struct gnix_tx_descriptor {
+	union gnix_tx_descriptor0 desc;
+	char inject_buf[GNIX_CACHELINE_SIZE];
+} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
+
+/*
+ *  enums, defines, for gni provider internal fab requests.
+ */
+
+#define GNIX_FAB_RQ_M_IN_ACTIVE_LIST          0x00000001
+#define GNIX_FAB_RQ_M_REPLAYABLE              0x00000002
+#define GNIX_FAB_RQ_M_UNEXPECTED              0x00000004
+#define GNIX_FAB_RQ_M_MATCHED                 0x00000008
+#define GNIX_FAB_RQ_M_INJECT_DATA             0x00000010
+
+enum gnix_fab_req_type {
+	GNIX_FAB_RQ_SEND,
+	GNIX_FAB_RQ_TSEND,
+	GNIX_FAB_RQ_RDMA_WRITE,
+	GNIX_FAB_RQ_RDMA_WRITE_IMM_DATA,
+	GNIX_FAB_RQ_RDMA_READ,
+	GNIX_FAB_RQ_RECV,
+	GNIX_FAB_RQ_TRECV
+};
+
+/*
+ * Fabric request layout, there is a one to one
+ * correspondence between an application's invocation of fi_send, fi_recv
+ * and a gnix fab_req.
+ */
+
+struct gnix_fab_req {
+	struct list_node          list;
+	struct slist_entry        slist;
+	enum gnix_fab_req_type    type;
+	struct gnix_fid_ep        *gnix_ep;
+	void                      *user_context;
+	/* matched_rcv_fab_req only applicable to GNIX_FAB_RQ_RECV type */
+	struct gnix_fab_req       *matched_rcv_fab_req;
+	void     *buf;
+	/* current point in the buffer for next transfer chunk -
+	   case of long messages or rdma requests greater than 4 GB */
+	void     *cur_pos;
+	size_t   len;
+	uint64_t imm;
+	uint64_t tag;
+	struct gnix_vc *vc;
+	void *completer_data;
+	int (*completer_func)(void *,int *);
+	int modes;
+	int retries;
+	uint32_t id;
+};
+
+/*
+ * work queue struct, used for handling delay ops, etc. in a generic wat
+ */
+
+struct gnix_work_req {
+	struct list_node list;
+	/* function to be invoked to progress this work queue req.
+	   first element is pointer to data needec by the func, second
+	   is a pointer to an int which will be set to 1 if progress
+	   function is complete */
+	int (*progress_func)(void *,int *);
+	/* data to be passed to the progress function */
+	void *data;
+	/* function to be invoked if this work element has completed */
+	int (*completer_func)(void *);
+	/* data for completer function */
+	void *completer_data;
 };
 
 /*
@@ -288,68 +518,6 @@ struct gnix_cq_msg_entry {
 struct gnix_cq_tagged_entry {
 	struct list_node list;
 	struct fi_cq_tagged_entry the_entry;
-};
-
-struct gnix_fid_cq {
-	struct fid_cq cq_fid;
-	uint64_t flags;
-	struct gnix_fid_domain *domain;
-	void *free_list_base;
-	struct list_head entry;
-	struct list_head err_entry;
-	struct list_head entry_free_list;
-	int (*progress_fn)(struct gnix_fid_cq *);
-	enum fi_cq_format format;
-};
-
-struct gnix_fid_mem_desc {
-	struct fid_mr mr_fid;
-	struct gnix_fid_domain *domain;
-	gni_mem_handle_t mem_hndl;
-};
-
-struct addr_entry {
-	struct gnix_address* addr;
-	bool valid;
-};
-
-/*
- * TODO: need a lot more fields for AV support
- * TODO: Support shared named AVs
- */
-struct gnix_fid_av {
-	struct fid_av av_fid;
-	struct gnix_fid_domain *domain;
-	enum fi_av_type type;
-	struct addr_entry* table;
-	size_t addrlen;
-	/* How many addresses AV can hold before it needs to be resized */
-	size_t capacity;
-	/* How many address are currently stored in AV */
-	size_t count;
-	atomic_t ref_cnt;
-};
-
-/*
- *   gnix endpoint structure
- */
-struct gnix_fid_ep {
-	struct fid_ep ep_fid;
-	enum fi_ep_type type;
-	struct gnix_fid_domain *domain;
-	struct gnix_fid_cq *send_cq;
-	struct gnix_fid_cq *recv_cq;
-	struct gnix_fid_av *av;
-	struct gnix_nic *nic;
-	void *vc_hash_hndl;
-	void *vc;
-	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
-	/* RX specific progress fn */
-	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
-	int enabled;
-	int no_want_cqes;
-	/* num. active post descs associated with this ep */
-	uint32_t active_post_descs;
 };
 
 /*
