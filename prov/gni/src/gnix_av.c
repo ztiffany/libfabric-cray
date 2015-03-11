@@ -219,18 +219,11 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 	assert(int_av->table);
 	entry = &int_av->table[index];
 
-	if (entry && !entry->valid) {
+	if (entry && entry->valid) {
+		found = entry->addr;
+	} else {
 		ret = -FI_EINVAL;
 		goto err;
-	}
-
-	if (entry) {
-		if (!entry->valid) {
-			ret = -FI_EINVAL;
-			goto err;
-		} else {
-			found = entry->addr;
-		}
 	}
 
 	out = container_of(found, struct gnix_ep_name, gnix_addr);
@@ -322,7 +315,7 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
-	if (!av || !fi_addr) {
+	if (!av) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -360,7 +353,7 @@ static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
-	if (!av || !addr) {
+	if (!av) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -395,7 +388,7 @@ static int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
-	if (!av || !fi_addr) {
+	if (!av) {
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -517,7 +510,13 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->domain = int_dom;
 	int_av->type = type;
 	int_av->addrlen = sizeof(struct gnix_address);
-	int_av->count = count;
+
+	int_av->capacity = count;
+	int_av->table = calloc(count, sizeof(struct gnix_addr_entry));
+	if (!int_av->table) {
+		ret = -FI_ENOMEM;
+		goto cleanup;
+	}
 
 	int_av->av_fid.fid.fclass = FI_CLASS_AV;
 	int_av->av_fid.fid.context = context;
