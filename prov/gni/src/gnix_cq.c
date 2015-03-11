@@ -36,6 +36,7 @@
  */
 #include <stdlib.h>
 #include <string.h>
+#include <assert.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
@@ -50,6 +51,7 @@ static int gnix_cq_close(fid_t fid)
 		return -FI_EBUSY;
 
 	atomic_dec(&cq->domain->ref_cnt);
+	assert(&cq->domain->ref_cnt > 0);
 
 #if 0
 	while (!slist_empty(&cq->free_list)) {
