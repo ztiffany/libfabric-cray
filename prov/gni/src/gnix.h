@@ -220,17 +220,6 @@ struct gnix_fid_domain {
 	atomic_t ref_cnt;
 };
 
-struct gnix_fid_cq {
-	struct fid_cq cq_fid;
-	uint64_t flags;
-	struct gnix_fid_domain *domain;
-	void *free_list_base;
-	struct list_head entry;
-	struct list_head err_entry;
-	struct list_head entry_free_list;
-	enum fi_cq_format format;
-};
-
 struct gnix_fid_mem_desc {
 	struct fid_mr mr_fid;
 	struct gnix_fid_domain *domain;
@@ -315,7 +304,7 @@ struct gnix_fid_cq {
 	size_t entry_size;
 	enum fi_cq_format format;
 	atomic_t ref_cnt;
-}
+};
 
 /*
  * work queue struct, used for handling delay ops, etc. in a generic wat
@@ -528,24 +517,6 @@ struct gnix_work_req {
 	int (*completer_func)(void *);
 	/* data for completer function */
 	void *completer_data;
-};
-
-/*
- * CQE struct definitions
- */
-struct gnix_cq_entry {
-	struct list_node list;
-	struct fi_cq_entry the_entry;
-};
-
-struct gnix_cq_msg_entry {
-	struct list_node list;
-	struct fi_cq_msg_entry the_entry;
-};
-
-struct gnix_cq_tagged_entry {
-	struct list_node list;
-	struct fi_cq_tagged_entry the_entry;
 };
 
 /*
