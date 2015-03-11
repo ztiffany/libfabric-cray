@@ -143,69 +143,72 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	size_t entry_size = sizeof(struct fi_cq_entry); /* the default */
 	uint64_t cq_flags = 0UL;
 
+	/*
+	 * appears that a pointer to an fi_cq_attr must be supplied
+	 * by the application, undocumented rule? Fix up fi_cq.3.md.
+	 */
+	if (attr == NULL)
+		return -FI_EINVAL;
+
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
 	/*
 	 * process cq attr atributes
 	 */
 
-	if (attr) {
+	/*
+	 * GNI prov doesn't support this
+	 */
+	if (attr->flags & FI_WRITE) {
+		ret = -FI_ENOSYS;
+		goto err;
+	}
 
-		/*
-		 * GNI prov doesn't support this
-		 */
-		if (attr->flags & FI_WRITE) {
-			ret = -FI_ENOSYS;
-			goto err;
-		}
+	cq_flags = attr->flags;
 
-		cq_flags = attr->flags;
+	switch (attr->format) {
+	/*
+	 * default CQE format for gni provider is context
+	 */
+	case FI_CQ_FORMAT_UNSPEC:
+		attr->format = FI_CQ_FORMAT_CONTEXT;
+		entry_size = sizeof(struct fi_cq_entry);
+		break;
+	case FI_CQ_FORMAT_CONTEXT:
+		entry_size = sizeof(struct fi_cq_entry);
+		break;
 
-		switch (attr->format) {
-		/*
-		 * default CQE format for gni provider is context
-		 */
-		case FI_CQ_FORMAT_UNSPEC:
-			attr->format = FI_CQ_FORMAT_CONTEXT;
-			entry_size = sizeof(struct fi_cq_entry);
-			break;
-		case FI_CQ_FORMAT_CONTEXT:
-			entry_size = sizeof(struct fi_cq_entry);
-			break;
+	case FI_CQ_FORMAT_MSG:
+		entry_size = sizeof(struct fi_cq_msg_entry);
+		break;
 
-		case FI_CQ_FORMAT_MSG:
-			entry_size = sizeof(struct fi_cq_msg_entry);
-			break;
+	case FI_CQ_FORMAT_DATA:
+		entry_size = sizeof(struct fi_cq_data_entry);
+		break;
 
-		case FI_CQ_FORMAT_DATA:
-			entry_size = sizeof(struct fi_cq_data_entry);
-			break;
+	case FI_CQ_FORMAT_TAGGED:
+		entry_size = sizeof(struct fi_cq_tagged_entry);
+		break;
 
-		case FI_CQ_FORMAT_TAGGED:
-			entry_size = sizeof(struct fi_cq_tagged_entry);
-			break;
+	default:
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
-		default:
-			ret = -FI_EINVAL;
-			goto err;
-		}
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+	case FI_WAIT_UNSPEC:
+		break;
 
-		switch (attr->wait_obj) {
-		case FI_WAIT_NONE:
-		case FI_WAIT_UNSPEC:
-			break;
-
-		/*
-		 * TODO: need to implement various blocking forms of CQ
-		 */
-		case FI_WAIT_SET:
-		case FI_WAIT_FD:
-		case FI_WAIT_MUTEX_COND:
-		default:
-			ret = -FI_ENOSYS;
-			goto err;
-		}
-
+	/*
+	 * TODO: need to implement various blocking forms of CQ
+	 */
+	case FI_WAIT_SET:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+	default:
+		ret = -FI_ENOSYS;
+		goto err;
 	}
 
 	/*
