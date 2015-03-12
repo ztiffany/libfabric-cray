@@ -49,13 +49,130 @@ uint32_t gnix_def_gni_rx_cq_size = 16384;
 /* TODO: should we use physical pages for gni cq rings? This is a question for Zach */
 gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 
+static int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
+{
+	int ret = FI_SUCCESS;
+	gni_return_t status;
+
+	if (cm_nic == NULL)
+		return -FI_EINVAL;
+
+	atomic_dec(&cm_nic->ref_cnt);
+	if ((atomic_get(&cm_nic->ref_cnt) == 0)
+		&& (cm_nic->gni_cdm_hndl != NULL)) {
+		status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_ERR(FI_LOG_DOMAIN, "oops, cdm destroy failed\n");
+			ret = gnixu_to_fi_errno(status);
+			free(cm_nic);
+		}
+	}
+
+	return ret;
+}
+
+static int gnix_cm_nic_alloc(struct gnix_fid_fabric *fabric, int8_t ptag,
+				uint32_t cookie, uint32_t cdm_id,
+				struct gnix_cm_nic **cm_nic_ptr)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_cm_nic *cm_nic = NULL, *elem;
+	uint32_t device_addr;
+	gni_return_t status;
+
+	*cm_nic_ptr = NULL;
+
+	/*
+	 * look for the cm_nic for this ptag/cookie in the list
+	 * TODO: thread safety, this iterator is not thread safe
+	 */
+
+	list_for_each(&cm_nic_list, elem, list) {
+		if ((elem->ptag == ptag) &&
+			(elem->cookie == cookie) &&
+			(elem->cdm_id == cdm_id)) {
+			cm_nic = elem;
+			atomic_inc(&cm_nic->ref_cnt);
+			break;
+		}
+	}
+
+	/*
+	 * no matching cm_nic found in the list, so create one for this
+	 * domain and add to the list.
+	 */
+
+	if (cm_nic == NULL) {
+
+		GNIX_INFO(FI_LOG_DOMAIN, "creating cm_nic for %d/0x%x id %d\n",
+		      ptag, cookie, getpid());
+		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
+		if (cm_nic == NULL) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		status = GNI_CdmCreate(cdm_id, ptag, cookie,
+				       gnix_cdm_modes,
+				       &cm_nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_ERR(FI_LOG_DOMAIN, "GNI_CdmCreate returned %s\n",
+				       gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+
+		/*
+		 * Okay, now go for the attach
+		 */
+		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
+				       &cm_nic->gni_nic_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_ERR(FI_LOG_DOMAIN, "GNI_CdmAttach returned %s\n",
+			       gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+
+		gnix_list_node_init(&cm_nic->list);
+		cm_nic->cdm_id = cdm_id;
+		cm_nic->ptag = ptag;
+		cm_nic->device_addr = device_addr;
+		fastlock_init(&cm_nic->lock);
+
+		/*
+		 * prep the cm nic's dgram component
+		 */
+		ret = gnix_dgram_hndl_alloc(fabric, cm_nic,
+					    &cm_nic->dgram_hndl);
+		if (ret != FI_SUCCESS)
+			goto err;
+
+		atomic_init(&cm_nic->ref_cnt, 1);
+		list_add_tail(&cm_nic_list, &cm_nic->list);
+	}
+
+	*cm_nic_ptr = cm_nic;
+	return ret;
+
+err:
+	if (cm_nic->dgram_hndl)
+		gnix_dgram_hndl_free(cm_nic->dgram_hndl);
+
+	if (cm_nic->gni_cdm_hndl)
+		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+
+	if (cm_nic != NULL)
+		free(cm_nic);
+
+	return ret;
+}
+
 static int gnix_domain_close(fid_t fid)
 {
-	int ret = FI_SUCCESS, v;
+	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain;
-	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *p, *next;
-	gni_return_t status;
 
 	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
 	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
@@ -76,18 +193,10 @@ static int gnix_domain_close(fid_t fid)
 	GNIX_INFO(FI_LOG_DOMAIN, "gnix_domain_close invoked.\n");
 
 	if (domain->cm_nic) {
-		cm_nic = domain->cm_nic;
-		v = atomic_dec(&domain->cm_nic->ref_cnt);
-		assert(v >= 0);
-		if (cm_nic->gni_cdm_hndl &&
-		    (v == 0)) {
-			status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
-			if (status != GNI_RC_SUCCESS) {
-				GNIX_ERR(FI_LOG_DOMAIN,
-					   "oops, cdm destroy failed\n");
-			}
-			free(domain->cm_nic);
-		}
+		ret = gnix_cm_nic_free(domain->cm_nic);
+		if (ret != FI_SUCCESS)
+			goto err;
+		domain->cm_nic = NULL;
 	}
 
 	/*
@@ -187,10 +296,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct gnix_fid_domain *domain = NULL;
 	int ret = FI_SUCCESS;
 	uint8_t ptag;
-	uint32_t cookie, device_addr;
-	struct gnix_cm_nic *cm_nic = NULL, *elem;
+	uint32_t cookie;
+	struct gnix_cm_nic *cm_nic = NULL;
 	struct gnix_fid_fabric *fabric_priv;
-	gni_return_t status;
 
 	GNIX_INFO(FI_LOG_DOMAIN, "%s\n", __func__);
 
@@ -237,81 +345,16 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	list_head_init(&domain->domain_wq);
 
-	/*
-	 * look for the cm_nic for this ptag/cookie in the list
-	 * TODO: thread safety, this iterator is not thread safe
-	 */
-
-	list_for_each(&gnix_cm_nic_list, elem, list) {
-		if ((elem->ptag == ptag) &&
-			(elem->cookie == cookie) &&
-			(elem->cdm_id == getpid())) {
-			cm_nic = elem;
-			atomic_inc(&cm_nic->ref_cnt);
-			break;
-		}
-	}
-
-	/*
-	 * no matching cm_nic found in the list, so create one for this
-	 * domain and add to the list.
-	 */
-
-	if (cm_nic == NULL) {
-
-		GNIX_INFO(FI_LOG_DOMAIN,
-			  "creating cm_nic for ptag %d cookie 0x%x id %d\n",
-			  ptag, cookie, getpid());
-		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof *cm_nic);
-		if (cm_nic == NULL) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		gnix_list_node_init(&cm_nic->list);
-		atomic_init(&cm_nic->ref_cnt, 1);
-		list_head_init(&cm_nic->datagram_free_list);
-		list_head_init(&cm_nic->wc_datagram_active_list);
-		list_head_init(&cm_nic->wc_datagram_free_list);
-		cm_nic->cdm_id = getpid();
-		cm_nic->ptag = ptag;
-		cm_nic->cookie = cookie;
-
-		status = GNI_CdmCreate(cm_nic->cdm_id, ptag, cookie,
-				       gnix_cdm_modes,
-				       &cm_nic->gni_cdm_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_DOMAIN,
-				   "GNI_CdmCreate returned %s\n",
-				   gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-
-		/*
-		 * Okay, now go for the attach
-		 */
-		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
-				       &cm_nic->gni_nic_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_DOMAIN,
-				   "GNI_CdmAttach returned %s\n",
-			           gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-
-		cm_nic->device_addr = device_addr;
-
-		list_add_tail(&gnix_cm_nic_list, &cm_nic->list);
-	}
+	ret = gnix_cm_nic_alloc(fabric_priv, ptag, cookie, getpid(), &cm_nic);
+	if (ret != FI_SUCCESS)
+		goto err;
 
 	domain->fabric = fabric_priv;
 	atomic_inc(&fabric_priv->ref_cnt);
 
 	domain->cm_nic = cm_nic;
-	domain->ptag = cm_nic->ptag;
-	domain->cookie = cm_nic->cookie;
+	domain->ptag = ptag;
+	domain->cookie = cookie;
 	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
 	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
@@ -327,14 +370,11 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	return FI_SUCCESS;
 
 err:
-	if (cm_nic && cm_nic->gni_cdm_hndl) {
-		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
-	}
+	if (cm_nic)
+		gnix_cm_nic_free(cm_nic);
+
 	if (domain != NULL) {
 		free(domain);
-	}
-	if (cm_nic != NULL) {
-		free(cm_nic);
 	}
 	return ret;
 }
