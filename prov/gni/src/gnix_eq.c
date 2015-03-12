@@ -48,14 +48,6 @@ static struct fi_ops gnix_fi_eq_ops;
 static int gnix_verify_eq_attr(struct fi_eq_attr *attr)
 {
 	/*
-	 * Initial implementation doesn't support any of the flags.
-	 * TODO: Support FI_WRITE. This specifies that fi_eq_write can be called
-	 * on the opened event queue.
-	 */
-	if (attr->flags)
-		return -FI_ENOSYS;
-
-	/*
 	 * Initial implementation doesn't support any type of wait object.
 	 */
 	switch (attr->wait_obj) {
@@ -78,14 +70,14 @@ static int gnix_verify_eq_attr(struct fi_eq_attr *attr)
  */
 static void free_queue(struct slist *list)
 {
-	slist_entry *current = NULL;
-	slist_entry *next = NULL;
+	struct slist_entry *current = NULL;
+	struct slist_entry *next = NULL;
 	struct gnix_event *temp = NULL;
 
 	if (slist_empty(list))
 		return;
 
-	for (current = list.head; current; current = next) {
+	for (current = list->head; current; current = next) {
 		next = current->next;
 		temp = container_of(current, struct gnix_event, entry);
 
@@ -99,8 +91,8 @@ static void free_queue(struct slist *list)
 	}
 }
 
-static int gnix_eq_write_error(struct gnix_fid_eq *gnix_eq, fid_t fid,
-			       void *context, uint32_t index, int err,
+static ssize_t gnix_eq_write_error(struct gnix_fid_eq *gnix_eq, fid_t fid,
+			       void *context, uint64_t index, int err,
 			       int prov_errno, void *err_data, size_t err_size)
 {
 	struct fi_eq_err_entry *err_entry = NULL;
@@ -126,11 +118,11 @@ static int gnix_eq_write_error(struct gnix_fid_eq *gnix_eq, fid_t fid,
 
 	err_entry->fid = fid;
 	err_entry->context = context;
-	err_entry->index = index;
+	err_entry->data = index;
 	err_entry->err = err;
 	err_entry->prov_errno = prov_errno;
 	err_entry->err_data = err_data;
-	err_entry->err_size = err_size;
+	err_entry->err_data_size = err_size;
 
 	/*
 	 * Don't care about type, or flags. Just need to store the
@@ -166,7 +158,8 @@ err:
 /*
  * TODO:
  * - Increment fabric ref_cnt.
- * - Handle FI_WRITE flag.
+ * - Handle FI_WRITE flag. When not included, replace write function with
+ *   fi_no_eq_write.
  * - Handle wait objects.
  */
 int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -204,7 +197,9 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	slist_init(&gnix_eq->ev_queue);
 	slist_init(&gnix_eq->err_queue);
 
-	*eq = &gnix_eq->eq;
+	*eq = &gnix_eq->eq_fid;
+
+	return ret;
 
 cleanup:
 	free(gnix_eq);
@@ -234,33 +229,132 @@ static int gnix_eq_close(struct fid *fid)
 	atomic_dec(&gnix_eq->eq_fabric->ref_cnt);
 	assert(atomic_get(&gnix_eq->eq_fabric->ref_cnt) >= 0);
 
-	free_queue(gnix_eq->ev_queue);
-	free_queue(gnix_eq->err_queue);
+	free_queue(&gnix_eq->ev_queue);
+	free_queue(&gnix_eq->err_queue);
 	free(gnix_eq);
 
 	return FI_SUCCESS;
 }
 
-static int gnix_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
-			 size_t len, int timeout, uint64_t flags)
+static ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
+			     size_t len, int timeout, uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-static int gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
-			size_t len, uint64_t flags)
+static ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
+			    size_t len, uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct gnix_fid_eq *gnix_eq = NULL;
+	struct gnix_event *ev = NULL;
+	int ret = len;
+
+	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
+	if (!gnix_eq) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	fastlock_acquire(&gnix_eq->lock);
+
+	if (!slist_empty(&gnix_eq->err_queue)) {
+		ret = -FI_EAVAIL;
+		goto cleanup;
+	}
+
+	if (slist_empty(&gnix_eq->ev_queue)) {
+		ret = -FI_EAGAIN;
+		goto cleanup;
+	}
+
+	ev = container_of(gnix_eq->ev_queue.head, struct gnix_event, entry);
+	if (!event) {
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
+
+	if (len < ev->len) {
+		ret = -FI_ETOOSMALL;
+		goto cleanup;
+	}
+
+	*event = ev->type;
+	memcpy(buf, ev->buf, len);
+
+	/*
+	 * Remove if FI_PEEK isn't specified.
+	 */
+	if (!(flags & FI_PEEK)) {
+		ev = container_of(slist_remove_head(&gnix_eq->ev_queue),
+				  struct gnix_event, entry);
+		free(ev->buf);
+		free(ev);
+	}
+
+	fastlock_release(&gnix_eq->lock);
+
+	return ret;
+
+cleanup:
+	fastlock_release(&gnix_eq->lock);
+err:
+	return ret;
 }
 
-static int gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
-			   size_t len, uint64_t flags)
+static ssize_t gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
+			       uint64_t flags)
 {
-	return -FI_ENOSYS;
+	struct gnix_fid_eq *gnix_eq = NULL;
+	struct gnix_event *ev = NULL;
+	int ret = 0;
+
+	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
+	if (!gnix_eq) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	fastlock_acquire(&gnix_eq->lock);
+
+	/*
+	 * If there is no error, then signal to try again.
+	 */
+	if (slist_empty(&gnix_eq->err_queue)) {
+		ret = -FI_EAGAIN;
+		goto cleanup;
+	}
+
+	ev = container_of(gnix_eq->err_queue.head, struct gnix_event, entry);
+	if (!ev) {
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
+
+	memcpy(buf, ev->buf, ev->len);
+	ret = ev->len;
+
+	/*
+	 * Remove if FI_PEEK isn't specified.
+	 */
+	if (!(flags & FI_PEEK)) {
+		ev = container_of(slist_remove_head(&gnix_eq->err_queue),
+				  struct gnix_event, entry);
+		free(ev->buf);
+		free(ev);
+	}
+
+	fastlock_release(&gnix_eq->lock);
+
+	return ret;
+
+cleanup:
+	fastlock_release(&gnix_eq->lock);
+err:
+	return ret;
 }
 
-static int gnix_eq_write(struct fid_eq *eq, uint32_t event,
-			 const void *buf, size_t len, uint64_t flags)
+static ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
+			     const void *buf, size_t len, uint64_t flags)
 {
 	struct gnix_fid_eq *gnix_eq = NULL;
 	struct gnix_event *ev_entry = NULL;
@@ -290,7 +384,7 @@ static int gnix_eq_write(struct fid_eq *eq, uint32_t event,
 	}
 
 	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
-	if (!gnix_fid_eq) {
+	if (!gnix_eq) {
 		ret = -FI_EINVAL;
 		goto cleanup_ev_buf;
 	}
@@ -326,9 +420,9 @@ err:
 }
 
 static const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
-				    const void *err_data, void *buf, size_t len)
+				    const void *err_data, char *buf, size_t len)
 {
-	return -FI_ENOSYS;
+	return NULL;
 }
 
 /*******************************************************************************
@@ -336,10 +430,10 @@ static const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
  ******************************************************************************/
 static struct fi_ops_eq gnix_eq_ops = {
 	.size = sizeof(struct fi_ops_eq),
-	.sread = gnix_eq_sread,
 	.read = gnix_eq_read,
 	.readerr = gnix_eq_readerr,
 	.write = gnix_eq_write,
+	.sread = gnix_eq_sread,
 	.strerror = gnix_eq_strerror
 };
 
