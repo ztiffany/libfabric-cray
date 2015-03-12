@@ -186,6 +186,7 @@ struct gnix_fid_fabric {
 	struct fid_fabric fab_fid;
 	/* llist of domains's opened from fabric */
 	struct list_head domain_list;
+	atomic_t ref_cnt;
 };
 
 extern struct fi_ops_cm gnix_cm_ops;
@@ -206,6 +207,7 @@ struct gnix_fid_domain {
 	struct list_head nic_list;
 	/* cm nic bound to this domain */
 	struct gnix_cm_nic *cm_nic;
+	struct gnix_fid_fabric *fabric;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id;

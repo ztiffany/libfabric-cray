@@ -36,6 +36,7 @@
 #endif /* HAVE_CONFIG_H */
 
 #include <stdlib.h>
+#include <assert.h>
 
 #include "gnix.h"
 #include "gnix_util.h"
@@ -94,6 +95,9 @@ static int gnix_domain_close(fid_t fid)
 		gnix_list_node_init(&p->list);
 		/* TODO: free nic here */
 	}
+
+	atomic_dec(&domain->fabric->ref_cnt);
+	assert(atomic_get(&domain->fabric->ref_cnt) >= 0);
 
 	/*
 	 * remove from the list of cdms attached to fabric
@@ -278,6 +282,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	        list_add_tail(&cm_nic_list,&cm_nic->list);
 	}
+
+	domain->fabric = fabric_priv;
+	atomic_inc(&fabric_priv->ref_cnt);
 
 	domain->cm_nic = cm_nic;
 	domain->ptag = cm_nic->ptag;
