@@ -398,6 +398,7 @@ struct gnix_fid_eq {
 	struct fi_eq_attr attr;
 	struct gnix_fid_fabric *eq_fabric;
 	atomic_t ref_cnt;
+	fastlock_t lock;
 
 	struct slist err_queue;
 	struct slist ev_queue;
