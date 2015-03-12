@@ -119,19 +119,20 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 		goto err;
 	}
 
-	gnix_eq->eq_fabric = container_of(fabric, struct gnix_fid_fabric,
-					  fab_fid);
-
-	gnix_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
-	gnix_eq->eq_fid.fid.context = context;
-	gnix_eq->eq_fid.fid.ops = &gnix_fi_eq_ops;
-	gnix_eq->eq_fid.ops = &gnix_eq_ops;
-
 	if (attr) {
 		ret = gnix_verify_eq_attr(attr);
 		if (ret)
 			goto cleanup;
 	}
+
+	gnix_eq->eq_fabric = container_of(fabric, struct gnix_fid_fabric,
+					  fab_fid);
+	atomic_inc(&gnix_eq->eq_fabric->ref_cnt);
+
+	gnix_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
+	gnix_eq->eq_fid.fid.context = context;
+	gnix_eq->eq_fid.fid.ops = &gnix_fi_eq_ops;
+	gnix_eq->eq_fid.ops = &gnix_eq_ops;
 
 	slist_init(&gnix_eq->ev_queue);
 	slist_init(&gnix_eq->err_queue);
@@ -162,6 +163,9 @@ static int gnix_eq_close(struct fid *fid)
 
 	if (atomic_get(&gnix_eq->ref_cnt) != 0)
 		return -FI_EBUSY;
+
+	atomic_dec(&gnix_eq->eq_fabric->ref_cnt);
+	assert(atomic_get(&gnix_eq->eq_fabric->ref_cnt) >= 0);
 
 	free_queue(gnix_eq->ev_queue);
 	free_queue(gnix_eq->err_queue);
