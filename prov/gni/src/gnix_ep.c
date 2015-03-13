@@ -40,7 +40,11 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
+<<<<<<< HEAD
 static LIST_HEAD(gnix_nic_list);
+=======
+static atomic_t gnix_id_counter;
+>>>>>>> prov/gni: add nic counting
 
 /*
  * Prototypes for method structs below
@@ -409,38 +413,54 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->rx_progress_fn = NULL;
 
 	/*
-	 * TODO: hookup a nic to this ep, may add more later if
-	 *  fi_tx_context, etc. is invoked on this endpoing
+	 * If we've maxed out the number of nics for this domain/ptag,
+	 * search the list of existing nics.  Take the gnix_nic_list_lock
+	 * here since the gnix_nic_list will be manipulated whether or
+	 * not we attach to an existing nic or create a new one.
+	 *
+	 * Should not matter much that this is a pretty fat critical section
+	 * since endpoint setup for RDM type will typically occur near
+	 * app startup, likely in a single threaded region, and for the
+	 * case of MSG, where there will likely be many 100s of EPs, after
+	 * a few initial slow times through this section when nics are created,
+	 * max nic count for the ptag will be reached and only the first part
+	 * of the critical section - iteration over existing nics - will be
+	 * happening.
 	 */
 
-        list_for_each(&gnix_nic_list,elem,list) {
-		if ((elem->ptag == domain_priv->ptag) &&
-			(elem->cookie == domain_priv->cookie)
-			&& (elem->cdm_id == domain_priv->cdm_id)) {
-			nic = elem;
-			atomic_inc(&nic->ref_cnt);
-			break;
+	pthread_mutex_lock(&gnix_nic_list_lock);
+
+	if (gnix_nics_per_ptag[domain_priv->ptag] ==
+					gnix_def_max_nics_per_ptag) {
+		list_for_each(&gnix_nic_list, elem, list) {
+			if ((elem->ptag == domain_priv->ptag) &&
+				(elem->cookie == domain_priv->cookie)
+				&& (elem->cdm_id == domain_priv->cdm_id)) {
+				nic = elem;
+				break;
+			}
 		}
-	}
 
-	/*
-	 * move this nic to the end of the list, this allows
-	 * for balancing use of nics across ep's for this domain
-	 */
+		/*
+		 * nic found, balance use by removing from head and
+		 * positioning at end
+		 */
 
-	if (nic) {
-		gnix_list_del_init(&nic->list);
-		list_add_tail(&gnix_nic_list, &nic->list);
+		if (nic) {
+			gnix_list_del_init(&nic->gnix_nic_list);
+			list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
+		}
 	}
 
 	/*
 	 * no nic found create a cdm and attach
 	 */
 	if (!nic) {
+
 		nic = calloc(1,sizeof(struct gnix_nic));
 		if (nic == NULL) {
 			ret = -FI_ENOMEM;
-			goto err;
+			goto err_w_lock;
 		}
 
 		/*
@@ -490,7 +510,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->tx_cq);
 		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status);
 
 			goto err_w_inc;
 		}
@@ -504,7 +524,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->tx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
 
@@ -521,7 +541,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					NULL,                 /* useless handler context */
 					&nic->rx_cq);
 		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status); /* TODO: better processing */	
+			ret = gnixu_to_fi_errno(status);
 		goto err_w_inc;
 		}
 
@@ -529,12 +549,12 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					domain_priv->gni_rx_cq_size,
 					0,                    /* no delay count */
 					GNI_CQ_BLOCKING |
-						domain_priv->gni_cq_modes,
+					domain_priv->gni_cq_modes,
 					NULL,                 /* useless handler */
 					NULL,                 /* useless handler context */
 					&nic->rx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status); /* TODO: better processing */
+			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
 
@@ -547,10 +567,17 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 		atomic_init(&nic->ref_cnt, 1);
 		atomic_init(&nic->outstanding_fab_reqs_nic, 0);
+
 		list_add_tail(&gnix_nic_list,&nic->list);
+		++gnix_nics_per_ptag[domain_priv->ptag];
+
+		list_add_tail(&domain_priv->nic_list, &nic->list);
 	}
 
+	pthread_mutex_unlock(&gnix_nic_list_lock);
+
 	ep_priv->nic = nic;
+	atomic_inc(&nic->ref_cnt);
 
 	atomic_inc(&domain_priv->ref_cnt);
 	*ep = &ep_priv->ep_fid;
@@ -558,7 +585,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 err_w_inc:
 	atomic_dec(&gnix_id_counter);
-err:
+err_w_lock:
 	if (nic != NULL) {
 		if (nic->rx_cq_blk != NULL) {
 			GNI_CqDestroy(nic->rx_cq_blk);
@@ -577,6 +604,8 @@ err:
 		}
 	}
 
-	if (nic != NULL) free(nic);
+	if (nic != NULL)
+		free(nic);
+	pthread_mutex_unlock(&gnix_nic_list_lock);
 	return ret;
 }
