@@ -42,6 +42,15 @@
 static struct fi_ops_eq gnix_eq_ops;
 static struct fi_ops gnix_fi_eq_ops;
 
+
+/*******************************************************************************
+ * Aids in distinguishing queues when using generic write.
+ ******************************************************************************/
+enum q_type {
+	EVENT,
+	ERROR
+};
+
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
@@ -91,30 +100,145 @@ static void free_queue(struct slist *list)
 	}
 }
 
-static ssize_t gnix_eq_write_error(struct gnix_fid_eq *gnix_eq, fid_t fid,
-			       void *context, uint64_t index, int err,
-			       int prov_errno, void *err_data, size_t err_size)
+static ssize_t queue_read(struct fid_eq *eq, uint32_t *event, void *buf,
+			  size_t len, uint64_t flags, enum q_type type)
 {
-	struct fi_eq_err_entry *err_entry = NULL;
+	struct gnix_fid_eq *gnix_eq = NULL;
 	struct gnix_event *ev = NULL;
-	int ret = FI_SUCCESS;
+	struct slist *queue;
+	int ret = len;
 
-	err_entry = calloc(1, sizeof(*err_entry));
-	if (!err_entry) {
+	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
+	if (!gnix_eq) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
+
+	fastlock_acquire(&gnix_eq->lock);
+
+	switch (type) {
+	case EVENT:
+		if (!slist_empty(&gnix_eq->err_queue)) {
+			ret = -FI_EAVAIL;
+			goto cleanup;
+		}
+
+		if (slist_empty(&gnix_eq->ev_queue)) {
+			ret = -FI_EAGAIN;
+			goto cleanup;
+		}
+
+		queue = &gnix_eq->ev_queue;
+		break;
+	case ERROR:
+		if (slist_empty(&gnix_eq->err_queue)) {
+			ret = -FI_EAGAIN;
+			goto cleanup;
+		}
+
+		queue = &gnix_eq->err_queue;
+		break;
+	default:
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
+
+	ev = container_of(queue->head, struct gnix_event, entry);
+	if (!event) {
+		ret = -FI_EINVAL;
+		goto cleanup;
+	}
+
+	if (len < ev->len) {
+		ret = -FI_ETOOSMALL;
+		goto cleanup;
+	}
+
+	if (type == EVENT)
+		*event = ev->type;
+
+	memcpy(buf, ev->buf, len);
+
+	/*
+	 * Remove if FI_PEEK isn't specified.
+	 */
+	if (!(flags & FI_PEEK)) {
+		ev = container_of(slist_remove_head(&gnix_eq->ev_queue),
+				  struct gnix_event, entry);
+		free(ev->buf);
+		free(ev);
+	}
+
+	fastlock_release(&gnix_eq->lock);
+
+	return ret;
+
+cleanup:
+	fastlock_release(&gnix_eq->lock);
+err:
+	return ret;
+}
+
+static ssize_t queue_write(struct fid_eq *eq, uint32_t event, void *buf,
+			   size_t len, uint64_t flags, enum q_type type)
+{
+	struct gnix_fid_eq *gnix_eq = NULL;
+	struct gnix_event *q_entry = NULL;
+	struct slist *queue = NULL;
+	ssize_t ret = len;
+
+	q_entry = calloc(1, sizeof(*q_entry));
+	if (!q_entry) {
 		ret = -FI_ENOMEM;
 		goto err;
 	}
 
-	/*
-	 * Need to use a gnix_event structure because fi_eq_err_entry doesn't
-	 * have an slist_entry field. We'll just shove the error into the buf
-	 * field.
-	 */
-	ev = calloc(1, sizeof(*ev));
-	if (!ev) {
-		ret = -FI_ENOMEM;
-		goto cleanup_err_entry;
+	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
+	if (!gnix_eq) {
+		ret = -FI_EINVAL;
+		goto cleanup_q_entry;
 	}
+
+	switch (type) {
+	case EVENT:
+		queue = &gnix_eq->ev_queue;
+		break;
+	case ERROR:
+		queue = &gnix_eq->err_queue;
+		break;
+	default:
+		ret = -FI_EINVAL;
+		goto cleanup_q_entry;
+	}
+
+	q_entry->len = len;
+	q_entry->buf = buf;
+	q_entry->type = event;
+	q_entry->flags = flags;
+
+	fastlock_acquire(&gnix_eq->lock);
+
+	slist_insert_tail(&q_entry->entry, queue);
+
+	fastlock_release(&gnix_eq->lock);
+
+	return ret;
+
+cleanup_q_entry:
+	free(q_entry);
+err:
+	return ret;
+}
+
+static ssize_t gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
+				   void *context, uint64_t index, int err,
+				   int prov_errno, void *err_data,
+				   size_t err_size)
+{
+	struct fi_eq_err_entry *err_entry = calloc(1, sizeof(*err_entry));
+
+	if (!err_entry)
+		return -FI_ENOMEM;
 
 	err_entry->fid = fid;
 	err_entry->context = context;
@@ -125,30 +249,9 @@ static ssize_t gnix_eq_write_error(struct gnix_fid_eq *gnix_eq, fid_t fid,
 	err_entry->err_data_size = err_size;
 
 	/*
-	 * Don't care about type, or flags. Just need to store the
-	 * fi_eq_err_entry.
+	 * Event and flag entries are irrelevant for error queue entries.
 	 */
-	ev->len = sizeof(*err_entry);
-	ev->buf = err_entry;
-
-	ret = ev->len;
-
-	/*
-	 * TODO:
-	 * - Handle fastlock_acquire failure case.
-	 */
-	fastlock_acquire(&gnix_eq->lock);
-
-	slist_insert_tail(&ev->entry, &gnix_eq->err_queue);
-
-	fastlock_release(&gnix_eq->lock);
-
-	return ret;
-
-cleanup_err_entry:
-	free(err_entry);
-err:
-	return ret;
+	return queue_write(eq, 0, err_entry, sizeof(*err_entry), 0, ERROR);
 }
 
 
@@ -193,6 +296,7 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	gnix_eq->eq_fid.fid.context = context;
 	gnix_eq->eq_fid.fid.ops = &gnix_fi_eq_ops;
 	gnix_eq->eq_fid.ops = &gnix_eq_ops;
+	fastlock_init(&gnix_eq->lock);
 
 	slist_init(&gnix_eq->ev_queue);
 	slist_init(&gnix_eq->err_queue);
@@ -229,6 +333,7 @@ static int gnix_eq_close(struct fid *fid)
 	atomic_dec(&gnix_eq->eq_fabric->ref_cnt);
 	assert(atomic_get(&gnix_eq->eq_fabric->ref_cnt) >= 0);
 
+	fastlock_destroy(&gnix_eq->lock);
 	free_queue(&gnix_eq->ev_queue);
 	free_queue(&gnix_eq->err_queue);
 	free(gnix_eq);
@@ -245,178 +350,27 @@ static ssize_t gnix_eq_sread(struct fid_eq *eq, uint32_t *event, void *buf,
 static ssize_t gnix_eq_read(struct fid_eq *eq, uint32_t *event, void *buf,
 			    size_t len, uint64_t flags)
 {
-	struct gnix_fid_eq *gnix_eq = NULL;
-	struct gnix_event *ev = NULL;
-	int ret = len;
-
-	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
-	if (!gnix_eq) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
-	fastlock_acquire(&gnix_eq->lock);
-
-	if (!slist_empty(&gnix_eq->err_queue)) {
-		ret = -FI_EAVAIL;
-		goto cleanup;
-	}
-
-	if (slist_empty(&gnix_eq->ev_queue)) {
-		ret = -FI_EAGAIN;
-		goto cleanup;
-	}
-
-	ev = container_of(gnix_eq->ev_queue.head, struct gnix_event, entry);
-	if (!event) {
-		ret = -FI_EINVAL;
-		goto cleanup;
-	}
-
-	if (len < ev->len) {
-		ret = -FI_ETOOSMALL;
-		goto cleanup;
-	}
-
-	*event = ev->type;
-	memcpy(buf, ev->buf, len);
-
-	/*
-	 * Remove if FI_PEEK isn't specified.
-	 */
-	if (!(flags & FI_PEEK)) {
-		ev = container_of(slist_remove_head(&gnix_eq->ev_queue),
-				  struct gnix_event, entry);
-		free(ev->buf);
-		free(ev);
-	}
-
-	fastlock_release(&gnix_eq->lock);
-
-	return ret;
-
-cleanup:
-	fastlock_release(&gnix_eq->lock);
-err:
-	return ret;
+	return queue_read(eq, event, buf, len, flags, EVENT);
 }
 
 static ssize_t gnix_eq_readerr(struct fid_eq *eq, struct fi_eq_err_entry *buf,
 			       uint64_t flags)
 {
-	struct gnix_fid_eq *gnix_eq = NULL;
-	struct gnix_event *ev = NULL;
-	int ret = 0;
-
-	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
-	if (!gnix_eq) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
-	fastlock_acquire(&gnix_eq->lock);
-
-	/*
-	 * If there is no error, then signal to try again.
-	 */
-	if (slist_empty(&gnix_eq->err_queue)) {
-		ret = -FI_EAGAIN;
-		goto cleanup;
-	}
-
-	ev = container_of(gnix_eq->err_queue.head, struct gnix_event, entry);
-	if (!ev) {
-		ret = -FI_EINVAL;
-		goto cleanup;
-	}
-
-	memcpy(buf, ev->buf, ev->len);
-	ret = ev->len;
-
-	/*
-	 * Remove if FI_PEEK isn't specified.
-	 */
-	if (!(flags & FI_PEEK)) {
-		ev = container_of(slist_remove_head(&gnix_eq->err_queue),
-				  struct gnix_event, entry);
-		free(ev->buf);
-		free(ev);
-	}
-
-	fastlock_release(&gnix_eq->lock);
-
-	return ret;
-
-cleanup:
-	fastlock_release(&gnix_eq->lock);
-err:
-	return ret;
+	return queue_read(eq, NULL, buf, sizeof(*buf), flags, ERROR);
 }
 
 static ssize_t gnix_eq_write(struct fid_eq *eq, uint32_t event,
 			     const void *buf, size_t len, uint64_t flags)
 {
-	struct gnix_fid_eq *gnix_eq = NULL;
-	struct gnix_event *ev_entry = NULL;
-	int ret = len;
 	void *ev_buf = NULL;
 
-	/*
-	 * Allocate memory for the event entry that will be stored inside of the
-	 * event queue. Memory for the given buffer containing the fi_eq_entry
-	 * must be allocated separately.
-	 */
-	ev_entry = calloc(1, sizeof(*ev_entry));
-	if (!ev_entry) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	/*
-	 * The buf entry is meant to contain a type of fi_eq_entry, but this is
-	 * only a header and it could be larger. Allocate size len which is
-	 * assumed to already be sizeof(fi_eq_entry) + sizeof(extra_data).
-	 */
 	ev_buf = calloc(1, len);
-	if (!ev_buf) {
-		ret = -FI_ENOMEM;
-		goto cleanup_ev_entry;
-	}
-
-	gnix_eq = container_of(eq, struct gnix_fid_eq, eq_fid);
-	if (!gnix_eq) {
-		ret = -FI_EINVAL;
-		goto cleanup_ev_buf;
-	}
+	if (!ev_buf)
+		return -FI_ENOMEM;
 
 	memcpy(ev_buf, buf, len);
-	ev_entry->buf = ev_buf;
 
-	ev_entry->type = event;
-	ev_entry->len = len;
-	ev_entry->flags = flags;
-
-	/*
-	 * TODO:
-	 * - Handle fastlock_acquire failure case.
-	 */
-	fastlock_acquire(&gnix_eq->lock);
-
-	/*
-	 * Insert generated entry into the event queue.
-	 */
-	slist_insert_tail(&ev_entry->entry, &gnix_eq->ev_queue);
-
-	fastlock_release(&gnix_eq->lock);
-
-	return ret;
-
-cleanup_ev_buf:
-	free(ev_buf);
-cleanup_ev_entry:
-	free(ev_entry);
-err:
-	return ret;
+	return queue_write(eq, event, ev_buf, len, flags, EVENT);
 }
 
 static const char *gnix_eq_strerror(struct fid_eq *eq, int prov_errno,
