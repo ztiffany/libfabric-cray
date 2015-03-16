@@ -398,6 +398,7 @@ struct gnix_fid_eq {
 	struct fi_eq_attr attr;
 	struct gnix_fid_fabric *eq_fabric;
 	atomic_t ref_cnt;
+	fastlock_t lock;
 
 	struct slist err_queue;
 	struct slist ev_queue;
@@ -583,6 +584,8 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context);
+int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
+		 struct fid_eq **eq, void *context);
 
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
