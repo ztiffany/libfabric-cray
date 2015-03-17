@@ -348,7 +348,13 @@ err:
 		if (gnix_info->fabric_attr) free(gnix_info->fabric_attr);
 		free(gnix_info);
 	}
-	return ret;
+
+	/*
+	 *  for the getinfo method, we need to return -FI_ENODATA  otherwise
+	 *  the fi_getinfo call will make an early exit without querying
+	 *  other providers which may be avaialble.
+	 */
+	return -FI_ENODATA;
 }
 
 static void gnix_fini(void)
