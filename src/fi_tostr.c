@@ -157,7 +157,6 @@ static void fi_tostr_threading(char *buf, enum fi_threading threading)
 	}
 }
 
-
 static void fi_tostr_order(char *buf, uint64_t flags)
 {
 	IFFLAGSTR(flags, FI_ORDER_RAR);
@@ -349,6 +348,30 @@ static void fi_tostr_ep_attr(char *buf, const struct fi_ep_attr *attr, const cha
 	strcatf(buf, "%s%srx_ctx_cnt: %zd\n", prefix, TAB, attr->rx_ctx_cnt);
 }
 
+static void fi_tostr_resource_mgmt(char *buf, enum fi_resource_mgmt rm)
+{
+	switch (rm) {
+	CASEENUMSTR(FI_RM_UNSPEC);
+	CASEENUMSTR(FI_RM_DISABLED);
+	CASEENUMSTR(FI_RM_ENABLED);
+	default:
+		strcatf(buf, "Unknown");
+		break;
+	}
+}
+
+static void fi_tostr_av_type(char *buf, enum fi_av_type type)
+{
+	switch (type) {
+	CASEENUMSTR(FI_AV_UNSPEC);
+	CASEENUMSTR(FI_AV_MAP);
+	CASEENUMSTR(FI_AV_TABLE);
+	default:
+		strcatf(buf, "Unknown");
+		break;
+	}
+}
+
 static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 				 const char *prefix)
 {
@@ -368,6 +391,12 @@ static void fi_tostr_domain_attr(char *buf, const struct fi_domain_attr *attr,
 	strcatf(buf, "\n");
 	strcatf(buf, "%s%sdata_progress: ", prefix, TAB);
 	fi_tostr_progress(buf, attr->data_progress);
+	strcatf(buf, "\n");
+	strcatf(buf, "%s%sresouce_mgmt: ", prefix, TAB);
+	fi_tostr_resource_mgmt(buf, attr->resource_mgmt);
+	strcatf(buf, "\n");
+	strcatf(buf, "%s%sav_type: ", prefix, TAB);
+	fi_tostr_av_type(buf, attr->av_type);
 	strcatf(buf, "\n");
 
 	strcatf(buf, "%s%smr_key_size: %zd\n", prefix, TAB, attr->mr_key_size);
@@ -424,17 +453,6 @@ static void fi_tostr_info(char *buf, const struct fi_info *info)
 	fi_tostr_ep_attr(buf, info->ep_attr, TAB);
 	fi_tostr_domain_attr(buf, info->domain_attr, TAB);
 	fi_tostr_fabric_attr(buf, info->fabric_attr, TAB);
-}
-
-static void fi_tostr_av_type(char *buf, enum fi_av_type type)
-{
-	switch (type) {
-	CASEENUMSTR(FI_AV_MAP);
-	CASEENUMSTR(FI_AV_TABLE);
-	default:
-		strcatf(buf, "Unknown");
-		break;
-	}
 }
 
 static void fi_tostr_atomic_type(char *buf, enum fi_datatype type)

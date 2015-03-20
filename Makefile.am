@@ -27,7 +27,8 @@ rdmainclude_HEADERS =
 # internal utility functions shared by in-tree providers:
 common_srcs = \
 	src/common.c \
-	src/enosys.c
+	src/enosys.c \
+	src/log.c
 
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
@@ -42,7 +43,6 @@ src_libfabric_la_SOURCES = \
 	include/prov.h \
 	src/fabric.c \
 	src/fi_tostr.c \
-	src/log.c \
 	$(common_srcs)
 
 if MACOS
@@ -430,6 +430,7 @@ dummy_man_pages = \
         man/man3/fi_mr_regattr.3 \
         man/man3/fi_mr_regv.3 \
         man/man3/fi_open.3 \
+        man/man3/fi_open_ops.3 \
         man/man3/fi_passive_ep.3 \
         man/man3/fi_poll_add.3 \
         man/man3/fi_poll_del.3 \
