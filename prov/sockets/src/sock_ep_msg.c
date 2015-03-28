@@ -57,6 +57,9 @@
 #include "sock.h"
 #include "sock_util.h"
 
+#define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
+#define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
+
 const struct fi_ep_attr sock_msg_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
@@ -256,7 +259,8 @@ static int sock_ep_cm_create_socket()
 
 static int sock_ep_cm_enqueue_msg(struct sock_cm_entry *cm,
 				  const struct sockaddr_in *addr, 
-				  void *msg, size_t len)
+				  void *msg, size_t len, 
+				  fid_t fid, struct sock_eq *eq)
 {
 	char c = 0;
 	int ret = 0;
@@ -269,6 +273,8 @@ static int sock_ep_cm_enqueue_msg(struct sock_cm_entry *cm,
 	list_entry->msg_len = len;
 	memcpy(&list_entry->msg[0], msg, len);
 	memcpy(&list_entry->addr, addr, sizeof(*addr));
+	list_entry->fid = fid;
+	list_entry->eq = eq;
 
 	fastlock_acquire(&cm->lock);
 	dlist_insert_tail(&list_entry->entry, &cm->msg_list);
@@ -301,11 +307,36 @@ static int sock_ep_cm_send_msg(struct sock_cm_entry *cm,
 	return (ret == len) ? 0 : -1;
 }
 
+static void sock_ep_cm_release_entry(struct sock_cm_msg_list_entry *msg_entry)
+{
+	struct sock_conn_hdr *msg_hdr;
+	struct fi_eq_cm_entry cm_entry;
+	struct sock_ep *sock_ep;
+
+	msg_hdr = (struct sock_conn_hdr*)msg_entry->msg;
+	if (msg_hdr->type == SOCK_CONN_SHUTDOWN) {
+		memset(&cm_entry, 0, sizeof cm_entry);
+		cm_entry.fid = msg_entry->fid;
+		sock_ep = container_of(cm_entry.fid, struct sock_ep, ep.fid);
+		if (sock_eq_report_event(msg_entry->eq, FI_SHUTDOWN, &cm_entry,
+					 sizeof(cm_entry), 0))
+			SOCK_LOG_ERROR("Error in writing to EQ\n");
+		sock_ep->cm.shutdown_received = 1;
+		sock_ep_disable(&sock_ep->ep);
+	} else {
+		if (sock_eq_report_error(msg_entry->eq, msg_entry->fid, NULL,
+					 0, FI_ETIMEDOUT, -FI_ETIMEDOUT, NULL, 0))
+			SOCK_LOG_ERROR("failed to report error\n");
+	}
+
+	dlist_remove(&msg_entry->entry);
+	free(msg_entry);
+}
+
 static void sock_ep_cm_flush_msg(struct sock_cm_entry *cm)
 {
 	struct dlist_entry *entry, *next_entry;
 	struct sock_cm_msg_list_entry *msg_entry;
-
 	fastlock_acquire(&cm->lock);
 	for (entry = cm->msg_list.next; entry != &cm->msg_list;) {
 		msg_entry = container_of(entry, 
@@ -322,8 +353,7 @@ static void sock_ep_cm_flush_msg(struct sock_cm_entry *cm)
 		msg_entry->retry++;
 
 		if (msg_entry->retry > SOCK_EP_MAX_RETRY) {
-			dlist_remove(entry);
-			free(msg_entry);
+			sock_ep_cm_release_entry(msg_entry);
 			entry = next_entry;
 			continue;
 		}
@@ -397,7 +427,6 @@ static void *sock_msg_ep_listener_thread(void *data)
 	struct sock_ep *ep = (struct sock_ep*)data;
 	struct sock_conn_response *conn_response;
 	struct fi_eq_cm_entry *cm_entry;
-	struct fi_eq_err_entry *cm_err_entry;
 
 	struct sockaddr_in from_addr;
 	socklen_t addr_len;
@@ -501,26 +530,11 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (ep->is_disabled || ep->cm.shutdown_received)
 				break;
 
-			cm_err_entry = calloc(1, sizeof(*cm_err_entry) + user_data_sz);
-			if (!cm_err_entry) {
-				SOCK_LOG_ERROR("cannot allocate memory\n");
-				goto out;
-			}
-
-			memset(cm_err_entry, 0, sizeof(*cm_err_entry) + user_data_sz);
-			cm_err_entry->fid = &ep->ep.fid;
-			cm_err_entry->err = -FI_ECONNREFUSED;
-
-			if (user_data_sz > 0)
-				memcpy(cm_err_entry->err_data,
-				       &conn_response->user_data, user_data_sz);
-			
-			if (sock_eq_report_event(ep->eq, FI_ECONNREFUSED,
-						 cm_err_entry,
-						 sizeof(*cm_err_entry) +
-						 user_data_sz, 0)) 
+			if (sock_eq_report_error(ep->eq, &ep->ep.fid, NULL, 0,
+						 FI_ECONNREFUSED, -FI_ECONNREFUSED,
+						 &conn_response->user_data, 
+						 user_data_sz))
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			free(cm_err_entry);
 			goto out;
 
 		case SOCK_CONN_SHUTDOWN:
@@ -533,6 +547,7 @@ static void *sock_msg_ep_listener_thread(void *data)
 			if (ep->cm.shutdown_received)
 				break;
 
+			sock_ep_disable(&ep->ep);
 			ep->cm.shutdown_received = 1;
 			if (sock_eq_report_event(ep->eq, FI_SHUTDOWN, cm_entry,
 						 entry_sz, 0))
@@ -588,7 +603,8 @@ static int sock_ep_cm_connect(struct fid_ep *ep, const void *addr,
 	
 	memcpy(&_ep->cm_addr, addr, sizeof(struct sockaddr_in));
 	if (sock_ep_cm_enqueue_msg(&_ep->cm, addr, req, 
-				sizeof (*req) + paramlen)) {
+				   sizeof (*req) + paramlen, 
+				   &_ep->ep.fid, _eq)) {
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -642,7 +658,8 @@ static int sock_ep_cm_accept(struct fid_ep *ep, const void *param, size_t paraml
 	response->hdr.s_port = htons(atoi(_ep->listener.service));
 
 	if (sock_ep_cm_enqueue_msg(&_ep->cm, addr, response, 
-				   sizeof (*response) + paramlen)) {
+				   sizeof (*response) + paramlen,
+				   &_ep->ep.fid, _ep->eq)) {
 		ret = -FI_EIO;
 		goto out;
 	}
@@ -672,7 +689,7 @@ int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 	response.hdr.msg_id = _ep->cm.next_msg_id++;
 
 	if (sock_ep_cm_enqueue_msg(&_ep->cm, &_ep->cm_addr, &response, 
-				sizeof response)) {
+				   sizeof response, &_ep->ep.fid, _ep->eq)) {
 		return -FI_EIO;
 	}
 
@@ -922,17 +939,6 @@ static void *sock_pep_listener_thread (void *data)
 				SOCK_LOG_ERROR("Error in writing to EQ\n");
 			break;
 
-		case SOCK_CONN_SHUTDOWN:
-			SOCK_LOG_INFO("Received SOCK_CONN_SHUTDOWN\n");
-
-			entry_sz = sizeof(*cm_entry);
-			cm_entry->fid = &pep->pep.fid;
-
-			if (sock_eq_report_event(pep->eq, FI_SHUTDOWN, cm_entry,
-						 entry_sz, 0))
-				SOCK_LOG_ERROR("Error in writing to EQ\n");
-			break;
-
 		default:
 			SOCK_LOG_ERROR("Invalid event: %d\n", conn_req->hdr.type);
 			goto out;
@@ -1053,7 +1059,8 @@ static int sock_pep_reject(struct fid_pep *pep, fi_connreq_t connreq,
 	req->hdr.msg_id = _pep->cm.next_msg_id++;
 
 	if (sock_ep_cm_enqueue_msg(&_pep->cm, addr, req, 
-				   sizeof(struct sock_conn_response))) {
+				   sizeof(struct sock_conn_response),
+				   &_pep->pep.fid, _pep->eq)) {
 		ret = -FI_EIO;
 		goto out;
 	}

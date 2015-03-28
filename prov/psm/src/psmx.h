@@ -39,13 +39,13 @@ extern "C" {
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
-#include "fi_log.h"
+#include <rdma/fi_log.h>
 
 #define PSMX_PROVNAME "psm"
 #define PSMX_DEFAULT_UUID	"0FFF0FFF-0000-0000-0000-0FFF0FFF0FFF"
 
-#define PSMX_DEBUG(...) FI_LOG(2, PSMX_PROVNAME, __VA_ARGS__)
-#define PSMX_WARN(...)	FI_WARN(PSMX_PROVNAME, __VA_ARGS__)
+#define PSMX_DEBUG(...)
+#define PSMX_WARN(...)
 
 #define PSMX_TIME_OUT	120
 
@@ -110,6 +110,7 @@ union psmx_pi {
 #define PSMX_AM_FLAG_MASK	0xFFFF0000
 #define PSMX_AM_EOM		0x40000000
 #define PSMX_AM_DATA		0x20000000
+#define PSMX_AM_FORCE_ACK	0x10000000
 
 #ifndef PSMX_AM_USE_SEND_QUEUE
 #define PSMX_AM_USE_SEND_QUEUE	0
@@ -148,6 +149,8 @@ struct psmx_am_request {
 			uint64_t addr;
 			uint64_t key;
 			void	*context;
+			void	*peer_context;
+			void	*peer_addr;
 			uint64_t data;
 		} write;
 		struct {
@@ -595,6 +598,8 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
+
+void	psmx_am_ack_rma(struct psmx_am_request *req);
 
 struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
