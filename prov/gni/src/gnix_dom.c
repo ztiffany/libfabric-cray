@@ -73,7 +73,7 @@ static int gnix_domain_close(fid_t fid)
 		goto err;
 	}
 
-	GNIX_LOG_INFO("gnix_domain_close invoked.\n");
+	GNIX_INFO(FI_LOG_DOMAIN, "gnix_domain_close invoked.\n");
 
 	if (domain->cm_nic) {
 		cm_nic = domain->cm_nic;
@@ -82,8 +82,8 @@ static int gnix_domain_close(fid_t fid)
 		    (atomic_get(&cm_nic->ref_cnt) == 0)) {
 			status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
 			if (status != GNI_RC_SUCCESS) {
-				GNIX_LOG_ERROR("oops, cdm destroy"
-					       "failed\n");
+				GNIX_ERR(FI_LOG_DOMAIN,
+					   "oops, cdm destroy failed\n");
 			}
 			free(domain->cm_nic);
 		}
@@ -107,7 +107,8 @@ static int gnix_domain_close(fid_t fid)
 	memset(domain, 0, sizeof *domain);
 	free(domain);
 
-	GNIX_LOG_INFO("gnix_domain_close invoked returning %d\n", ret);
+	GNIX_INFO(FI_LOG_DOMAIN, "gnix_domain_close invoked returning %d\n",
+		  ret);
 err:
 	return ret;
 }
@@ -174,7 +175,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	struct gnix_fid_fabric *fabric_priv;
 	gni_return_t status;
 
-	GNIX_LOG_INFO("%s\n", __func__);
+	GNIX_INFO(FI_LOG_DOMAIN, "%s\n", __func__);
 
 	fabric_priv = container_of(fabric, struct gnix_fid_fabric, fab_fid);
 	if (!info->domain_attr->name ||
@@ -194,16 +195,18 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		ret =
 		    gnixu_get_rdma_credentials(info->dest_addr, &ptag, &cookie);
 		if (ret) {
-			GNIX_LOG_ERROR("gnixu_get_rdma_credentials returned"
-				       "ptag %d cookie 0x%x\n", ptag, cookie);
+			GNIX_ERR(FI_LOG_DOMAIN,
+				   "gnixu_get_rdma_credentials returned ptag %d cookie 0x%x\n",
+				   ptag, cookie);
 			goto err;
 		}
 	} else {
 		ret = gnixu_get_rdma_credentials(NULL, &ptag, &cookie);
 	}
 
-	GNIX_LOG_INFO("gnix rdma credentials returned ptag %d cookie 0x%x\n",
-		      ptag, cookie);
+	GNIX_INFO(FI_LOG_DOMAIN,
+		  "gnix rdma credentials returned ptag %d cookie 0x%x\n",
+		  ptag, cookie);
 	domain = calloc(1, sizeof *domain);
 	if (domain == NULL) {
 		ret = -FI_ENOMEM;
@@ -239,8 +242,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	if (cm_nic == NULL) {
 
-		GNIX_LOG_INFO("creating cm_nic for ptag %d cookie 0x%x id %d\n",
-		      ptag, cookie, getpid());
+		GNIX_INFO(FI_LOG_DOMAIN,
+			  "creating cm_nic for ptag %d cookie 0x%x id %d\n",
+			  ptag, cookie, getpid());
 		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof *cm_nic);
 		if (cm_nic == NULL) {
 			ret = -FI_ENOMEM;
@@ -260,8 +264,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 				       gnix_cdm_modes,
 				       &cm_nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
-				       gni_err_str[status]);
+			GNIX_ERR(FI_LOG_DOMAIN,
+				   "GNI_CdmCreate returned %s\n",
+				   gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
@@ -272,8 +277,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
 				       &cm_nic->gni_nic_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
-			       gni_err_str[status]);
+			GNIX_ERR(FI_LOG_DOMAIN,
+				   "GNI_CdmAttach returned %s\n",
+			           gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}

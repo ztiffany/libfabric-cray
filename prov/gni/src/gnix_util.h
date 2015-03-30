@@ -38,16 +38,26 @@
 #define _GNIX_UTIL_H_
 
 #include <stdio.h>
-#include "fi_log.h"
+#include "rdma/fi_log.h"
 
-#define GNIX_DEBUG (2)
+extern struct fi_provider gnix_prov;
 
-extern const char gnix_fab_name[];
-extern const char gnix_dom_name[];
+#define GNIX_WARN(subsystem, ...)                                              \
+	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
+#define GNIX_TRACE(subsystem, ...)                                             \
+	FI_TRACE(&gnix_prov, subsystem, __VA_ARGS__)
+#define GNIX_INFO(subsystem, ...)                                              \
+	FI_INFO(&gnix_prov, subsystem, __VA_ARGS__)
+#define GNIX_DEBUG(subsystem, ...)                                             \
+	FI_DBG(&gnix_prov, subsystem, __VA_ARGS__)
 
-#define GNIX_LOG_INFO(...) FI_LOG(GNIX_DEBUG, gnix_fab_name, __VA_ARGS__)
-#define GNIX_LOG_WARN(...) FI_WARN(gnix_fab_name, __VA_ARGS__)
-#define GNIX_LOG_ERROR(...) FI_WARN(gnix_fab_name, __VA_ARGS__)
+/*
+ * TODO: This currently breaks the logging semantics. Discuss how to handle
+ * error output.
+ */
+#define GNIX_ERR(subsystem, ...)                                               \
+	fi_log(&gnix_prov, FI_LOG_WARN, subsystem, __func__, __LINE__,         \
+	       __VA_ARGS__);
 
 /*
  * prototypes

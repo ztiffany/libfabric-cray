@@ -457,8 +457,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					gnix_cdm_modes,
 					&nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_LOG_ERROR("GNI_CdmCreate returned %s\n",
-					gni_err_str[status]);
+			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
+				 gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
@@ -471,8 +471,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 					&device_addr,
 					&nic->gni_nic_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_LOG_ERROR("GNI_CdmAttach returned %s\n",
-					gni_err_str[status]);
+			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
+				 gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err_w_inc;
 		}
