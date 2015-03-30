@@ -174,7 +174,8 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	};
 
 	if (!resolved_addr) {
-		GNIX_LOG_ERROR("Resolved_addr must be a valid pointer.\n");
+		GNIX_ERR(FI_LOG_FABRIC,
+			 "Resolved_addr must be a valid pointer.\n");
 		ret = -FI_EINVAL;
 		goto err;
 	}
@@ -182,7 +183,8 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
 
 	if (sock == -1) {
-		GNIX_LOG_ERROR("Socket creation failed: %s\n", strerror(errno));
+		GNIX_ERR(FI_LOG_FABRIC, "Socket creation failed: %s\n",
+			 strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -193,8 +195,9 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 
 	ret = ioctl(sock, SIOCGIFADDR, &ifr);
 	if (ret == -1) {
-		GNIX_LOG_ERROR("Failed to get address for ipogif0: %s\n",
-			       strerror(errno));
+		GNIX_ERR(FI_LOG_FABRIC,
+			 "Failed to get address for ipogif0: %s\n",
+			 strerror(errno));
 		ret = -FI_EIO;
 		goto sock_cleanup;
 	}
@@ -203,8 +206,9 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 
 	ret = getaddrinfo(node, "domain", &hints, &result);
 	if (ret != 0) {
-		GNIX_LOG_ERROR("Failed to get address for node provided: %s\n",
-			       strerror(errno));
+		GNIX_ERR(FI_LOG_FABRIC,
+			 "Failed to get address for node provided: %s\n",
+			 strerror(errno));
 		ret = -FI_EINVAL;
 		goto sock_cleanup;
 	}
@@ -222,7 +226,8 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 			if(status == GNI_RC_SUCCESS) {
 				break;
 			} else {
-				GNIX_LOG_ERROR("Unable to get NIC address.");
+				GNIX_ERR(FI_LOG_FABRIC,
+					 "Unable to get NIC address.");
 				ret = gnixu_to_fi_errno(status);
 				goto sock_cleanup;
 			}
@@ -239,8 +244,9 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	 * Make sure address is valid.
 	 */
 	if (pe == -1) {
-		GNIX_LOG_ERROR("Unable to acquire valid address for node %s\n",
-			       node);
+		GNIX_ERR(FI_LOG_FABRIC,
+			 "Unable to acquire valid address for node %s\n",
+			 node);
 		ret = -FI_EADDRNOTAVAIL;
 		goto sock_cleanup;
 	}
@@ -258,7 +264,8 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	resolved_addr->name_type = 0;
 sock_cleanup:
 	if(close(sock) == -1) {
-		GNIX_LOG_ERROR("Unable to close socket: %s\n", strerror(errno));
+		GNIX_ERR(FI_LOG_FABRIC, "Unable to close socket: %s\n",
+			 strerror(errno));
 	}
 err:
 	if (result != NULL) {
