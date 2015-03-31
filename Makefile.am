@@ -292,6 +292,7 @@ _gni_files = \
 	prov/gni/src/gnix_mr.c \
 	prov/gni/src/gnix_cm.c \
 	prov/gni/src/gnix_ep_rdm.c \
+	prov/gni/src/gnix_ep_msg.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_util.c
 

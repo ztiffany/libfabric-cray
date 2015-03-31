@@ -37,5 +37,5 @@
 #include "gnix.h"
 
 /*
- * gni provider FID_EP_RDM specific methods
+ * gni provider FID_EP_MSG specific methods
  */
