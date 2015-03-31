@@ -286,12 +286,12 @@ static int gnix_ep_close(fid_t fid)
 	domain = ep->domain;
 	assert(domain != NULL);
 	atomic_dec(&domain->ref_cnt);
-	assert(domain->ref_cnt > 0);
+	assert(atomic_get(&domain->ref_cnt) > 0);
 
 	nic = ep->nic;
 	assert(nic != NULL);
 	atomic_dec(&nic->ref_cnt);
-	assert(nic->ref_cnt > 0);
+	assert(atomic_get(&nic->ref_cnt) > 0);
 
 	free(ep);
 
