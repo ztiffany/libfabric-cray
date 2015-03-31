@@ -227,7 +227,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	cq_priv->format = attr->format;
 	cq_priv->entry_size = entry_size;
 	cq_priv->flags = cq_flags;
-	atomic_set(&cq_priv->ref_cnt, 1);
+	atomic_init(&cq_priv->ref_cnt, 1);
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq_fid.fid.context = context;

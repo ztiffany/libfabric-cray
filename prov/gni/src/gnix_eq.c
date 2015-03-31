@@ -291,6 +291,7 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	gnix_eq->eq_fabric = container_of(fabric, struct gnix_fid_fabric,
 					  fab_fid);
 	atomic_inc(&gnix_eq->eq_fabric->ref_cnt);
+	atomic_init(&gnix_eq->ref_cnt, 0);
 
 	gnix_eq->eq_fid.fid.fclass = FI_CLASS_EQ;
 	gnix_eq->eq_fid.fid.context = context;
@@ -311,10 +312,6 @@ err:
 	return ret;
 }
 
-/*
- * TOOD:
- * - Decrement fabric ref_cnt.
- */
 static int gnix_eq_close(struct fid *fid)
 {
 	struct gnix_fid_eq *gnix_eq = NULL;
