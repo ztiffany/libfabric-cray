@@ -228,6 +228,8 @@ struct gnix_fid_mem_desc {
 	gni_mem_handle_t mem_hndl;
 };
 
+extern atomic_t gnix_id_counter;
+
 /*
  *   gnix endpoint structure
  */

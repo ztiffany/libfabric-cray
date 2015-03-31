@@ -252,7 +252,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		}
 
 		gnix_list_node_init(&cm_nic->list);
-		atomic_set(&cm_nic->ref_cnt,1);
+		atomic_init(&cm_nic->ref_cnt, 1);
 		list_head_init(&cm_nic->datagram_free_list);
 		list_head_init(&cm_nic->wc_datagram_active_list);
 		list_head_init(&cm_nic->wc_datagram_free_list);
@@ -298,7 +298,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
 	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
-	atomic_set(&domain->ref_cnt,0);
+	atomic_init(&domain->ref_cnt, 0);
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	domain->domain_fid.fid.context = context;

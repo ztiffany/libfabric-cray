@@ -58,6 +58,7 @@
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
+atomic_t gnix_id_counter;
 
 uint32_t gnix_cdm_modes =
 	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED |
@@ -128,6 +129,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &gnix_fab_fi_ops;
 	fab->fab_fid.ops = &gnix_fab_ops;
+	atomic_init(&fab->ref_cnt, 0);
 	list_head_init(&fab->domain_list);
 	*fabric = &fab->fab_fid;
 
@@ -398,6 +400,8 @@ GNI_INI
 	     GNI_GET_MINOR(lib_version.ugni_version) >= GNI_MINOR_REV)) {
 		provider = &gnix_prov;
 	}
+
+	atomic_init(&gnix_id_counter, 0);
 
 	return (provider);
 }
