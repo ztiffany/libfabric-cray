@@ -129,11 +129,10 @@ static struct fi_ops_cq gnix_cq_ops = {
 	.read = gnix_cq_read,
 	.readfrom = gnix_cq_readfrom,
 	.readerr = gnix_cq_readerr,
-	.write = fi_no_cq_write,
-	.writeerr = fi_no_cq_writeerr,
 	.sread = gnix_cq_sread,
 	.sreadfrom = gnix_cq_sreadfrom,
-	.strerror = gnix_cq_strerror,
+	.signal = fi_no_cq_signal,
+	.strerror = gnix_cq_strerror
 };
 
 int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,

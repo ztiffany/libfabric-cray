@@ -283,8 +283,6 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	/* TODO: need to work on this */
 	gnix_info->ep_attr->mem_tag_format = 0x0;
 	/* TODO: remember this when implementing sends */
-	gnix_info->ep_attr->msg_order = FI_ORDER_SAS;
-	gnix_info->ep_attr->comp_order = FI_ORDER_NONE;
 	gnix_info->ep_attr->tx_ctx_cnt = 1;
 	gnix_info->ep_attr->rx_ctx_cnt = 1;
 
@@ -317,8 +315,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		gnix_info->tx_attr->op_flags = GNIX_EP_OP_FLAGS;
 	}
 
-	gnix_info->tx_attr->msg_order = gnix_info->ep_attr->msg_order;
-	gnix_info->tx_attr->comp_order = gnix_info->ep_attr->comp_order;
+	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
+	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
 	/* TODO: probably something else here */
 	gnix_info->tx_attr->size = UINT64_MAX;
 	gnix_info->tx_attr->iov_limit = 1;
@@ -333,8 +331,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		gnix_info->rx_attr->op_flags = GNIX_EP_OP_FLAGS;
 	}
 
-	gnix_info->rx_attr->msg_order = gnix_info->ep_attr->msg_order;
-	gnix_info->rx_attr->comp_order = gnix_info->ep_attr->comp_order;
+	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
+	gnix_info->rx_attr->comp_order = FI_ORDER_NONE;
 	/* TODO: probably something else here */
 	gnix_info->rx_attr->size = UINT64_MAX;
 	gnix_info->rx_attr->iov_limit = 1;
