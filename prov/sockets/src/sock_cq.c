@@ -135,30 +135,6 @@ out:
 	return ret;
 }
 
-static ssize_t _sock_cq_writeerr(struct sock_cq *cq, 
-				 struct fi_cq_err_entry *buf, size_t len)
-{
-	ssize_t ret;
-	
-	fastlock_acquire(&cq->lock);
-	if (rbavail(&cq->cqerr_rb) < len) {
-		ret = -FI_ENOSPC;
-		SOCK_LOG_ERROR("Not enough space in CQ\n");
-		goto out;
-	}
-
-	rbwrite(&cq->cqerr_rb, buf, len);
-	rbcommit(&cq->cqerr_rb);
-	ret = len;
-
-	if (cq->signal) 
-		sock_wait_signal(cq->waitset);
-out:
-	fastlock_release(&cq->lock);
-	return ret;
-}
-
-
 static int sock_cq_report_context(struct sock_cq *cq, fi_addr_t addr,
 				  struct sock_pe_entry *pe_entry)
 {
@@ -244,7 +220,7 @@ static inline ssize_t sock_cq_rbuf_read(struct sock_cq *cq, void *buf,
 	return count;
 }
 
-ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
+static ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 			fi_addr_t *src_addr, const void *cond, int timeout)
 {
 	int ret = 0;
@@ -293,24 +269,24 @@ ssize_t sock_cq_sreadfrom(struct fid_cq *cq, void *buf, size_t count,
 	return (ret == 0 || ret == -FI_ETIMEDOUT) ? -FI_EAGAIN : ret;
 }
 
-ssize_t sock_cq_sread(struct fid_cq *cq, void *buf, size_t len,
+static ssize_t sock_cq_sread(struct fid_cq *cq, void *buf, size_t len,
 			     const void *cond, int timeout)
 {
 	return sock_cq_sreadfrom(cq, buf, len, NULL, cond, timeout);
 }
 
-ssize_t sock_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
+static ssize_t sock_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 			fi_addr_t *src_addr)
 {
 	return sock_cq_sreadfrom(cq, buf, count, src_addr, NULL, 0);
 }
 
-ssize_t sock_cq_read(struct fid_cq *cq, void *buf, size_t count)
+static ssize_t sock_cq_read(struct fid_cq *cq, void *buf, size_t count)
 {
 	return sock_cq_readfrom(cq, buf, count, NULL);
 }
 
-ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
+static ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 			uint64_t flags)
 {
 	struct sock_cq *sock_cq;
@@ -331,30 +307,7 @@ ssize_t sock_cq_readerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
 	return ret;
 }
 
-ssize_t sock_cq_write(struct fid_cq *cq, const void *buf, size_t len)
-{
-	struct sock_cq *sock_cq;
-	
-	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	if (!(sock_cq->attr.flags & FI_WRITE))
-		return -FI_EINVAL;
-
-	return _sock_cq_write(sock_cq, FI_ADDR_NOTAVAIL, buf, len);
-}
-
-ssize_t sock_cq_writeerr(struct fid_cq *cq, struct fi_cq_err_entry *buf,
-			size_t len, uint64_t flags)
-{
-	struct sock_cq *sock_cq;
-	
-	sock_cq = container_of(cq, struct sock_cq, cq_fid);
-	if (!(sock_cq->attr.flags & FI_WRITE))
-		return -FI_EINVAL;
-
-	return _sock_cq_writeerr(sock_cq, buf, len);
-}
-
-const char * sock_cq_strerror(struct fid_cq *cq, int prov_errno,
+static const char * sock_cq_strerror(struct fid_cq *cq, int prov_errno,
 			      const void *err_data, char *buf, size_t len)
 {
 	if (buf && len)
@@ -362,7 +315,7 @@ const char * sock_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return strerror(-prov_errno);
 }
 
-int sock_cq_close(struct fid *fid)
+static int sock_cq_close(struct fid *fid)
 {
 	struct sock_cq *cq;
 
@@ -385,15 +338,22 @@ int sock_cq_close(struct fid *fid)
 	return 0;
 }
 
-struct fi_ops_cq sock_cq_ops = {
+static int sock_cq_signal(struct fid_cq *cq)
+{
+	struct sock_cq *sock_cq;
+	sock_cq = container_of(cq, struct sock_cq, cq_fid);
+	rbfdsignal(&sock_cq->cq_rbfd);
+	return 0;
+}
+
+static struct fi_ops_cq sock_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = sock_cq_read,
 	.readfrom = sock_cq_readfrom,
 	.readerr = sock_cq_readerr,
-	.write = sock_cq_write,
-	.writeerr = sock_cq_writeerr,
 	.sread = sock_cq_sread,
 	.sreadfrom = sock_cq_sreadfrom,
+	.signal = sock_cq_signal,
 	.strerror = sock_cq_strerror,
 };
 
@@ -431,7 +391,7 @@ static int sock_cq_control(struct fid *fid, int command, void *arg)
 	return ret;
 }
 
-struct fi_ops sock_cq_fi_ops = {
+static struct fi_ops sock_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = sock_cq_close,
 	.bind = fi_no_bind,

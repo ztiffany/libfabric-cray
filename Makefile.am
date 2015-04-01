@@ -214,7 +214,7 @@ _usnic_files = \
 	prov/usnic/src/usdf_timer.h
 
 _usnic_cppflags = \
-        -D__LIBUSNIC__ \
+        -D__LIBUSNIC__ -DWANT_DEBUG_MSGS=0 \
         -DHAVE_LIBNL3=$(HAVE_LIBNL3) $(usnic_nl_CPPFLAGS) \
         -I$(top_srcdir)/prov/usnic/src/usnic_direct
 
@@ -398,7 +398,7 @@ dummy_man_pages = \
         man/man3/fi_cq_sread.3 \
         man/man3/fi_cq_sreadfrom.3 \
         man/man3/fi_cq_strerror.3 \
-        man/man3/fi_cq_write.3 \
+        man/man3/fi_cq_signal.3 \
         man/man3/fi_domain_bind.3 \
         man/man3/fi_domain_query.3 \
         man/man3/fi_dupinfo.3 \

@@ -255,8 +255,6 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->ep_attr->protocol = FI_PROTO_PSMX;
 	psmx_info->ep_attr->max_msg_size = PSMX_MAX_MSG_SIZE;
 	psmx_info->ep_attr->mem_tag_format = fi_tag_format(max_tag_value);
-	psmx_info->ep_attr->msg_order = FI_ORDER_SAS;
-	psmx_info->ep_attr->comp_order = FI_ORDER_NONE;
 	psmx_info->ep_attr->tx_ctx_cnt = 1;
 	psmx_info->ep_attr->rx_ctx_cnt = 1;
 
@@ -280,8 +278,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->tx_attr->mode = psmx_info->mode;
 	psmx_info->tx_attr->op_flags = (hints && hints->tx_attr && hints->tx_attr->op_flags)
 					? hints->tx_attr->op_flags : 0;
-	psmx_info->tx_attr->msg_order = psmx_info->ep_attr->msg_order;
-	psmx_info->tx_attr->comp_order = psmx_info->ep_attr->comp_order;
+	psmx_info->tx_attr->msg_order = FI_ORDER_SAS;
+	psmx_info->tx_attr->comp_order = FI_ORDER_NONE;
 	psmx_info->tx_attr->inject_size = PSMX_INJECT_SIZE;
 	psmx_info->tx_attr->size = UINT64_MAX;
 	psmx_info->tx_attr->iov_limit = 1;
@@ -290,8 +288,8 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->rx_attr->mode = psmx_info->mode;
 	psmx_info->rx_attr->op_flags = (hints && hints->rx_attr && hints->tx_attr->op_flags)
 					? hints->tx_attr->op_flags : 0;
-	psmx_info->rx_attr->msg_order = psmx_info->ep_attr->msg_order;
-	psmx_info->rx_attr->comp_order = psmx_info->ep_attr->comp_order;
+	psmx_info->rx_attr->msg_order = FI_ORDER_SAS;
+	psmx_info->rx_attr->comp_order = FI_ORDER_NONE;
 	psmx_info->rx_attr->total_buffered_recv = ~(0ULL); /* that's how PSM handles it internally! */
 	psmx_info->rx_attr->size = UINT64_MAX;
 	psmx_info->rx_attr->iov_limit = 1;
@@ -421,7 +419,6 @@ PSM_INI
 	psmx_env.name_server	= psmx_get_int_env("OFI_PSM_NAME_SERVER", 1);
 	psmx_env.am_msg		= psmx_get_int_env("OFI_PSM_AM_MSG", 0);
 	psmx_env.tagged_rma	= psmx_get_int_env("OFI_PSM_TAGGED_RMA", 1);
-	psmx_env.warning	= psmx_get_int_env("OFI_PSM_WARNING", 1);
 	psmx_env.uuid		= getenv("OFI_PSM_UUID");
 	if (!psmx_env.uuid)
 		psmx_env.uuid	= PSMX_DEFAULT_UUID;
@@ -462,8 +459,6 @@ PSM_INI
 		"OFI_PSM_AM_MSG = %d\n", psmx_env.am_msg);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_TAGGED_RMA = %d\n", psmx_env.tagged_rma);
-	FI_INFO(&psmx_prov, FI_LOG_CORE,
-		"OFI_PSM_WARNING = %d\n", psmx_env.warning);
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"OFI_PSM_UUID = %s\n", psmx_env.uuid);
 

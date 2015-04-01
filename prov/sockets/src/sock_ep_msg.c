@@ -60,7 +60,7 @@
 #define SOCK_LOG_INFO(...) _SOCK_LOG_INFO(FI_LOG_EP_CTRL, __VA_ARGS__)
 #define SOCK_LOG_ERROR(...) _SOCK_LOG_ERROR(FI_LOG_EP_CTRL, __VA_ARGS__)
 
-const struct fi_ep_attr sock_msg_ep_attr = {
+static const struct fi_ep_attr sock_msg_ep_attr = {
 	.type = FI_EP_MSG,
 	.protocol = FI_PROTO_SOCK_TCP,
 	.max_msg_size = SOCK_EP_MAX_MSG_SZ,
@@ -68,21 +68,20 @@ const struct fi_ep_attr sock_msg_ep_attr = {
 	.max_order_war_size = SOCK_EP_MAX_ORDER_WAR_SZ,
 	.max_order_waw_size = SOCK_EP_MAX_ORDER_WAW_SZ,
 	.mem_tag_format = SOCK_EP_MEM_TAG_FMT,
-	.msg_order = SOCK_EP_MSG_ORDER,
 	.tx_ctx_cnt = SOCK_EP_MAX_TX_CNT,
 	.rx_ctx_cnt = SOCK_EP_MAX_RX_CNT,
 };
 
-const struct fi_tx_attr sock_msg_tx_attr = {
+static const struct fi_tx_attr sock_msg_tx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
-	.op_flags = 0,
+	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
-const struct fi_rx_attr sock_msg_rx_attr = {
+static const struct fi_rx_attr sock_msg_rx_attr = {
 	.caps = SOCK_EP_MSG_CAP,
 	.op_flags = 0,
 	.msg_order = SOCK_EP_MSG_ORDER,
@@ -91,7 +90,7 @@ const struct fi_rx_attr sock_msg_rx_attr = {
 	.iov_limit = SOCK_EP_MAX_IOV_LIMIT,
 };
 
-int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
+static int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -114,7 +113,7 @@ int sock_msg_verify_rx_attr(const struct fi_rx_attr *attr)
 	return 0;
 }
 
-int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
+static int sock_msg_verify_tx_attr(const struct fi_tx_attr *attr)
 {
 	if (!attr)
 		return 0;
@@ -163,9 +162,6 @@ int sock_msg_verify_ep_attr(struct fi_ep_attr *ep_attr,
 
 		if (ep_attr->max_order_waw_size > 
 		   sock_msg_ep_attr.max_order_waw_size)
-			return -FI_ENODATA;
-
-		if ((ep_attr->msg_order | SOCK_EP_MSG_ORDER) != SOCK_EP_MSG_ORDER)
 			return -FI_ENODATA;
 
 		if ((ep_attr->tx_ctx_cnt > SOCK_EP_MAX_TX_CNT) &&
@@ -243,7 +239,7 @@ static int sock_ep_cm_getpeer(struct fid_ep *ep, void *addr, size_t *addrlen)
 	return 0;
 }
 
-static int sock_ep_cm_create_socket() 
+static int sock_ep_cm_create_socket(void)
 {
 	int sock, optval;
 	sock = socket(AF_INET, SOCK_DGRAM, 0);
@@ -677,7 +673,7 @@ out:
 	return ret;
 }
 
-int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
+static int sock_ep_cm_shutdown(struct fid_ep *ep, uint64_t flags)
 {
 	struct sock_conn_response response;
 	struct sock_ep *_ep;
@@ -708,7 +704,7 @@ struct fi_ops_cm sock_ep_cm_ops = {
 	.shutdown = sock_ep_cm_shutdown,
 };
 
-int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
+static int sock_msg_endpoint(struct fid_domain *domain, struct fi_info *info,
 		struct sock_ep **ep, void *context, size_t fclass)
 {
 	int ret;
@@ -810,6 +806,7 @@ static int sock_pep_fi_close(fid_t fid)
 
 	close(pep->cm.signal_fds[0]);
 	close(pep->cm.signal_fds[1]);
+	fastlock_destroy(&pep->cm.lock);
 
 	free(pep);
 	return 0;
@@ -1153,6 +1150,7 @@ int sock_msg_passive_ep(struct fid_fabric *fabric, struct fi_info *info,
 	_pep->pep.fid.ops = &sock_pep_fi_ops;
 	_pep->pep.cm = &sock_pep_cm_ops;
 	_pep->pep.ops = NULL;
+	fastlock_init(&_pep->cm.lock);
 
 	_pep->sock_fab = container_of(fabric, struct sock_fabric, fab_fid);
 	*pep = &_pep->pep;

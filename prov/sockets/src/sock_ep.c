@@ -59,7 +59,7 @@ extern const struct fi_fabric_attr sock_fabric_attr;
 
 const struct fi_tx_attr sock_stx_attr = {
 	.caps = SOCK_EP_RDM_CAP,
-	.op_flags = 0,
+	.op_flags = FI_TRANSMIT_COMPLETE,
 	.msg_order = SOCK_EP_MSG_ORDER,
 	.inject_size = SOCK_EP_MAX_INJECT_SZ,
 	.size = SOCK_EP_TX_SZ,
@@ -325,6 +325,7 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 			break;
 		case FI_SETOPSFLAG:
 			tx_ctx->attr.op_flags = *(uint64_t *) arg;
+			tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 			break;
 		case FI_ENABLE:
 			ep = container_of(fid, struct fid_ep, fid);
@@ -361,6 +362,7 @@ static int sock_ctx_control(struct fid *fid, int command, void *arg)
 			break;
 		case FI_SETOPSFLAG:
 			tx_ctx->attr.op_flags = *(uint64_t *) arg;
+			tx_ctx->attr.op_flags |= FI_TRANSMIT_COMPLETE;
 			break;
 		default:
 			return -FI_ENOSYS;
@@ -596,6 +598,7 @@ static int sock_ep_close(struct fid *fid)
 	
 	close(sock_ep->listener.signal_fds[0]);
 	close(sock_ep->listener.signal_fds[1]);
+	fastlock_destroy(&sock_ep->cm.lock);
 
 	if (sock_ep->fclass != FI_CLASS_SEP && !sock_ep->tx_shared) {
 		sock_pe_remove_tx_ctx(sock_ep->tx_array[0]);
@@ -876,6 +879,7 @@ static int sock_ep_control(struct fid *fid, int command, void *arg)
 		break;
 	case FI_SETOPSFLAG:
 		ep->op_flags = *(uint64_t *) arg;
+		ep->op_flags |= FI_TRANSMIT_COMPLETE;
 		break;
 	case FI_ENABLE:
 		ep_fid = container_of(fid, struct fid_ep, fid);
@@ -1294,9 +1298,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	sock_ep->fclass = fclass;
 	*ep = sock_ep;	
 
-	fastlock_acquire(&sock_dom->lock);
-	fastlock_release(&sock_dom->lock);
-
 	if (info) {
 		sock_ep->info.caps = info->caps;
 		sock_ep->info.addr_format = FI_SOCKADDR_IN;
@@ -1325,6 +1326,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 			sock_ep->tx_attr.size = sock_ep->tx_attr.size ?
 				sock_ep->tx_attr.size : 
 				(SOCK_EP_TX_SZ * SOCK_EP_TX_ENTRY_SZ);
+			sock_ep->op_flags |= FI_TRANSMIT_COMPLETE;
 		}
 		
 		if (info->rx_attr) {
@@ -1393,6 +1395,7 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	if (sock_conn_listen(sock_ep))
 		goto err;
 
+	fastlock_init(&sock_ep->cm.lock);
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);
 		if (socketpair(AF_UNIX, SOCK_STREAM, 0, 
