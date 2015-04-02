@@ -41,7 +41,7 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
-LIST_HEAD(cm_nic_list);
+LIST_HEAD(gnix_cm_nic_list);
 
 uint32_t gnix_def_gni_tx_cq_size = 2048;
 /* rx cq bigger to avoid having to deal with rx overruns so much */
@@ -51,7 +51,7 @@ gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 
 static int gnix_domain_close(fid_t fid)
 {
-	int ret = FI_SUCCESS;
+	int ret = FI_SUCCESS, v;
 	struct gnix_fid_domain *domain;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *p, *next;
@@ -77,9 +77,10 @@ static int gnix_domain_close(fid_t fid)
 
 	if (domain->cm_nic) {
 		cm_nic = domain->cm_nic;
-		atomic_dec(&domain->cm_nic->ref_cnt);
+		v = atomic_dec(&domain->cm_nic->ref_cnt);
+		assert(v >= 0);
 		if (cm_nic->gni_cdm_hndl &&
-		    (atomic_get(&cm_nic->ref_cnt) == 0)) {
+		    (v == 0)) {
 			status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
 			if (status != GNI_RC_SUCCESS) {
 				GNIX_ERR(FI_LOG_DOMAIN,
@@ -89,15 +90,31 @@ static int gnix_domain_close(fid_t fid)
 		}
 	}
 
+	/*
+	 *  remove nics from the domain's nic list,
+	 *  decrement ref_cnt on each nic.  If ref_cnt
+	 *  drops to 0, destroy the cdm, remove from
+	 *  the global nic list.
+	 */
 	list_for_each_safe(&domain->nic_list, p, next, list)
 	{
 		list_del(&p->list);
 		gnix_list_node_init(&p->list);
-		/* TODO: free nic here */
+		v = atomic_dec(&p->ref_cnt);
+		assert(v >= 0);
+		if (v == 0) {
+			list_del(&p->gnix_nic_list);
+			gnix_list_node_init(&p->gnix_nic_list);
+			status = GNI_CdmDestroy(p->gni_cdm_hndl);
+			if (status != GNI_RC_SUCCESS)
+				GNIX_ERR(FI_LOG_DOMAIN,
+					 "oops, cdm destroy failed\n");
+			free(p);
+		}
 	}
 
-	atomic_dec(&domain->fabric->ref_cnt);
-	assert(atomic_get(&domain->fabric->ref_cnt) >= 0);
+	v = atomic_dec(&domain->fabric->ref_cnt);
+	assert(v >= 0);
 
 	/*
 	 * remove from the list of cdms attached to fabric
@@ -118,7 +135,7 @@ err:
  * better control allocation of underlying aries resources associated
  * with the domain.  Examples will include controlling size of underlying
  * hardware CQ sizes, max size of RX ring buffers, etc.
- * 
+ *
  * Currently this function is not implemented, so just return -FI_ENOSYS
  */
 
@@ -225,7 +242,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	 * TODO: thread safety, this iterator is not thread safe
 	 */
 
-        list_for_each(&cm_nic_list,elem,list) {
+	list_for_each(&gnix_cm_nic_list, elem, list) {
 		if ((elem->ptag == ptag) &&
 			(elem->cookie == cookie) &&
 			(elem->cdm_id == getpid())) {
@@ -286,7 +303,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 		cm_nic->device_addr = device_addr;
 
-	        list_add_tail(&cm_nic_list,&cm_nic->list);
+		list_add_tail(&gnix_cm_nic_list, &cm_nic->list);
 	}
 
 	domain->fabric = fabric_priv;

@@ -60,6 +60,13 @@ const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
 atomic_t gnix_id_counter;
 
+/* TODO: this will need to be adjustable - probably set in GNI_INI*/
+uint32_t gnix_def_max_nics_per_ptag = 4;
+
+int gnix_nics_per_ptag[GNI_PTAG_USER_END];
+LIST_HEAD(gnix_nic_list);
+pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
+
 uint32_t gnix_cdm_modes =
 	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED |
 	GNI_CDM_MODE_FMA_SMALL_WINDOW | GNI_CDM_MODE_FORK_PARTCOPY |
@@ -131,6 +138,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.ops = &gnix_fab_ops;
 	atomic_init(&fab->ref_cnt, 0);
 	list_head_init(&fab->domain_list);
+
 	*fabric = &fab->fab_fid;
 
 	return FI_SUCCESS;

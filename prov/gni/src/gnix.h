@@ -347,6 +347,8 @@ struct gnix_cm_nic {
 
 struct gnix_nic {
 	struct list_node list;
+	/* for the gnix_nic_list */
+	struct list_node gnix_nic_list;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
 	/* receive completion queue for hndl */
@@ -559,6 +561,10 @@ struct gnix_work_req {
 extern const char gnix_fab_name[];
 extern const char gnix_dom_name[];
 extern uint32_t gnix_cdm_modes;
+extern uint32_t gnix_def_max_nics_per_ptag;
+extern int gnix_nics_per_ptag[GNI_PTAG_USER_END];
+extern pthread_mutex_t gnix_nic_list_lock;
+extern struct list_head gnix_nic_list;
 
 /*
  * linked list helpers
