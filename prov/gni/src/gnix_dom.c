@@ -107,7 +107,8 @@ static int gnix_domain_close(fid_t fid)
 			gnix_list_node_init(&p->gnix_nic_list);
 			status = GNI_CdmDestroy(p->gni_cdm_hndl);
 			if (status != GNI_RC_SUCCESS)
-				GNIX_LOG_ERROR("oops, cdm destroy failed\n");
+				GNIX_ERR(FI_LOG_DOMAIN,
+					 "oops, cdm destroy failed\n");
 			free(p);
 		}
 	}

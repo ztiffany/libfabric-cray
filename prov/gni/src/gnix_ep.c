@@ -40,11 +40,7 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
-<<<<<<< HEAD
-static LIST_HEAD(gnix_nic_list);
-=======
-static atomic_t gnix_id_counter;
->>>>>>> prov/gni: add nic counting
+atomic_t gnix_id_counter;
 
 /*
  * Prototypes for method structs below
@@ -568,7 +564,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		atomic_init(&nic->ref_cnt, 1);
 		atomic_init(&nic->outstanding_fab_reqs_nic, 0);
 
-		list_add_tail(&gnix_nic_list,&nic->list);
+		list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
 		++gnix_nics_per_ptag[domain_priv->ptag];
 
 		list_add_tail(&domain_priv->nic_list, &nic->list);
