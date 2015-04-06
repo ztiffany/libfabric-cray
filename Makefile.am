@@ -282,6 +282,7 @@ endif HAVE_PSM
 if HAVE_GNI
 _gni_files = \
 	prov/gni/src/gnix.h \
+	prov/gni/src/gnix_cq.h \
 	prov/gni/src/gnix_init.c \
 	prov/gni/src/gnix_fabric.c \
 	prov/gni/src/gnix_dom.c \
