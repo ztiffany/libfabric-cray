@@ -65,6 +65,8 @@ extern "C" {
 #include "ccan/list.h"
 #include "gnix_util.h"
 
+#include "gnix_cq.h"
+
 #define GNI_MAJOR_VERSION 0
 #define GNI_MINOR_VERSION 5
 
@@ -279,34 +281,6 @@ struct gnix_fid_av {
 	size_t capacity;
 	/* How many address are currently stored in AV */
 	size_t count;
-	atomic_t ref_cnt;
-};
-
-struct gnix_cq_entry {
-	struct slist_entry item;
-	struct fi_cq_entry the_entry;
-};
-
-struct gnix_cq_msg_entry {
-	struct slist_entry item;
-	struct fi_cq_msg_entry the_entry;
-};
-
-struct gnix_cq_tagged_entry {
-	struct slist_entry item;
-	struct fi_cq_tagged_entry the_entry;
-};
-
-struct gnix_fid_cq {
-	struct fid_cq cq_fid;
-	uint64_t flags;
-	struct gnix_fid_domain *domain;
-	struct slist event_queue;
-	struct slist err_event_queue;
-	struct slist free_list;
-	void *free_list_base;
-	size_t entry_size;
-	enum fi_cq_format format;
 	atomic_t ref_cnt;
 };
 
