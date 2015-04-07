@@ -188,6 +188,15 @@ struct gnix_fid_fabric {
 	struct fid_fabric fab_fid;
 	/* llist of domains's opened from fabric */
 	struct list_head domain_list;
+	/* number of directed datagrams for domains opened from
+	 * this fabric object - used by cm nic*/
+	int n_dgrams;
+	/* number of wildcard datagrams for domains opened from
+	 * this fabric object - used by cm nic*/
+	int n_wc_dgrams;
+	/* timeout datagram completion - see
+	 * GNI_PostdataProbeWaitById in gni_pub.h */
+	uint64_t datagram_timeout;
 	atomic_t ref_cnt;
 };
 
@@ -291,21 +300,16 @@ struct gnix_fid_av {
  * gnix cm nic struct - to be used only for GNI_EpPostData, etc.
  */
 
+
 struct gnix_cm_nic {
 	struct list_node list;
+	fastlock_t lock;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
-	/* free list of datagrams   */
-	struct list_head datagram_free_list;
-	/* list of active wc datagrams   */
-	struct list_head wc_datagram_active_list;
-	/* free list of wc datagrams   */
-	struct list_head wc_datagram_free_list;
-	/* pointer to domain this nic is attached to */
+	struct gnix_dgram_hndl *dgram_hndl;
 	struct gnix_fid_domain *domain;
 	/* work queue for cm nic */
 	struct list_head cm_nic_wq;
-	struct gnix_datagram *datagram_base;
 	uint32_t cdm_id;
 	uint8_t ptag;
 	uint32_t cookie;
@@ -530,6 +534,58 @@ struct gnix_work_req {
 };
 
 /*
+ * GNI datagram related structs and defines.
+ * The GNI_EpPostData, etc. are used to manage
+ * connecting VC's for the FI_EP_RDM endpoint
+ * type.
+ */
+
+struct gnix_dgram_hndl {
+	struct gnix_cm_nic *nic;
+	/* free list of datagrams   */
+	struct list_head datagram_free_list;
+	/* list of active datagrams   */
+	struct list_head datagram_active_list;
+	/* free list of wc datagrams   */
+	struct list_head wc_datagram_free_list;
+	/* list of active wc datagrams   */
+	struct list_head wc_datagram_active_list;
+	struct gnix_datagram *datagram_base;
+	uint64_t datagram_timeout;
+	int n_dgrams;
+	int n_wc_dgrams;
+};
+
+enum gnix_dgram_type {
+	GNIX_DGRAM_WC = 100,
+	GNIX_DGRAM_BND
+};
+
+enum gnix_dgram_state {
+	GNIX_DGRAM_STATE_FREE,
+	GNIX_DGRAM_STATE_CONNECTING,
+	GNIX_DGRAM_STATE_LISTENING,
+	GNIX_DGRAM_STATE_CONNECTED,
+	GNIX_DGRAM_STATE_ALREADY_CONNECTING
+};
+
+struct gnix_datagram {
+	struct list_node        list;
+	struct list_head        *free_list_head;
+	gni_ep_handle_t         gni_ep;
+	struct gnix_cm_nic      *nic;
+	struct gnix_address     target_addr;
+	enum gnix_dgram_state   state;
+	enum gnix_dgram_type    type;
+	struct gnix_dgram_hndl  *d_hndl;
+	int  (*callback_fn)(struct gnix_datagram *,
+			    struct gnix_address,
+			    gni_post_state_t);
+	char dgram_in_buf[GNI_DATAGRAM_MAXSIZE];
+	char dgram_out_buf[GNI_DATAGRAM_MAXSIZE];
+};
+
+/*
  * globals
  */
 extern const char gnix_fab_name[];
@@ -556,7 +612,7 @@ static inline void gnix_list_del_init(struct list_node *node)
 }
 
 /*
- * prototypes
+ * prototypes for fi ops methods
  */
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **domain, void *context);
@@ -572,6 +628,22 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context);
+
+/*
+ * prototypes for gni provider internal functions
+ */
+
+int gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
+				struct gnix_cm_nic *cm_nic,
+				struct gnix_dgram_hndl **hndl_ptr);
+int gnix_dgram_hndl_free(struct gnix_dgram_hndl *hndl);
+int gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
+			struct gnix_datagram **d_ptr);
+int gnix_dgram_unbnd_post(struct gnix_datagram *d,
+			gni_return_t *status_ptr);
+int gnix_dgram_connect_post(struct gnix_datagram *d,
+				gni_return_t *status_ptr);
+void gnix_dgram_prog_thread_fn(void *the_arg);
 
 
 #ifdef __cplusplus

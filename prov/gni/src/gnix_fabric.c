@@ -72,6 +72,12 @@ uint32_t gnix_cdm_modes =
 	GNI_CDM_MODE_FMA_SMALL_WINDOW | GNI_CDM_MODE_FORK_PARTCOPY |
 	GNI_CDM_MODE_ERR_NO_KILL);
 
+/* default number of directed datagrams per domain */
+static int gnix_def_gni_n_dgrams = 128;
+/* default number of wildcard datagrams per domain */
+static int gnix_def_gni_n_wc_dgrams = 4;
+static uint64_t gnix_def_gni_datagram_timeouts = -1;
+
 const struct fi_fabric_attr gnix_fabric_attr = {
 	.fabric = NULL,
 	.name = NULL,
@@ -131,6 +137,13 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	if (!fab) {
 		return -FI_ENOMEM;
 	}
+
+	/*
+	 * set defaults related to use of GNI datagrams
+	 */
+	fab->n_dgrams = gnix_def_gni_n_dgrams;
+	fab->n_wc_dgrams = gnix_def_gni_n_wc_dgrams;
+	fab->datagram_timeout = gnix_def_gni_datagram_timeouts;
 
 	fab->fab_fid.fid.fclass = FI_CLASS_FABRIC;
 	fab->fab_fid.fid.context = context;
