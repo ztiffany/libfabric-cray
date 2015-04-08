@@ -49,6 +49,17 @@ uint32_t gnix_def_gni_rx_cq_size = 16384;
 /* TODO: should we use physical pages for gni cq rings? This is a question for Zach */
 gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
 
+/*******************************************************************************
+ * Forward declaration for ops structures.
+ ******************************************************************************/
+
+static struct fi_ops gnix_domain_fi_ops;
+static struct fi_ops_mr gnix_domain_mr_ops;
+static struct fi_ops_domain gnix_domain_ops;
+
+/*******************************************************************************
+ * Helper functions.
+ ******************************************************************************/
 static int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 {
 	int ret = FI_SUCCESS, v;
@@ -167,6 +178,9 @@ err:
 	return ret;
 }
 
+/*******************************************************************************
+ * API function implementations.
+ ******************************************************************************/
 static int gnix_domain_close(fid_t fid)
 {
 	int ret = FI_SUCCESS, v;
@@ -265,31 +279,6 @@ err:
 	return ret;
 }
 
-static struct fi_ops gnix_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = gnix_domain_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = gnix_domain_ops_open
-};
-
-static struct fi_ops_domain gnix_domain_ops = {
-	.size = sizeof(struct fi_ops_domain),
-	.av_open = gnix_av_open,
-	.cq_open = gnix_cq_open,
-	.endpoint = gnix_ep_open,
-	/* TODO: no cntrs for now in gnix */
-	.cntr_open = fi_no_cntr_open,
-	.poll_open = fi_no_poll_open,
-	.stx_ctx = fi_no_stx_context,
-	.srx_ctx = fi_no_srx_context
-};
-
-static struct fi_ops_mr gnix_domain_mr_ops = {
-	.size = sizeof(struct fi_ops_mr),
-	.reg = gnix_mr_reg
-};
-
 int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		     struct fid_domain **dom, void *context)
 {
@@ -362,7 +351,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	domain->domain_fid.fid.context = context;
-	domain->domain_fid.fid.ops = &gnix_fi_ops;
+	domain->domain_fid.fid.ops = &gnix_domain_fi_ops;
 	domain->domain_fid.ops = &gnix_domain_ops;
 	domain->domain_fid.mr = &gnix_domain_mr_ops;
 
@@ -378,3 +367,32 @@ err:
 	}
 	return ret;
 }
+
+/*******************************************************************************
+ * FI_OPS_* data structures.
+ ******************************************************************************/
+
+static struct fi_ops gnix_domain_fi_ops = {
+	.size = sizeof(struct fi_ops),
+	.close = gnix_domain_close,
+	.bind = fi_no_bind,
+	.control = fi_no_control,
+	.ops_open = gnix_domain_ops_open
+};
+
+static struct fi_ops_mr gnix_domain_mr_ops = {
+	.size = sizeof(struct fi_ops_mr),
+	.reg = gnix_mr_reg
+};
+
+static struct fi_ops_domain gnix_domain_ops = {
+	.size = sizeof(struct fi_ops_domain),
+	.av_open = gnix_av_open,
+	.cq_open = gnix_cq_open,
+	.endpoint = gnix_ep_open,
+	/* TODO: no cntrs for now in gnix */
+	.cntr_open = fi_no_cntr_open,
+	.poll_open = fi_no_poll_open,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context
+};
