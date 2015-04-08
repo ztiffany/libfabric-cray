@@ -59,9 +59,6 @@ typedef ssize_t (*sendmsg_func_t)(struct fid_ep *ep, const struct fi_msg *msg,
 typedef ssize_t (*msg_inject_func_t)(struct fid_ep *ep, const void *buf,
 					size_t len, fi_addr_t dest_addr);
 
-typedef ssize_t (*msg_inject_func_t)(struct fid_ep *ep, const void *buf,
-					size_t len, fi_addr_t dest_addr);
-
 typedef ssize_t (*recv_func_t)(struct fid_ep *ep, const void *buf,
 				size_t len, void *desc,
 				fi_addr_t dest_addr, void *context);
