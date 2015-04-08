@@ -39,6 +39,28 @@ m4_include([config/pkg.m4])
                                  ],
                                  [alps_util_happy=0])
 	       ])
+
+	have_criterion=false
+
+	AC_ARG_WITH([criterion],
+		[AS_HELP_STRING([--with-criterion],
+			       [Location for criterion unit testing framework])])
+
+	if test "$with_criterion" != "" && test "$with_criterion" != "no"; then
+		AC_MSG_CHECKING([criterion path])
+		if test -d "$with_criterion"; then
+			AC_MSG_RESULT([yes])
+			have_criterion=true
+			CPPFLAGS="-I$with_criterion/include $CPPFLAGS"
+			LDFLAGS="-L$with_criterion/lib $LDFLAGS"
+		else
+			AC_MSG_RESULT([no])
+			AC_MSG_ERROR([criterion requested but invalid path given])
+		fi
+	fi
+
+	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
+
 	AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
 ])
