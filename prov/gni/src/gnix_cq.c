@@ -95,6 +95,7 @@ static struct gnix_cq_entry *alloc_cq_entry(size_t size)
 		goto err;
 	}
 
+	GNIX_INFO(FI_LOG_CQ, "generating entry of size %d\n", size);
 	entry->the_entry = malloc(size);
 	if (!entry->the_entry) {
 		GNIX_ERR(FI_LOG_CQ, "out of memory\n");
@@ -180,11 +181,16 @@ static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
 
 	fastlock_acquire(&cq->lock);
 
+	GNIX_INFO(FI_LOG_CQ, "Attempting to dequeue %d items.\n",
+		  count);
+
 	while (count--) {
 		event = container_of(slist_remove_head(&cq->ev_queue),
 				     struct gnix_cq_entry,
 				     item);
 
+		assert(buf);
+		assert(event->the_entry);
 		memcpy(buf, event->the_entry, cq->entry_size);
 		slist_insert_tail(&event->item, &cq->ev_free);
 
@@ -221,8 +227,10 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 		return -FI_ENOMEM;
 	}
 
-	fill_function[cq->attr.format](event, op_context, flags, len, buf,
-				       data, tag);
+	assert(event->the_entry);
+
+	fill_function[cq->attr.format](event->the_entry, op_context, flags,
+			len, buf, data, tag);
 
 	cq_enqueue(cq, event);
 
