@@ -1,5 +1,6 @@
 # Makefile.am for libfabric
 
+
 AM_CPPFLAGS = \
 	-I$(srcdir)/include \
 	-D_GNU_SOURCE \
@@ -279,37 +280,6 @@ endif !HAVE_PSM_DL
 
 endif HAVE_PSM
 
-if HAVE_GNI
-_gni_files = \
-	prov/gni/src/gnix.h \
-	prov/gni/src/gnix_cq.h \
-	prov/gni/src/gnix_init.c \
-	prov/gni/src/gnix_fabric.c \
-	prov/gni/src/gnix_dom.c \
-	prov/gni/src/gnix_ep.c \
-	prov/gni/src/gnix_cq.c \
-	prov/gni/src/gnix_av.c \
-	prov/gni/src/gnix_eq.c \
-	prov/gni/src/gnix_mr.c \
-	prov/gni/src/gnix_cm.c \
-	prov/gni/src/gnix_ep_rdm.c \
-	prov/gni/src/gnix_ep_msg.c \
-	prov/gni/src/gnix_nameserver.c \
-	prov/gni/src/gnix_datagram.c \
-	prov/gni/src/gnix_util.c
-
-if HAVE_GNI_DL
-pkglib_LTLIBRARIES += libgnix-fi.la
-libgnix_fi_la_SOURCES = $(_gni_files) $(common_srcs)
-libgnix_fi_la_LIBADD = $(linkback)
-libgnix_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
-libgnix_fi_la_DEPENDENCIES = $(linkback)
-else !HAVE_GNI_DL
-src_libfabric_la_SOURCES += $(_gni_files)
-endif !HAVE_GNI_DL
-
-endif HAVE_GNI
-
 src_libfabric_la_LDFLAGS += -version-info 1 -export-dynamic \
 			   $(libfabric_version_script)
 src_libfabric_la_DEPENDENCIES = $(srcdir)/libfabric.map
@@ -491,3 +461,5 @@ EXTRA_DIST = libfabric.map libfabric.spec.in config/distscript.pl $(man_MANS)
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"
+
+include prov/gni/Makefile.am
