@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,109 +31,108 @@
  * SOFTWARE.
  */
 
-
-#ifndef _GNIX_EP_RDM_H_
-#define _GNIX_EP_RDM_H_
+#ifndef _GNIX_EP_MSG_H_
+#define _GNIX_EP_MSG_H_
 
 #include "gnix.h"
 
 /*
- * Entry points for FI_EP_RDM data motion methods.
+ * Entry points for FI_EP_MSG data motion methods.
  * This file is intended to be included only in gnix_ep.c
  */
 
-static ssize_t gnix_ep_send_rdm(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t gnix_ep_send_msg(struct fid_ep *ep, const void *buf, size_t len,
 				void *desc, fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_sendv_rdm(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t gnix_ep_sendv_msg(struct fid_ep *ep, const struct iovec *iov,
 				 void **desc, size_t count, fi_addr_t dest_addr,
 				 void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_sendmsg_rdm(struct fid_ep *ep, const struct fi_msg *msg,
+static ssize_t gnix_ep_sendmsg_msg(struct fid_ep *ep, const struct fi_msg *msg,
 				   uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_msg_inject_rdm(struct fid_ep *ep, const void *buf,
+static ssize_t gnix_ep_msg_inject_msg(struct fid_ep *ep, const void *buf,
 				      size_t len, fi_addr_t dest_addr)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_recv_rdm(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t gnix_ep_recv_msg(struct fid_ep *ep, const void *buf, size_t len,
 				void *desc, fi_addr_t dest_addr, void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_recvv_rdm(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t gnix_ep_recvv_msg(struct fid_ep *ep, const struct iovec *iov,
 				 void **desc, size_t count, fi_addr_t dest_addr,
 				 void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_recvmsg_rdm(struct fid_ep *ep, const struct fi_msg *msg,
+static ssize_t gnix_ep_recvmsg_msg(struct fid_ep *ep, const struct fi_msg *msg,
 				   uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_tsend_rdm(struct fid_ep *ep, const void *buf, size_t len,
+static ssize_t gnix_ep_tsend_msg(struct fid_ep *ep, const void *buf, size_t len,
 				 void *desc, fi_addr_t dest_addr, uint64_t tag,
 				 void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_tsendv_rdm(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t gnix_ep_tsendv_msg(struct fid_ep *ep, const struct iovec *iov,
 				  void **desc, size_t count,
-				  fi_addr_t dest_addr, uint64_t tag,
-				  void *context)
+				  fi_addr_t dest_addr,
+				  uint64_t tag, void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_tsendmsg_rdm(struct fid_ep *ep,
+static ssize_t gnix_ep_tsendmsg_msg(struct fid_ep *ep,
 				    const struct fi_msg_tagged *msg,
 				    uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_tinject_rdm(struct fid_ep *ep, const void *buf,
+static ssize_t gnix_ep_tinject_msg(struct fid_ep *ep, const void *buf,
 				   size_t len, fi_addr_t dest_addr,
 				   uint64_t tag)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_trecv_rdm(struct fid_ep *ep, void *buf, size_t len,
-				 void *desc, fi_addr_t src_addr, uint64_t tag,
-				 uint64_t ignore, void *context)
+static ssize_t gnix_ep_trecv_msg(struct fid_ep *ep, void *buf, size_t len,
+			  void *desc, fi_addr_t src_addr, uint64_t tag,
+			  uint64_t ignore, void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_trecvv_rdm(struct fid_ep *ep, const struct iovec *iov,
+static ssize_t gnix_ep_trecvv_msg(struct fid_ep *ep, const struct iovec *iov,
 				  void **desc, size_t count, fi_addr_t src_addr,
 				  uint64_t tag, uint64_t ignore, void *context)
 {
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_trecvmsg_rdm(struct fid_ep *ep,
+static ssize_t gnix_ep_trecvmsg_msg(struct fid_ep *ep,
 				    const struct fi_msg_tagged *msg,
 				    uint64_t flags)
 {
 	return -FI_ENOSYS;
 }
 
-#endif /* _GNIX_EP_RDM_H_ */
+#endif /* _GNIX_EP_MSG_H_ */
