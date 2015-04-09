@@ -26,6 +26,16 @@ _gni_files = \
 	prov/gni/src/gnix_datagram.c \
 	prov/gni/src/gnix_util.c
 
+if HAVE_CRITERION
+bin_PROGRAMS = gnitest
+gnitest_SOURCES = prov/gni/test/cq.c
+
+gnitest_LDFLAGS = -static
+gnitest_CPPFLAGS = $(AM_CPPFLAGS)
+gnitest_LDADD = -lcriterion \
+		$(linkback)
+endif
+
 if HAVE_GNI_DL
 pkglib_LTLIBRARIES += libgnix-fi.la
 libgnix_fi_la_SOURCES = $(_gni_files) $(common_srcs)
