@@ -39,6 +39,7 @@
 #include <assert.h>
 
 #include "gnix.h"
+#include "gnix_nic.h"
 #include "gnix_util.h"
 
 uint32_t gnix_def_gni_tx_cq_size = 2048;
