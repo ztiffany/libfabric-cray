@@ -81,7 +81,7 @@ static int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 	return ret;
 }
 
-static int gnix_cm_nic_alloc(struct gnix_fid_fabric *fabric, int8_t ptag,
+static int gnix_cm_nic_alloc(struct gnix_fid_fabric *fabric, uint8_t ptag,
 				uint32_t cookie, uint32_t cdm_id,
 				struct gnix_cm_nic **cm_nic_ptr)
 {
@@ -114,7 +114,7 @@ static int gnix_cm_nic_alloc(struct gnix_fid_fabric *fabric, int8_t ptag,
 
 	if (cm_nic == NULL) {
 
-		GNIX_INFO(FI_LOG_DOMAIN, "creating cm_nic for %d/0x%x id %d\n",
+		GNIX_INFO(FI_LOG_DOMAIN, "creating cm_nic for %u/0x%x id %d\n",
 		      ptag, cookie, getpid());
 		cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
 		if (cm_nic == NULL) {
@@ -147,6 +147,7 @@ static int gnix_cm_nic_alloc(struct gnix_fid_fabric *fabric, int8_t ptag,
 		gnix_list_node_init(&cm_nic->list);
 		cm_nic->cdm_id = cdm_id;
 		cm_nic->ptag = ptag;
+		cm_nic->cookie = cookie;
 		cm_nic->device_addr = device_addr;
 		fastlock_init(&cm_nic->lock);
 
@@ -310,7 +311,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		    gnixu_get_rdma_credentials(info->dest_addr, &ptag, &cookie);
 		if (ret) {
 			GNIX_ERR(FI_LOG_DOMAIN,
-				   "gnixu_get_rdma_credentials returned ptag %d cookie 0x%x\n",
+				   "gnixu_get_rdma_credentials returned ptag %u cookie 0x%x\n",
 				   ptag, cookie);
 			goto err;
 		}
@@ -319,7 +320,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	}
 
 	GNIX_INFO(FI_LOG_DOMAIN,
-		  "gnix rdma credentials returned ptag %d cookie 0x%x\n",
+		  "gnix rdma credentials returned ptag %u cookie 0x%x\n",
 		  ptag, cookie);
 	domain = calloc(1, sizeof *domain);
 	if (domain == NULL) {
