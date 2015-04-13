@@ -85,8 +85,12 @@ void setup(void)
 
 void teardown(void)
 {
-	fi_close(&dom->fid);
-	fi_close(&fab->fid);
+	int ret = 0;
+
+	ret = fi_close(&dom->fid);
+	assert(!ret, "failure in closing domain.");
+	ret = fi_close(&fab->fid);
+	assert(!ret, "failure in closing fabric.");
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 }
@@ -130,8 +134,8 @@ void cq_tagged_setup(void)
 
 void cq_teardown(void)
 {
+	assert(!fi_close(&rcq->fid), "failure in closing cq.");
 	teardown();
-	fi_close(&rcq->fid);
 }
 
 /*******************************************************************************

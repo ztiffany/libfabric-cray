@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -61,7 +61,7 @@ static void fill_cq_tagged(void *cq_entry, void *op_context, uint64_t flags,
 /*******************************************************************************
  * Forward declarations for ops structures.
  ******************************************************************************/
-static struct fi_ops gnix_fi_ops;
+static struct fi_ops gnix_cq_fi_ops;
 static struct fi_ops_cq gnix_cq_ops;
 
 /*******************************************************************************
@@ -320,6 +320,19 @@ static int verify_cq_attr(struct fi_cq_attr *attr)
 	return FI_SUCCESS;
 }
 
+void free_cq(struct slist *cq)
+{
+	struct slist_entry *entry;
+	struct gnix_cq_entry *item;
+
+	while (!slist_empty(cq)) {
+		entry = slist_remove_head(cq);
+		item = container_of(entry, struct gnix_cq_entry, item);
+		free(item->the_entry);
+		free(item);
+	}
+}
+
 
 /*******************************************************************************
  * API functions.
@@ -327,26 +340,25 @@ static int verify_cq_attr(struct fi_cq_attr *attr)
 static int gnix_cq_close(fid_t fid)
 {
 	struct gnix_fid_cq *cq;
-	struct slist_entry *entry;
-	struct gnix_cq_entry *item;
 
 	cq = container_of(fid, struct gnix_fid_cq, cq_fid);
-	if (atomic_get(&cq->ref_cnt) != 0)
+	if (atomic_get(&cq->ref_cnt) != 0) {
+		GNIX_INFO(FI_LOG_CQ, "CQ ref count: %d, not closing.\n",
+			  cq->ref_cnt);
 		return -FI_EBUSY;
+	}
 
 	atomic_dec(&cq->domain->ref_cnt);
-	assert(atomic_get(&cq->domain->ref_cnt) > 0);
+	assert(atomic_get(&cq->domain->ref_cnt) >= 0);
 
 	fastlock_acquire(&cq->lock);
 
-	/*
-	 * TODO: Clear out all lists.
-	 */
-	while (!slist_empty(&cq->ev_free)) {
-		entry = slist_remove_head(&cq->ev_free);
-		item = container_of(entry, struct gnix_cq_entry, item);
-		free(item);
-	}
+	GNIX_INFO(FI_LOG_CQ, "Freeing all resources associated with CQ.\n");
+
+	free_cq(&cq->ev_free);
+	free_cq(&cq->err_free);
+	free_cq(&cq->ev_queue);
+	free_cq(&cq->err_queue);
 
 	fastlock_release(&cq->lock);
 
@@ -455,11 +467,12 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_priv->domain = domain_priv;
 	cq_priv->attr = *attr;
-	atomic_init(&cq_priv->ref_cnt, 1);
+	atomic_init(&cq_priv->ref_cnt, 0);
+	atomic_inc(&cq_priv->domain->ref_cnt);
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq_fid.fid.context = context;
-	cq_priv->cq_fid.fid.ops = &gnix_fi_ops;
+	cq_priv->cq_fid.fid.ops = &gnix_cq_fi_ops;
 	cq_priv->cq_fid.ops = &gnix_cq_ops;
 
 	/*
@@ -498,6 +511,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
  *  TODO: Cleanup allocated CQ entries in the event of FI_ENOMEM
  */
 cleanup:
+	atomic_dec(&cq_priv->domain->ref_cnt);
 	fastlock_release(&cq_priv->lock);
 	fastlock_destroy(&cq_priv->lock);
 	free(cq_priv);
@@ -509,7 +523,7 @@ err:
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
-static struct fi_ops gnix_fi_ops = {
+static struct fi_ops gnix_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_cq_close,
 	.bind = fi_no_bind,
