@@ -86,8 +86,8 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	/*
 	 * Retrieve the cdm_id & device_addr from the gnix_nic structure.
 	 */
-	name.gnix_addr.cdm_id = ep->nic->cdm_id;
-	name.gnix_addr.device_addr = ep->nic->device_addr;
+	name.gnix_addr.cdm_id = ep->cm_nic->cdm_id;
+	name.gnix_addr.device_addr = ep->cm_nic->device_addr;
 	name.cookie = ep->domain->cookie;
 
 	memcpy(addr, &name, copy_size);

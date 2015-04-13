@@ -1,4 +1,5 @@
 /*
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -30,40 +31,19 @@
  * SOFTWARE.
  */
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif /* HAVE_CONFIG_H */
+#ifndef _GNIX_CM_NIC_H_
+#define _GNIX_CM_NIC_H_
 
-#ifndef _GNIX_UTIL_H_
-#define _GNIX_UTIL_H_
+#include "gnix.h"
 
-#include <stdio.h>
-#include "rdma/fi_log.h"
-
-extern struct fi_provider gnix_prov;
-
-#define GNIX_WARN(subsystem, ...)                                              \
-	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
-#define GNIX_TRACE(subsystem, ...)                                             \
-	FI_TRACE(&gnix_prov, subsystem, __VA_ARGS__)
-#define GNIX_INFO(subsystem, ...)                                              \
-	FI_INFO(&gnix_prov, subsystem, __VA_ARGS__)
-#define GNIX_DEBUG(subsystem, ...)                                             \
-	FI_DBG(&gnix_prov, subsystem, __VA_ARGS__)
-
+extern atomic_t gnix_id_counter;
 /*
- * TODO: This currently breaks the logging semantics. Discuss how to handle
- * error output.
+ * prototypes for GNI CM NIC methods
  */
-#define GNIX_ERR(subsystem, ...)                                               \
-	fi_log(&gnix_prov, FI_LOG_WARN, subsystem, __func__, __LINE__,         \
-	       __VA_ARGS__);
 
-/*
- * prototypes
- */
-int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie);
-int gnixu_to_fi_errno(int err);
+int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
+int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
+			struct gnix_cm_nic **cm_nic);
+int gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id);
 
-
-#endif
+#endif /* _GNIX_CM_NIC_H_ */

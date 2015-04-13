@@ -1,0 +1,165 @@
+/*
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
+ *
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
+ */
+
+#if HAVE_CONFIG_H
+#include <config.h>
+#endif /* HAVE_CONFIG_H */
+
+#include <stdlib.h>
+#include <assert.h>
+
+#include "gnix.h"
+#include "gnix_cm_nic.h"
+
+
+atomic_t gnix_id_counter;
+
+/*
+ * generate a cdm_id, use the 16 LSB of base_id from domain
+ * with 16 MSBs being obtained from atomic increment of
+ * a local variable.
+ */
+
+int gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
+{
+	uint32_t cdm_id;
+	int v;
+
+	v = atomic_inc(&gnix_id_counter);
+	cdm_id = (domain->cdm_id_seed & 0x0000FFFF) |
+			((uint32_t)v << 16);
+	*id = cdm_id;
+	return FI_SUCCESS;
+}
+
+int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
+{
+	int ret = FI_SUCCESS;
+	gni_return_t status;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+
+	if (cm_nic == NULL)
+		return -FI_EINVAL;
+
+	if (cm_nic->gni_cdm_hndl != NULL) {
+		status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_ERR(FI_LOG_EP_CTRL, "oops, cdm destroy failed\n");
+			ret = gnixu_to_fi_errno(status);
+			free(cm_nic);
+		}
+	}
+
+	return ret;
+}
+
+int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
+			struct gnix_cm_nic **cm_nic_ptr)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_cm_nic *cm_nic = NULL;
+	uint32_t device_addr, cdm_id;
+	gni_return_t status;
+
+	*cm_nic_ptr = NULL;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+
+	cm_nic = (struct gnix_cm_nic *)calloc(1, sizeof(*cm_nic));
+	if (cm_nic == NULL) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	ret = gnix_get_new_cdm_id(domain, &cdm_id);
+	if (ret != FI_SUCCESS)
+		goto err;
+
+	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u",
+		      domain->ptag, domain->cookie, cdm_id);
+
+	status = GNI_CdmCreate(cdm_id,
+			       domain->ptag,
+			       domain->cookie,
+			       gnix_cdm_modes,
+			       &cm_nic->gni_cdm_hndl);
+	if (status != GNI_RC_SUCCESS) {
+		GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
+			       gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+		goto err;
+	}
+
+	/*
+	 * Okay, now go for the attach
+	 */
+	status = GNI_CdmAttach(cm_nic->gni_cdm_hndl, 0, &device_addr,
+			       &cm_nic->gni_nic_hndl);
+	if (status != GNI_RC_SUCCESS) {
+		GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
+		       gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+		goto err;
+	}
+
+	cm_nic->cdm_id = cdm_id;
+	cm_nic->ptag = domain->ptag;
+	cm_nic->cookie = domain->cookie;
+	cm_nic->device_addr = device_addr;
+	fastlock_init(&cm_nic->lock);
+
+	/*
+	 * prep the cm nic's dgram component
+	 */
+	ret = gnix_dgram_hndl_alloc(domain->fabric,
+				    cm_nic,
+				    &cm_nic->dgram_hndl);
+	if (ret != FI_SUCCESS)
+		goto err;
+
+	*cm_nic_ptr = cm_nic;
+	return ret;
+
+err:
+	if (cm_nic->dgram_hndl)
+		gnix_dgram_hndl_free(cm_nic->dgram_hndl);
+
+	if (cm_nic->gni_cdm_hndl)
+		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
+
+	if (cm_nic != NULL)
+		free(cm_nic);
+
+	return ret;
+}

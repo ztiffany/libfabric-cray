@@ -53,12 +53,12 @@
 #include "prov.h"
 
 #include "gnix.h"
+#include "gnix_cm_nic.h"
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
-atomic_t gnix_id_counter;
 
 /* TODO: this will need to be adjustable - probably set in GNI_INI*/
 uint32_t gnix_def_max_nics_per_ptag = 4;
