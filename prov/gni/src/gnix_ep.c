@@ -479,7 +479,6 @@ struct fi_ops_tagged gnix_ep_tagged_ops = {
 	.senddata = fi_no_tagged_senddata,
 	.senddata = gnix_ep_tsenddata,
 	.injectdata = fi_no_tagged_injectdata,
-	.search = gnix_ep_tsearch,
 };
 
 static int gnix_ep_close(fid_t fid)
