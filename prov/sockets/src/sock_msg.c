@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2014-2015 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -87,11 +87,19 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
+	flags |= rx_ctx->attr.op_flags;
+	if (flags & FI_PEEK) {
+		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, 
+					 msg->context, flags, 0);
+	} else if (flags & FI_CLAIM) {
+		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 0L, 0,
+					  msg->msg_iov, msg->iov_count);
+	}
+
 	rx_entry = sock_rx_new_entry(rx_ctx);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	flags |= rx_ctx->attr.op_flags;
 	rx_entry->rx_op.op = SOCK_OP_RECV;
 	rx_entry->rx_op.dest_iov_len = msg->iov_count;
 
@@ -377,12 +385,21 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
+	flags |= rx_ctx->attr.op_flags;
+	flags &= ~FI_MULTI_RECV;
+	if (flags & FI_PEEK) {
+		return sock_rx_peek_recv(rx_ctx, msg->addr, msg->tag, 
+					 msg->context, flags, 1);
+	} else if (flags & FI_CLAIM) {
+		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 
+					  msg->tag, 1, 
+					  msg->msg_iov, msg->iov_count);
+	}
+
 	rx_entry = sock_rx_new_entry(rx_ctx);
 	if (!rx_entry)
 		return -FI_ENOMEM;
 
-	flags |= rx_ctx->attr.op_flags;
-	flags &= ~FI_MULTI_RECV;
 	rx_entry->rx_op.op = SOCK_OP_TRECV;
 	rx_entry->rx_op.dest_iov_len = msg->iov_count;
 
@@ -637,69 +654,6 @@ static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t le
 }
 
 
-static ssize_t sock_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-				uint64_t flags, fi_addr_t *src_addr, size_t *len, 
-				void *context)
-{
-	ssize_t ret;
-	struct dlist_entry *entry;
-	struct sock_rx_ctx *rx_ctx;
-	struct sock_rx_entry *rx_entry;
-	struct sock_ep *sock_ep;
-
-	switch (ep->fid.fclass) {
-	case FI_CLASS_EP:
-		sock_ep = container_of(ep, struct sock_ep, ep);
-		rx_ctx = sock_ep->rx_ctx;
-		break;
-
-	case FI_CLASS_RX_CTX:
-	case FI_CLASS_SRX_CTX:
-		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx);
-		break;
-
-	default:
-		SOCK_LOG_ERROR("Invalid ep type\n");
-		return -FI_EINVAL;
-	}
-
-	ret = -FI_ENOMSG;
-	fastlock_acquire(&rx_ctx->lock);
-	for (entry = rx_ctx->rx_buffered_list.next;
-	     entry != &rx_ctx->rx_buffered_list; entry = entry->next) {
-
-		rx_entry = container_of(entry, struct sock_rx_entry, entry);
-		if (rx_entry->is_busy || rx_entry->is_claimed)
-			continue;
-
-		if (((rx_entry->tag & ~rx_entry->ignore) == 
-		     (*tag & ~rx_entry->ignore)) &&
-		    (rx_entry->addr == FI_ADDR_UNSPEC ||
-		     (src_addr == NULL) || 
-		     (src_addr && 
-		      ((*src_addr == FI_ADDR_UNSPEC) ||
-		       (rx_entry->addr == *src_addr))))) {			
-			*tag = rx_entry->tag;
-			if (src_addr)
-				*src_addr = rx_entry->addr;
-			*len = rx_entry->used;
-			ret = 1;
-
-			if (flags & FI_CLAIM)
-				rx_entry->is_claimed = 1;
-
-			if (flags & FI_DISCARD) {
-				dlist_remove(&rx_entry->entry);
-				sock_rx_release_entry(rx_entry);
-			}
-			break;
-		}
-	}
-
-	fastlock_release(&rx_ctx->lock);
-	return ret;
-}
-
 struct fi_ops_tagged sock_ep_tagged = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = sock_ep_trecv,
@@ -711,6 +665,5 @@ struct fi_ops_tagged sock_ep_tagged = {
 	.inject = sock_ep_tinject,
 	.senddata = sock_ep_tsenddata,
 	.injectdata = sock_ep_tinjectdata,
-	.search = sock_ep_tsearch,
 };
 
