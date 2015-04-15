@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -39,6 +39,7 @@
 #include <assert.h>
 
 #include "gnix.h"
+#include "gnix_cm_nic.h"
 #include "gnix_util.h"
 #include "gnix_ep.h"
 #include "gnix_ep_rdm.h"
@@ -486,6 +487,7 @@ static int gnix_ep_close(fid_t fid)
 	struct gnix_fid_ep *ep;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
+	struct gnix_cm_nic *cm_nic;
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
@@ -494,6 +496,10 @@ static int gnix_ep_close(fid_t fid)
 	assert(domain != NULL);
 	atomic_dec(&domain->ref_cnt);
 	assert(atomic_get(&domain->ref_cnt) > 0);
+
+	cm_nic = ep->cm_nic;
+	assert(cm_nic != NULL);
+	gnix_cm_nic_free(cm_nic);
 
 	nic = ep->nic;
 	assert(nic != NULL);
@@ -564,7 +570,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain_priv;
-	struct gnix_fid_ep *ep_priv;
+	struct gnix_fid_ep *ep_priv = NULL;
 	struct gnix_nic *elem, *nic = NULL;
 	gni_return_t status;
 	uint32_t device_addr;
@@ -579,9 +585,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 
 	ep_priv = calloc(1, sizeof *ep_priv);
-	if (!ep) {
+	if (!ep_priv)
 		return -FI_ENOMEM;
-	}
 
 	ep_priv->ep_fid.fid.fclass = FI_CLASS_EP;
 	ep_priv->ep_fid.fid.context = context;
@@ -604,6 +609,10 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ep_priv->vc_hash_hndl = NULL;
+		ret = gnix_cm_nic_alloc(domain_priv,
+					 &ep_priv->cm_nic);
+		if (ret != FI_SUCCESS)
+			goto err_w_ep;
 	} else {
 		ep_priv->vc = NULL;
 	}
@@ -635,10 +644,9 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	if (gnix_nics_per_ptag[domain_priv->ptag] ==
 					gnix_def_max_nics_per_ptag) {
-		list_for_each(&gnix_nic_list, elem, list) {
+		list_for_each(&gnix_nic_list, elem, gnix_nic_list) {
 			if ((elem->ptag == domain_priv->ptag) &&
-				(elem->cookie == domain_priv->cookie)
-				&& (elem->cdm_id == domain_priv->cdm_id)) {
+				(elem->cookie == domain_priv->cookie)) {
 				nic = elem;
 				break;
 			}
@@ -666,14 +674,10 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			goto err_w_lock;
 		}
 
-		/*
-		 * cook up a fake cdm_id, use the 16 LSB of my pid
-		 * with 16 MSBs being obtained from atomic increment of
-		 * a local variable.
-		 */
-		atomic_inc(&gnix_id_counter);
-		fake_cdm_id = (domain_priv->cdm_id & 0x0000FFFF) |
-				((uint32_t)atomic_get(&gnix_id_counter) << 16);
+		ret = gnix_get_new_cdm_id(domain_priv, &fake_cdm_id);
+		if (ret != FI_SUCCESS)
+			goto err_w_lock;
+
 		status = GNI_CdmCreate(fake_cdm_id,
 					domain_priv->ptag,
 					domain_priv->cookie,
@@ -761,14 +765,15 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			goto err_w_inc;
 		}
 
-		nic->cdm_id = ep_priv->domain->cm_nic->cdm_id;
-		nic->device_addr = ep_priv->domain->cm_nic->device_addr;
+		nic->device_addr = device_addr;
+		nic->ptag = domain_priv->ptag;
+		nic->cookie = domain_priv->cookie;
 
 		/*
 		 * TODO: set up work queue
 		 */
 
-		atomic_init(&nic->ref_cnt, 1);
+		atomic_init(&nic->ref_cnt, 0);
 		atomic_init(&nic->outstanding_fab_reqs_nic, 0);
 
 		list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
@@ -810,5 +815,11 @@ err_w_lock:
 	if (nic != NULL)
 		free(nic);
 	pthread_mutex_unlock(&gnix_nic_list_lock);
+err_w_ep:
+	if (ep_priv != NULL) {
+		if (ep_priv->cm_nic != NULL)
+			gnix_cm_nic_free(ep_priv->cm_nic);
+		free(ep_priv);
+	}
 	return ret;
 }

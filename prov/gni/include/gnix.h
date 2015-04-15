@@ -206,9 +206,7 @@ extern struct fi_ops_cm gnix_cm_ops;
  * a gnix_fid_domain is associated with one or more gnix_nic's.
  * the gni_nics are in turn associated with ep's opened off of the
  * domain.  The gni_nic's are use for data motion - sending/receivng
- * messages, rma ops, etc.  Each gnix_fid_domain is associated with
- * a single gnix_cm_nic.  The gnix_cm_nic is used for building internal
- * connections between the endpoints at different addresses.
+ * messages, rma ops, etc.
  */
 struct gnix_fid_domain {
 	struct fid_domain domain_fid;
@@ -216,12 +214,10 @@ struct gnix_fid_domain {
 	struct list_node list;
 	/* list nics this domain is attached to, TODO: thread safety */
 	struct list_head nic_list;
-	/* cm nic bound to this domain */
-	struct gnix_cm_nic *cm_nic;
 	struct gnix_fid_fabric *fabric;
 	uint8_t ptag;
 	uint32_t cookie;
-	uint32_t cdm_id;
+	uint32_t cdm_id_seed;
 	/* work queue for domain */
 	struct list_head domain_wq;
 	/* size of gni tx cqs for this domain */
@@ -239,10 +235,12 @@ struct gnix_fid_mem_desc {
 	gni_mem_handle_t mem_hndl;
 };
 
-extern atomic_t gnix_id_counter;
-
 /*
  *   gnix endpoint structure
+ *
+ * A gnix_cm_nic is associated with an EP if it is of type  FID_EP_RDM.
+ * The gnix_cm_nic is used for building internal connections between the
+ * endpoints at different addresses.
  */
 struct gnix_fid_ep {
 	struct fid_ep ep_fid;
@@ -251,6 +249,8 @@ struct gnix_fid_ep {
 	struct gnix_fid_cq *send_cq;
 	struct gnix_fid_cq *recv_cq;
 	struct gnix_fid_av *av;
+	/* cm nic bound to this ep (FID_EP_RDM only) */
+	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	union {
 		void *vc_hash_hndl;  /*used for FI_AV_MAP */
@@ -302,7 +302,6 @@ struct gnix_fid_av {
 
 
 struct gnix_cm_nic {
-	struct list_node list;
 	fastlock_t lock;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
@@ -315,7 +314,6 @@ struct gnix_cm_nic {
 	uint32_t cookie;
 	uint32_t device_id;
 	uint32_t device_addr;
-	atomic_t ref_cnt;
 };
 
 /*
@@ -349,7 +347,6 @@ struct gnix_nic {
 	struct list_head nic_wq;
 	uint8_t ptag;
 	uint32_t cookie;
-	uint32_t cdm_id;
 	uint32_t device_id;
 	uint32_t device_addr;
 	atomic_t ref_cnt;
