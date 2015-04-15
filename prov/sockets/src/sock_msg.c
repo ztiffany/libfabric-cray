@@ -87,12 +87,15 @@ static ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	flags |= rx_ctx->attr.op_flags;
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= rx_ctx->attr.op_flags;
+
 	if (flags & FI_PEEK) {
-		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, 
+		return sock_rx_peek_recv(rx_ctx, msg->addr, 0L, ~0ULL,
 					 msg->context, flags, 0);
 	} else if (flags & FI_CLAIM) {
-		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 0L, 0,
+		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 
+					  0L, ~0ULL, 0, 
 					  msg->msg_iov, msg->iov_count);
 	}
 
@@ -139,7 +142,7 @@ static ssize_t sock_ep_recv(struct fid_ep *ep, void *buf, size_t len, void *desc
 	msg.addr = src_addr;
 	msg.context = context;
 	msg.data = 0;
-	return sock_ep_recvmsg(ep, &msg, 0);
+	return sock_ep_recvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov, 
@@ -154,7 +157,7 @@ static ssize_t sock_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 	msg.addr = src_addr;
 	msg.context = context;
 	msg.data = 0;
-	return sock_ep_recvmsg(ep, &msg, 0);
+	return sock_ep_recvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, 
@@ -199,7 +202,8 @@ static ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	SOCK_LOG_INFO("New sendmsg on TX: %p using conn: %p\n", 
 		      tx_ctx, conn);
 
-	flags |= tx_ctx->attr.op_flags;
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= tx_ctx->attr.op_flags;
 	memset(&tx_op, 0, sizeof(struct sock_op));
 	tx_op.op = SOCK_OP_SEND;
 
@@ -272,7 +276,7 @@ static ssize_t sock_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	msg.addr = dest_addr;
 	msg.context = context;
 
-	return sock_ep_sendmsg(ep, &msg, 0);
+	return sock_ep_sendmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_sendv(struct fid_ep *ep, const struct iovec *iov, 
@@ -286,7 +290,7 @@ static ssize_t sock_ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 	msg.iov_count = count;
 	msg.addr = dest_addr;
 	msg.context = context;
-	return sock_ep_sendmsg(ep, &msg, 0);
+	return sock_ep_sendmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_senddata(struct fid_ep *ep, const void *buf, size_t len, 
@@ -306,7 +310,7 @@ static ssize_t sock_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.context = context;
 	msg.data = data;
 
-	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA);
+	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len, 
@@ -322,7 +326,8 @@ static ssize_t sock_ep_inject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 
-	return sock_ep_sendmsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
+	return sock_ep_sendmsg(ep, &msg, FI_INJECT | 
+			       SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -341,7 +346,7 @@ static ssize_t	sock_ep_injectdata(struct fid_ep *ep, const void *buf, size_t len
 	msg.data = data;
 
 	return sock_ep_sendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT | 
-			       SOCK_NO_COMPLETION);
+			       SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 struct fi_ops_msg sock_ep_msg_ops = {
@@ -385,14 +390,16 @@ static ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	if (!rx_ctx->enabled)
 		return -FI_EOPBADSTATE;
 
-	flags |= rx_ctx->attr.op_flags;
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= rx_ctx->attr.op_flags;
 	flags &= ~FI_MULTI_RECV;
 	if (flags & FI_PEEK) {
-		return sock_rx_peek_recv(rx_ctx, msg->addr, msg->tag, 
+		return sock_rx_peek_recv(rx_ctx, msg->addr, 
+					 msg->tag, msg->ignore,
 					 msg->context, flags, 1);
 	} else if (flags & FI_CLAIM) {
 		return sock_rx_claim_recv(rx_ctx, msg->context, flags, 
-					  msg->tag, 1, 
+					  msg->tag, msg->ignore, 1, 
 					  msg->msg_iov, msg->iov_count);
 	}
 
@@ -443,7 +450,7 @@ static ssize_t sock_ep_trecv(struct fid_ep *ep, void *buf, size_t len, void *des
 	msg.tag = tag;
 	msg.ignore = ignore;
 	msg.data = 0;
-	return sock_ep_trecvmsg(ep, &msg, 0);
+	return sock_ep_trecvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov, 
@@ -461,7 +468,7 @@ static ssize_t sock_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 	msg.tag = tag;
 	msg.ignore = ignore;
 	msg.data = 0;
-	return sock_ep_trecvmsg(ep, &msg, 0);
+	return sock_ep_trecvmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_tsendmsg(struct fid_ep *ep, 
@@ -503,6 +510,9 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	if (!conn)
 		return -FI_EAGAIN;
 
+	if (flags & SOCK_USE_OP_FLAGS)
+		flags |= tx_ctx->attr.op_flags;
+
 	memset(&tx_op, 0, sizeof(tx_op));
 	tx_op.op = SOCK_OP_TSEND;
 
@@ -531,7 +541,6 @@ static ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 		goto err;
 	}
 
-	flags |= tx_ctx->attr.op_flags;
 	sock_tx_ctx_write_op_tsend(tx_ctx, &tx_op, flags, (uintptr_t) msg->context,
 			msg->addr, (uintptr_t) msg->msg_iov[0].iov_base,
 			sock_ep, conn, msg->tag);
@@ -577,7 +586,7 @@ static ssize_t sock_ep_tsend(struct fid_ep *ep, const void *buf, size_t len,
 	msg.context = context;
 	msg.tag = tag;
 
-	return sock_ep_tsendmsg(ep, &msg, 0);
+	return sock_ep_tsendmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_tsendv(struct fid_ep *ep, const struct iovec *iov, 
@@ -593,7 +602,7 @@ static ssize_t sock_ep_tsendv(struct fid_ep *ep, const struct iovec *iov,
 	msg.addr = dest_addr;
 	msg.context = context;
 	msg.tag = tag;
-	return sock_ep_tsendmsg(ep, &msg, 0);
+	return sock_ep_tsendmsg(ep, &msg, SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
@@ -614,7 +623,7 @@ static ssize_t sock_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	msg.data = data;
 	msg.tag = tag;
 
-	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA);
+	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
@@ -630,7 +639,8 @@ static ssize_t sock_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 	msg.iov_count = 1;
 	msg.addr = dest_addr;
 	msg.tag = tag;
-	return sock_ep_tsendmsg(ep, &msg, FI_INJECT | SOCK_NO_COMPLETION);
+	return sock_ep_tsendmsg(ep, &msg, FI_INJECT | 
+				SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t len,
@@ -650,7 +660,7 @@ static ssize_t	sock_ep_tinjectdata(struct fid_ep *ep, const void *buf, size_t le
 	msg.tag = tag;
 
 	return sock_ep_tsendmsg(ep, &msg, FI_REMOTE_CQ_DATA | FI_INJECT |
-				SOCK_NO_COMPLETION);
+				SOCK_NO_COMPLETION | SOCK_USE_OP_FLAGS);
 }
 
 
