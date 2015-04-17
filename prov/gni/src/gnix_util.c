@@ -52,6 +52,8 @@
 #include <sys/time.h>
 #include <unistd.h>
 #include <stdlib.h>
+#include <linux/limits.h>
+#include <sys/syscall.h>
 
 #include "alps/alps.h"
 #include "alps/alps_toolAssist.h"
@@ -191,3 +193,88 @@ int gnixu_to_fi_errno(int err)
 	else
 		return -FI_EOTHER;
 }
+
+/* Indicate that the next task spawned will be restricted to cores assigned to
+ * corespec. */
+int _gnix_task_is_not_app(void)
+{
+	size_t count;
+	int fd;
+	char filename[PATH_MAX];
+	int rc = 0;
+	char val_str[] = "0";
+	int val_str_len = strlen(val_str);
+
+	snprintf(filename, PATH_MAX, "/proc/self/task/%ld/task_is_app",
+		      syscall(SYS_gettid));
+	fd = open(filename, O_WRONLY);
+	if (fd < 0) {
+		GNIX_ERR(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
+			 filename, strerror(errno));
+		return -errno;
+	}
+
+	count = write(fd, val_str, val_str_len);
+	if (count != val_str_len) {
+		GNIX_ERR(FI_LOG_FABRIC, "write(%s, %s) failed, errno=%s\n",
+			 filename, val_str, strerror(errno));
+		rc = -errno;
+	}
+	close(fd);
+
+	return rc;
+}
+
+static int gnix_write_proc_job(char *val_str)
+{
+	size_t count;
+	int fd;
+	int rc = 0;
+	char *filename = "/proc/job";
+	int val_str_len = strlen(val_str);
+
+	fd = open(filename, O_WRONLY);
+	if (fd < 0) {
+		GNIX_ERR(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
+			 filename, strerror(errno));
+		return -errno;
+	}
+
+	count = write(fd, val_str, val_str_len);
+	if (count != val_str_len) {
+		GNIX_ERR(FI_LOG_FABRIC, "write(%s) failed, errno=%s\n",
+			 val_str, strerror(errno));
+		rc = -errno;
+	}
+	close(fd);
+
+	return rc;
+}
+
+/* Indicate that the next task spawned will be restricted to CPUs that are not
+ * assigned to the app and not assigned to corespec. */
+int _gnix_job_enable_unassigned_cpus(void)
+{
+	return gnix_write_proc_job("enable_unassigned_cpus");
+}
+
+/* Indicate that the next task spawned will be restricted to CPUs that are
+ * assigned to the app. */
+int _gnix_job_disable_unassigned_cpus(void)
+{
+	return gnix_write_proc_job("disable_unassigned_cpus");
+}
+
+/* Indicate that the next task spawned should adhere to the the affinity rules. */
+int _gnix_job_enable_affinity_apply(void)
+{
+	return gnix_write_proc_job("enable_affinity_apply");
+}
+
+/* Indicate that the next task spawned should avoid the affinity rules and be
+ * allowed to run anywhere in the app cpuset. */
+int _gnix_job_disable_affinity_apply(void)
+{
+	return gnix_write_proc_job("disable_affinity_apply");
+}
+

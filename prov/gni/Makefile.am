@@ -29,7 +29,9 @@ _gni_files = \
 
 if HAVE_CRITERION
 bin_PROGRAMS = gnitest
-gnitest_SOURCES = prov/gni/test/cq.c
+gnitest_SOURCES = \
+	prov/gni/test/cq.c \
+	prov/gni/test/utils.c
 
 gnitest_LDFLAGS = -static
 gnitest_CPPFLAGS = $(AM_CPPFLAGS)
