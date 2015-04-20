@@ -65,5 +65,10 @@ extern struct fi_provider gnix_prov;
 int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie);
 int gnixu_to_fi_errno(int err);
 
+int _gnix_task_is_not_app(void);
+int _gnix_job_enable_unassigned_cpus(void);
+int _gnix_job_disable_unassigned_cpus(void);
+int _gnix_job_enable_affinity_apply(void);
+int _gnix_job_disable_affinity_apply(void);
 
 #endif
