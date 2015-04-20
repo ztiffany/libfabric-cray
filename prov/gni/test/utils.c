@@ -77,3 +77,29 @@ Test(utils, proc)
 
 }
 
+Test(utils, alps)
+{
+	int rc;
+	uint8_t ptag;
+	uint32_t cookie, fmas, npes, npr;
+	void *addr = NULL;
+
+	_gnix_alps_cleanup();
+
+	rc = gnixu_get_rdma_credentials(addr, &ptag, &cookie);
+	expect(!rc);
+
+	rc = _gnix_job_fma_limit(0, ptag, &fmas);
+	expect(!rc);
+
+	rc = _gnix_pes_on_node(&npes);
+	expect(!rc);
+
+	rc = _gnix_nics_per_rank(&npr);
+	expect(!rc);
+
+	expect((fmas / npes) == npr);
+
+	_gnix_alps_cleanup();
+}
+
