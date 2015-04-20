@@ -461,13 +461,6 @@ ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 	return -FI_ENOSYS;
 }
 
-ssize_t gnix_ep_tsearch(struct fid_ep *ep, uint64_t *tag, uint64_t ignore,
-			uint64_t flags, fi_addr_t *src_addr, size_t *len,
-			void *context)
-{
-	return -FI_ENOSYS;
-}
-
 struct fi_ops_tagged gnix_ep_tagged_ops = {
 	.size = sizeof(struct fi_ops_tagged),
 	.recv = gnix_ep_trecv,
