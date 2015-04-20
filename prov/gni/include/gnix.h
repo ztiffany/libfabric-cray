@@ -121,7 +121,7 @@ extern "C" {
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
 	 FI_DIRECTED_RECV | FI_MULTI_RECV | FI_INJECT | FI_SOURCE | FI_READ |  \
 	 FI_WRITE | FI_SEND | FI_RECV | FI_REMOTE_READ | FI_REMOTE_WRITE |     \
-	 FI_TRANSMIT_COMPLETE | FI_CANCEL | FI_FENCE)
+	 FI_TRANSMIT_COMPLETE | FI_FENCE)
 
 /*
  * see Operations flags in fi_endpoint.3
