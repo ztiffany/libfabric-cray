@@ -50,14 +50,8 @@ extern struct fi_provider gnix_prov;
 	FI_INFO(&gnix_prov, subsystem, __VA_ARGS__)
 #define GNIX_DEBUG(subsystem, ...)                                             \
 	FI_DBG(&gnix_prov, subsystem, __VA_ARGS__)
-
-/*
- * TODO: This currently breaks the logging semantics. Discuss how to handle
- * error output.
- */
 #define GNIX_ERR(subsystem, ...)                                               \
-	fi_log(&gnix_prov, FI_LOG_WARN, subsystem, __func__, __LINE__,         \
-	       __VA_ARGS__);
+	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
 
 /*
  * prototypes
