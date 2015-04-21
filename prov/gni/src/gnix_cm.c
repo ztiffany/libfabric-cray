@@ -32,6 +32,7 @@
  */
 
 #include "gnix.h"
+#include "gnix_util.h"
 #include "gnix_nic.h"
 #include "gnix_cm_nic.h"
 
@@ -53,6 +54,8 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	struct gnix_fid_ep *ep = NULL;
 	int ret = FI_SUCCESS;
 	size_t copy_size;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	copy_size = sizeof(struct gnix_ep_name);
 

@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -278,6 +278,8 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 	int ret = FI_SUCCESS;
 	size_t copy_size;
 
+	GNIX_TRACE(FI_LOG_AV, "\n");
+
 	copy_size = sizeof(out);
 
 	if (*addrlen < copy_size) {
@@ -353,6 +355,8 @@ static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
 
+	GNIX_TRACE(FI_LOG_AV, "\n");
+
 	if (!av) {
 		ret = -FI_EINVAL;
 		goto err;
@@ -387,6 +391,8 @@ static int gnix_av_remove(struct fid_av *av, fi_addr_t *fi_addr, size_t count,
 {
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_AV, "\n");
 
 	if (!av) {
 		ret = -FI_EINVAL;
@@ -447,6 +453,8 @@ static int gnix_av_close(fid_t fid)
 	struct gnix_fid_av *av = NULL;
 	int ret = FI_SUCCESS;
 
+	GNIX_TRACE(FI_LOG_AV, "\n");
+
 	if (!fid) {
 		ret = -FI_EINVAL;
 		goto err;
@@ -479,6 +487,8 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	enum fi_av_type type = FI_AV_TABLE;
 	size_t count = 128;
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_AV, "\n");
 
 	if (!domain) {
 		ret = -FI_EINVAL;

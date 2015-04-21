@@ -38,6 +38,7 @@
 #include "gnix.h"
 #include "gnix_nic.h"
 #include "gnix_cm_nic.h"
+#include "gnix_mbox_allocator.h"
 
 static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
 static LIST_HEAD(gnix_nic_list);
@@ -50,6 +51,14 @@ static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 /* TODO: this will need to be adjustable - probably set in GNI_INI*/
 uint32_t gnix_def_max_nics_per_ptag = 4;
 
+/*
+ * stub for now
+ */
+
+int _gnix_nic_progress(struct gnix_nic *nic)
+{
+	return FI_SUCCESS;
+}
 
 /*
  * allocate a free list of tx descs for a gnix_nic struct.
@@ -59,6 +68,8 @@ int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 {
 	int i, ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *desc_base, *desc_ptr;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/*
 	 * set up free list of tx descriptors.
@@ -83,7 +94,6 @@ int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 	nic->max_tx_desc_id = n_descs - 1;
 	nic->tx_desc_base = desc_base;
 
-	return ret;
 err:
 	return ret;
 
@@ -96,7 +106,9 @@ err:
 int _gnix_nic_free(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS, v;
-	gni_return_t status;
+	gni_return_t status = GNI_RC_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (nic == NULL)
 		return -FI_EINVAL;
@@ -107,24 +119,61 @@ int _gnix_nic_free(struct gnix_nic *nic)
 	if ((nic->gni_cdm_hndl != NULL) && (v == 0))  {
 		if (nic->rx_cq_blk != NULL)
 			status = GNI_CqDestroy(nic->rx_cq_blk);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqDestroy returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		if (nic->rx_cq != NULL)
 			status = GNI_CqDestroy(nic->rx_cq);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqDestroy returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		if (nic->tx_cq_blk != NULL)
 			status = GNI_CqDestroy(nic->tx_cq_blk);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqDestroy returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		if (nic->tx_cq != NULL)
 			status = GNI_CqDestroy(nic->tx_cq);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "GNI_CqDestroy returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		status = GNI_CdmDestroy(nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_DOMAIN, "oops, cdm destroy failed\n");
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CdmDestroy returned %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			free(nic);
+			goto err;
 		}
+
+		ret = gnix_mbox_allocator_destroy(nic->mbox_hndl);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "gnix_mbox_allocator_destroy returned %d\n",
+				  ret);
 
 		/*
 		 * remove the nic from the linked lists
 		 * for the domain and the global nic list
 		 */
 
+err:
 		pthread_mutex_lock(&gnix_nic_list_lock);
 
 		gnix_list_del_init(&nic->gnix_nic_list);
@@ -150,6 +199,9 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t device_addr;
 	gni_return_t status;
 	uint32_t fake_cdm_id;
+	gni_smsg_attr_t smsg_mbox_attr;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	*nic_ptr = NULL;
 
@@ -201,12 +253,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		nic = calloc(1, sizeof(struct gnix_nic));
 		if (nic == NULL) {
 			ret = -FI_ENOMEM;
-			goto err_w_lock;
+			goto err;
 		}
 
 		ret = _gnix_get_new_cdm_id(domain, &fake_cdm_id);
 		if (ret != FI_SUCCESS)
-			goto err_w_lock;
+			goto err;
 
 		status = GNI_CdmCreate(fake_cdm_id,
 					domain->ptag,
@@ -214,10 +266,10 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					gnix_cdm_modes,
 					&nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
+			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
 				 gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			goto err_w_inc;
+			goto err1;
 		}
 
 		/*
@@ -228,10 +280,10 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					&device_addr,
 					&nic->gni_nic_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
+			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
 				 gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			goto err_w_inc;
+			goto err1;
 		}
 
 		/*
@@ -248,8 +300,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 								context */
 					&nic->tx_cq);
 		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqCreate returned %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			goto err_w_inc;
+			goto err1;
 		}
 
 		status = GNI_CqCreate(nic->gni_nic_hndl,
@@ -261,8 +316,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					NULL,
 					&nic->tx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqCreate returned %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			goto err_w_inc;
+			goto err1;
 		}
 
 		/*
@@ -278,8 +336,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					NULL,
 					&nic->rx_cq);
 		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqCreate returned %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-		goto err_w_inc;
+			goto err1;
 		}
 
 		status = GNI_CqCreate(nic->gni_nic_hndl,
@@ -291,24 +352,66 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					NULL,
 					&nic->rx_cq_blk);
 		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqCreate returned %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			goto err_w_inc;
+			goto err1;
 		}
 
 		nic->device_addr = device_addr;
 		nic->ptag = domain->ptag;
 		nic->cookie = domain->cookie;
+		fastlock_init(&nic->lock);
 
 		ret = _gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);
 		if (ret != FI_SUCCESS)
-			goto err_w_inc;
+			goto err1;
 
-		/*
-		 * TODO: set up work queue
-		 */
+		fastlock_init(&nic->wq_lock);
+		list_head_init(&nic->nic_wq);
 
 		atomic_initialize(&nic->ref_cnt, 1);
 		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
+		ret = alloc_bitmap(&nic->vc_id_bitmap, 1000);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "alloc_bitmap returned %d\n", ret);
+			goto err1;
+		}
+		fastlock_init(&nic->vc_id_lock);
+
+		/*
+		 * TODOs: need a way to specify mboxes/slab via
+		 * some domain param.
+		 */
+
+		smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
+		smsg_mbox_attr.mbox_maxcredit = 64; /* TODO: fix this */
+		smsg_mbox_attr.msg_maxsize =  16384;  /* TODO: definite fix */
+
+		status = GNI_SmsgBufferSizeNeeded(&smsg_mbox_attr,
+						  &nic->mem_per_mbox);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_SmsgBufferSizeNeeded returned %s\n",
+				  gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err1;
+		}
+
+		ret = gnix_mbox_allocator_create(nic,
+						 nic->rx_cq,
+						 GNIX_PAGE_2MB,
+						 (size_t)nic->mem_per_mbox,
+						 2048,
+						 &nic->mbox_hndl);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "gnix_mbox_alloc returned %d\n", ret);
+			goto err1;
+		}
+
 
 		list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
 		++gnix_nics_per_ptag[domain->ptag];
@@ -316,14 +419,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		list_add_tail(&domain->nic_list, &nic->list);
 	}
 
-	pthread_mutex_unlock(&gnix_nic_list_lock);
-
 	*nic_ptr = nic;
-	return FI_SUCCESS;
+	goto out;
 
-err_w_inc:
+err1:
 	atomic_dec(&gnix_id_counter);
-err_w_lock:
+err:
 	if (nic != NULL) {
 		if (nic->rx_cq_blk != NULL)
 			GNI_CqDestroy(nic->rx_cq_blk);
@@ -338,6 +439,7 @@ err_w_lock:
 		free(nic);
 	}
 
+out:
 	pthread_mutex_unlock(&gnix_nic_list_lock);
 	return ret;
 }

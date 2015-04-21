@@ -338,7 +338,6 @@ static int dgram_callback_fn(struct gnix_datagram *the_dgram,
 Test(dg_allocation,  dgram_wc_post_exchg)
 {
 	int ret = 0;
-	gni_return_t status;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_datagram *dgram_wc, *dgram_bnd;
 
@@ -353,7 +352,7 @@ Test(dg_allocation,  dgram_wc_post_exchg)
 	assert(!ret, "_gnix_dgram_alloc wc");
 
 	dgram_wc->callback_fn = dgram_callback_fn;
-	ret = _gnix_dgram_wc_post(dgram_wc, &status);
+	ret = _gnix_dgram_wc_post(dgram_wc);
 	assert((ret == 0), "_gnix_dgram_alloc wc");
 
 	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_BND,
@@ -367,7 +366,7 @@ Test(dg_allocation,  dgram_wc_post_exchg)
 	local_address.cdm_id = cm_nic->cdm_id;
 
 	dgram_bnd->callback_fn = dgram_callback_fn;
-	ret = _gnix_dgram_bnd_post(dgram_bnd, &status);
+	ret = _gnix_dgram_bnd_post(dgram_bnd);
 	assert(ret == 0);
 
 	/*
@@ -390,7 +389,6 @@ Test(dg_allocation,  dgram_wc_post_exchg)
 Test(dg_allocation,  dgram_wc_post_exchg_manual, .init = dg_setup_prog_manual)
 {
 	int ret = 0;
-	gni_return_t status;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_datagram *dgram_wc, *dgram_bnd;
 
@@ -407,7 +405,7 @@ Test(dg_allocation,  dgram_wc_post_exchg_manual, .init = dg_setup_prog_manual)
 	assert(!ret, "_gnix_dgram_alloc wc");
 
 	dgram_wc->callback_fn = dgram_callback_fn;
-	ret = _gnix_dgram_wc_post(dgram_wc, &status);
+	ret = _gnix_dgram_wc_post(dgram_wc);
 	assert((ret == 0), "_gnix_dgram_alloc wc");
 
 	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_BND,
@@ -421,7 +419,7 @@ Test(dg_allocation,  dgram_wc_post_exchg_manual, .init = dg_setup_prog_manual)
 	local_address.cdm_id = cm_nic->cdm_id;
 
 	dgram_bnd->callback_fn = dgram_callback_fn;
-	ret = _gnix_dgram_bnd_post(dgram_bnd, &status);
+	ret = _gnix_dgram_bnd_post(dgram_bnd);
 	assert(ret == 0);
 
 	/*

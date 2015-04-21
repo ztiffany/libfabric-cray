@@ -160,6 +160,14 @@ struct gnix_address {
 };
 
 /*
+ * macro for testing whether a gnix_address value is FI_ADDR_UNSPEC
+ */
+
+#define GNIX_ADDR_UNSPEC(var) (((var).device_addr == -1) ? \
+				(((var).cdm_id == -1) ? 1 : 0) : 0)
+
+
+/*
  * info returned by fi_getname/fi_getpeer - has enough
  * side band info for RDM ep's to be able to connect, etc.
  */
@@ -250,10 +258,11 @@ struct gnix_fid_ep {
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	union {
-		void *vc_hash_hndl;  /*used for FI_AV_MAP */
+		struct gnix_hashtable *vc_ht;
 		void *vc_table;      /* used for FI_AV_TABLE */
 		void *vc;
 	};
+	struct dlist_entry wc_vc_list;
 	/* used for unexpected receives */
 	struct slist unexp_recv_queue;
 	/* used for posted receives */
@@ -267,6 +276,7 @@ struct gnix_fid_ep {
 	int no_want_cqes;
 	/* num. active fab_reqs associated with this ep */
 	atomic_t active_fab_reqs;
+	atomic_t ref_cnt;
 };
 
 struct gnix_addr_entry {
@@ -289,47 +299,6 @@ struct gnix_fid_av {
 	size_t count;
 	atomic_t ref_cnt;
 };
-
-/*
- * defines for connection state for gnix VC
- */
-enum gnix_vc_conn_state {
-	GNIX_VC_CONN_NONE = 1,
-	GNIX_VC_CONNECTING,
-	GNIX_VC_CONNECTED,
-	GNIX_VC_CONN_TERMINATING,
-	GNIX_VC_CONN_TERMINATED
-};
-
-/*
- * gnix vc struct - internal struc for managing send/recv,
- * rma, amo ops between endpoints.  For FI_EP_RDM, many vc's
- * may map to a single RDM depending on how many remote ep's have
- * been targeted for send/recv, rma, or amo ops.  For FI_EP_MSG
- * endpoint types, there is a one-to-one mapping between the ep
- * and a vc.
- *
- * Notes: This structure needs to be as small as possible as the
- *        as the number of gnix_vc's scales linearly with
- *        the number of peers in a domain with which a process sends/
- *        receives messages.
- *        these structs should be allocated out of a slab allocator
- *        using large pages to potentially reduce cpu and i/o mmu
- *        TlB pressure.
- */
-
-struct gnix_vc {
-	struct gnix_address peer_addr;
-	void *smsg_mbox;
-	gni_ep_handle_t gni_ep;
-	/* used for send fab_reqs, these must go in order, hence an slist */
-	struct slist send_queue;
-	/* number of outstanding fab_reqs posted to this vc including rma ops, etc.*/
-	atomic_t outstanding_fab_reqs_vc;
-	/* connection status of this VC */
-	enum gnix_vc_conn_state conn_state;
-	atomic_t ref_cnt;
-} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
 
 /*
  *  enums, defines, for gni provider internal fab requests.
