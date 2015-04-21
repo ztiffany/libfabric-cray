@@ -53,19 +53,13 @@
 #include "prov.h"
 
 #include "gnix.h"
+#include "gnix_nic.h"
 #include "gnix_cm_nic.h"
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
-
-/* TODO: this will need to be adjustable - probably set in GNI_INI*/
-uint32_t gnix_def_max_nics_per_ptag = 4;
-
-int gnix_nics_per_ptag[GNI_PTAG_USER_END];
-LIST_HEAD(gnix_nic_list);
-pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 uint32_t gnix_cdm_modes =
 	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED |

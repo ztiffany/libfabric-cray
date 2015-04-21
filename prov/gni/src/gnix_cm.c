@@ -32,6 +32,7 @@
  */
 
 #include "gnix.h"
+#include "gnix_nic.h"
 
 /*
  * Retrieve the local endpoint address.

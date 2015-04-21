@@ -43,6 +43,7 @@ extern "C" {
 #endif /* HAVE_CONFIG_H */
 
 #include <stdbool.h>
+#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
@@ -317,42 +318,6 @@ struct gnix_cm_nic {
 };
 
 /*
- * gnix nic struct - to be used for GNI_PostRdma/PostFma,
- *                   GNI_CqGetEvent, etc.
- */
-
-struct gnix_nic {
-	struct list_node list;
-	/* for the gnix_nic_list */
-	struct list_node gnix_nic_list;
-	gni_cdm_handle_t gni_cdm_hndl;
-	gni_nic_handle_t gni_nic_hndl;
-	/* receive completion queue for hndl */
-	gni_cq_handle_t rx_cq;
-	/* receive completion queue for hndl (blocking) */
-	gni_cq_handle_t rx_cq_blk;
-	/* local(tx) completion queue for hndl */
-	gni_cq_handle_t tx_cq;
-	/* local(tx) completion queue for hndl (blocking) */
-	gni_cq_handle_t tx_cq_blk;
-	/* pointer to domain this nic is attached to */
-	struct gnix_fid_domain *domain;
-	/* list of active gnix tx desc's */
-	struct list_head active_tx_desc_list;
-	/* list for managing gnix tx desc's */
-	struct gnix_tx_descriptor_list *tx_desc_list;
-	/* number of outstanding fab_reqs associated with this nic including rma ops, etc.*/
-	atomic_t outstanding_fab_reqs_nic;
-	/* work queue for this nic */
-	struct list_head nic_wq;
-	uint8_t ptag;
-	uint32_t cookie;
-	uint32_t device_id;
-	uint32_t device_addr;
-	atomic_t ref_cnt;
-};
-
-/*
  * Stores events inside of the event queue.
  *
  * type: EQ event type defined in fi_eq.h
@@ -422,43 +387,6 @@ struct gnix_vc {
 	/* connection status of this VC */
 	enum gnix_vc_conn_state conn_state;
 	atomic_t ref_cnt;
-} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
-
-/*
- * two structure below are to help in optimized use of GNI_SmsgSendWTag
- */
-
-struct gnix_smsg_hdr {
-	size_t len;
-	uint64_t imm;
-};
-
-struct gnix_smsg_descriptor {
-	struct gnix_smsg_hdr hdr;
-	void    *buf;         /* may point to inject buffer */
-	uint8_t  tag;
-};
-
-/*
- * what's going on here is we're making sure that
- * gni_tx descriptor ends up being cacheline aligned
- */
-
-union gnix_tx_descriptor0 {
-	struct {
-		struct list_node          list;
-		gni_post_descriptor_t       gni_desc;
-		struct gnix_smsg_descriptor gnix_smsg_desc;
-		struct gnix_vc *vc;
-		struct gnix_nic *nic;
-		struct gnix_fid_ep *ep;
-	};
-	char padding[GNIX_CACHELINE_SIZE];
-} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
-
-struct gnix_tx_descriptor {
-	union gnix_tx_descriptor0 desc;
-	char inject_buf[GNIX_CACHELINE_SIZE];
 } __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
 
 /*
@@ -588,10 +516,6 @@ struct gnix_datagram {
 extern const char gnix_fab_name[];
 extern const char gnix_dom_name[];
 extern uint32_t gnix_cdm_modes;
-extern uint32_t gnix_def_max_nics_per_ptag;
-extern int gnix_nics_per_ptag[GNI_PTAG_USER_END];
-extern pthread_mutex_t gnix_nic_list_lock;
-extern struct list_head gnix_nic_list;
 
 /*
  * linked list helpers
