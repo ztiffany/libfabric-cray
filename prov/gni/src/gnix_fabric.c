@@ -137,7 +137,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	/*
 	 * set defaults related to use of GNI datagrams
 	 */
-	fab->n_dgrams = gnix_def_gni_n_dgrams;
+	fab->n_bnd_dgrams = gnix_def_gni_n_dgrams;
 	fab->n_wc_dgrams = gnix_def_gni_n_wc_dgrams;
 	fab->datagram_timeout = gnix_def_gni_datagram_timeouts;
 

@@ -52,9 +52,100 @@
 #include <rdma/fi_errno.h>
 
 #include "gnix.h"
+#include "gnix_datagram.h"
 #include "gnix_util.h"
 
-int gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
+
+/*
+ * function to pack data into datagram in/out buffers.
+ * On success, returns number of bytes packed in to the buffer,
+ * otherwise -FI errno.
+ */
+ssize_t _gnix_dgram_pack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
+			 void *data, uint32_t nbytes)
+{
+	char *dptr;
+	uint32_t index;
+
+	assert(d != NULL);
+	if (buf == GNIX_DGRAM_IN_BUF) {
+		index = d->index_in_buf;
+		dptr = &d->dgram_in_buf[index];
+	} else {
+		index = d->index_out_buf;
+		dptr = &d->dgram_out_buf[index];
+	}
+
+	/*
+	 * make sure there's room
+	 */
+	if ((index + nbytes) > GNI_DATAGRAM_MAXSIZE)
+		return -FI_ENOSPC;
+
+	memcpy(dptr, data, nbytes);
+
+	if (buf == GNIX_DGRAM_IN_BUF)
+		d->index_in_buf += nbytes;
+	else
+		d->index_out_buf += nbytes;
+
+	return nbytes;
+}
+
+
+/*
+ * function to unpack data fromdatagram in/out buffers.
+ * On success, returns number of bytes unpacked,
+ * otherwise -FI errno.
+ */
+ssize_t _gnix_dgram_unpack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
+			   void *data, uint32_t nbytes)
+{
+	char *dptr;
+	uint32_t index, bytes_left;
+
+	assert(d != NULL);
+	if (buf == GNIX_DGRAM_IN_BUF) {
+		index = d->index_in_buf;
+		dptr = &d->dgram_in_buf[index];
+	} else {
+		index = d->index_out_buf;
+		dptr = &d->dgram_out_buf[index];
+	}
+
+	/*
+	 * only copy out up to GNI_DATAGRAM_MAXSIZE
+	 */
+
+	bytes_left = GNI_DATAGRAM_MAXSIZE - index;
+
+	nbytes = (nbytes > bytes_left) ? bytes_left : nbytes;
+
+	memcpy(data, dptr, nbytes);
+
+	if (buf == GNIX_DGRAM_IN_BUF)
+		d->index_in_buf += nbytes;
+	else
+		d->index_out_buf += nbytes;
+
+	return nbytes;
+}
+
+/*
+ * function to rewind the internal pointers to
+ * datagram in/out buffers.
+ */
+int _gnix_dgram_rewind_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf)
+{
+	assert(d != NULL);
+	if (buf == GNIX_DGRAM_IN_BUF)
+		d->index_in_buf = 0;
+	else
+		d->index_out_buf = 0;
+	return FI_SUCCESS;
+}
+
+int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 			struct gnix_datagram **d_ptr)
 {
 	int ret = -FI_ENOMEM;
@@ -63,11 +154,11 @@ int gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 	struct list_head *the_active_list;
 
 	if (type == GNIX_DGRAM_WC) {
-		the_free_list = &hndl->wc_datagram_free_list;
-		the_active_list = &hndl->wc_datagram_active_list;
+		the_free_list = &hndl->wc_dgram_free_list;
+		the_active_list = &hndl->wc_dgram_active_list;
 	} else {
-		the_free_list = &hndl->datagram_free_list;
-		the_active_list = &hndl->datagram_active_list;
+		the_free_list = &hndl->bnd_dgram_free_list;
+		the_active_list = &hndl->bnd_dgram_active_list;
 	}
 
 	if (!list_empty(the_free_list)) {
@@ -80,11 +171,14 @@ int gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 		}
 	}
 
+	if (d != NULL)
+		d->index_in_buf = d->index_out_buf = 0;
+
 	*d_ptr = d;
 	return ret;
 }
 
-int gnix_datagram_free(struct gnix_datagram *d)
+int _gnix_dgram_free(struct gnix_datagram *d)
 {
 	int ret = 0;
 	gni_return_t status;
@@ -97,13 +191,12 @@ int gnix_datagram_free(struct gnix_datagram *d)
 	}
 
 	gnix_list_del_init(&d->list);
-	memset(d, 0, sizeof(struct gnix_datagram));
 	d->state = GNIX_DGRAM_STATE_FREE;
 	list_add(d->free_list_head, &d->list);
 	return ret;
 }
 
-int gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
+int _gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t status;
@@ -126,7 +219,7 @@ int gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 	return ret;
 }
 
-int gnix_dgram_connect_post(struct gnix_datagram *d, gni_return_t *status_ptr)
+int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 {
 	gni_return_t status;
 	int ret = FI_SUCCESS;
@@ -180,10 +273,170 @@ err:
 	return ret;
 }
 
+int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
+				struct gnix_cm_nic *cm_nic,
+				struct gnix_dgram_hndl **hndl_ptr)
+{
+	int i, ret = FI_SUCCESS;
+	int n_dgrams_tot;
+	struct gnix_datagram *dgram_base = NULL, *dg_ptr;
+	struct gnix_dgram_hndl *the_hndl = NULL;
+	gni_return_t status;
+
+	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
+	if (the_hndl == NULL) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	the_hndl->nic = cm_nic;
+
+	list_head_init(&the_hndl->bnd_dgram_free_list);
+	list_head_init(&the_hndl->bnd_dgram_active_list);
+
+	list_head_init(&the_hndl->wc_dgram_free_list);
+	list_head_init(&the_hndl->wc_dgram_active_list);
+
+	/*
+	 * inherit some stuff from the fabric object being
+	 * used to open the domain which will use this cm nic.
+	 */
+
+	the_hndl->n_dgrams = fabric->n_bnd_dgrams;
+	the_hndl->n_wc_dgrams = fabric->n_wc_dgrams;
+
+	n_dgrams_tot = the_hndl->n_dgrams + the_hndl->n_wc_dgrams;
+
+	/*
+	 * set up the free lists for datagrams
+	 */
+
+	dgram_base = calloc(n_dgrams_tot,
+			    sizeof(struct gnix_datagram));
+	if (dgram_base == NULL) {
+		ret = -FI_ENOMEM;
+		goto err;
+	}
+
+	dg_ptr = dgram_base;
+
+	/*
+	 * first build up the list for connection requests
+	 */
+
+	for (i = 0; i < fabric->n_bnd_dgrams; i++, dg_ptr++) {
+		dg_ptr->d_hndl = the_hndl;
+		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
+					NULL,
+					&dg_ptr->gni_ep);
+		if (status != GNI_RC_SUCCESS) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+		gnix_list_node_init(&dg_ptr->list);
+		list_add(&the_hndl->bnd_dgram_free_list, &dg_ptr->list);
+		dg_ptr->free_list_head = &the_hndl->bnd_dgram_free_list;
+	}
+
+	/*
+	 * now the wild card (WC) dgrams
+	 */
+
+	for (i = 0; i < fabric->n_wc_dgrams; i++, dg_ptr++) {
+		dg_ptr->d_hndl = the_hndl;
+		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
+					NULL,
+					&dg_ptr->gni_ep);
+		if (status != GNI_RC_SUCCESS) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+		gnix_list_node_init(&dg_ptr->list);
+		list_add(&the_hndl->wc_dgram_free_list, &dg_ptr->list);
+		dg_ptr->free_list_head = &the_hndl->wc_dgram_free_list;
+	}
+
+	the_hndl->dgram_base = dgram_base;
+
+	*hndl_ptr = the_hndl;
+
+	return ret;
+err:
+	dg_ptr = dgram_base;
+	if (dg_ptr) {
+
+		for (i = 0; i < n_dgrams_tot; i++, dg_ptr++) {
+			if (dg_ptr->gni_ep != NULL)
+				GNI_EpDestroy(dg_ptr->gni_ep);
+		}
+		free(dgram_base);
+	}
+	if (the_hndl)
+		free(the_hndl);
+	return ret;
+}
+
+int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
+{
+	int i;
+	int n_dgrams;
+	int ret = FI_SUCCESS;
+	struct gnix_datagram *p, *next, *dg_ptr;
+	gni_return_t status;
+
+	if (the_hndl->dgram_base == NULL)
+		return -FI_EINVAL;
+
+	/*
+	 * cancel any active datagrams - GNI_RC_NO_MATCH is okay.
+	 */
+
+	list_for_each_safe(&the_hndl->bnd_dgram_active_list, p, next, list) {
+		dg_ptr = p;
+		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
+		if ((status != GNI_RC_SUCCESS) &&
+					(status != GNI_RC_NO_MATCH)) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+		gnix_list_del_init(&dg_ptr->list);
+	}
+
+	list_for_each_safe(&the_hndl->wc_dgram_active_list,
+				p, next, list) {
+		dg_ptr = p;
+		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
+		if ((status != GNI_RC_SUCCESS) &&
+					(status != GNI_RC_NO_MATCH)) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+		gnix_list_del_init(&dg_ptr->list);
+	}
+
+	/*
+	 * destroy all the endpoints
+	 */
+
+	n_dgrams = the_hndl->n_dgrams + the_hndl->n_wc_dgrams;
+	dg_ptr = the_hndl->dgram_base;
+
+	for (i = 0; i < n_dgrams; i++, dg_ptr++) {
+		if (dg_ptr->gni_ep != NULL)
+			GNI_EpDestroy(dg_ptr->gni_ep);
+	}
+
+err:
+	free(the_hndl->dgram_base);
+	free(the_hndl);
+
+	return ret;
+}
+
 /*
  * this function is intended to be invoked as an argument to pthread_create,
  */
-void gnix_dgram_prog_thread_fn(void *the_arg)
+void _gnix_dgram_prog_thread_fn(void *the_arg)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t status;
@@ -261,165 +514,4 @@ void gnix_dgram_prog_thread_fn(void *the_arg)
 			break;
 		}
 	}
-}
-
-int gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
-				struct gnix_cm_nic *cm_nic,
-				struct gnix_dgram_hndl **hndl_ptr)
-{
-	int i, ret = FI_SUCCESS;
-	int n_dgrams_tot;
-	struct gnix_datagram *dgram_base = NULL, *dg_ptr;
-	struct gnix_dgram_hndl *the_hndl = NULL;
-	gni_return_t status;
-
-	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
-	if (the_hndl == NULL) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	the_hndl->nic = cm_nic;
-
-	list_head_init(&the_hndl->datagram_free_list);
-	list_head_init(&the_hndl->datagram_active_list);
-
-	list_head_init(&the_hndl->wc_datagram_free_list);
-	list_head_init(&the_hndl->wc_datagram_active_list);
-
-	/*
-	 * inherit some stuff from the fabric object being
-	 * used to open the domain which will use this cm nic.
-	 */
-
-	the_hndl->n_dgrams = fabric->n_dgrams;
-	the_hndl->n_wc_dgrams = fabric->n_wc_dgrams;
-	the_hndl->datagram_timeout = fabric->datagram_timeout;
-
-	n_dgrams_tot = the_hndl->n_dgrams + the_hndl->n_wc_dgrams;
-
-	/*
-	 * set up the free lists for datagrams
-	 */
-
-	dgram_base = calloc(n_dgrams_tot,
-			    sizeof(struct gnix_datagram));
-	if (dgram_base == NULL) {
-		ret = -FI_ENOMEM;
-		goto err;
-	}
-
-	dg_ptr = dgram_base;
-
-	/*
-	 * first build up the list for connection requests
-	 */
-
-	for (i = 0; i < fabric->n_dgrams; i++, dg_ptr++) {
-		dg_ptr->d_hndl = the_hndl;
-		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
-					NULL,
-					&dg_ptr->gni_ep);
-		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-		gnix_list_node_init(&dg_ptr->list);
-		list_add(&the_hndl->datagram_free_list, &dg_ptr->list);
-		dg_ptr->free_list_head = &the_hndl->datagram_free_list;
-	}
-
-	/*
-	 * now the wild card (WC) dgrams
-	 */
-
-	for (i = 0; i < fabric->n_wc_dgrams; i++, dg_ptr++) {
-		dg_ptr->d_hndl = the_hndl;
-		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
-					NULL,
-					&dg_ptr->gni_ep);
-		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-		gnix_list_node_init(&dg_ptr->list);
-		list_add(&the_hndl->wc_datagram_free_list, &dg_ptr->list);
-		dg_ptr->free_list_head = &the_hndl->wc_datagram_free_list;
-	}
-
-	the_hndl->datagram_base = dgram_base;
-
-	*hndl_ptr = the_hndl;
-
-	return ret;
-err:
-	dg_ptr = dgram_base;
-	if (dg_ptr) {
-
-		for (i = 0; i < n_dgrams_tot; i++, dg_ptr++) {
-			if (dg_ptr->gni_ep != NULL)
-				GNI_EpDestroy(dg_ptr->gni_ep);
-		}
-		free(dgram_base);
-	}
-	if (the_hndl)
-		free(the_hndl);
-	return ret;
-}
-
-int gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
-{
-	int i;
-	int n_dgrams;
-	int ret = FI_SUCCESS;
-	struct gnix_datagram *p, *next, *dg_ptr;
-	gni_return_t status;
-
-	if (the_hndl->datagram_base == NULL)
-		return -FI_EINVAL;
-
-	/*
-	 * cancel any active datagrams - GNI_RC_NO_MATCH is okay.
-	 */
-
-	list_for_each_safe(&the_hndl->datagram_active_list, p, next, list) {
-		dg_ptr = p;
-		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
-		if ((status != GNI_RC_SUCCESS) &&
-					(status != GNI_RC_NO_MATCH)) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-		gnix_list_del_init(&dg_ptr->list);
-	}
-
-	list_for_each_safe(&the_hndl->wc_datagram_active_list,
-				p, next, list) {
-		dg_ptr = p;
-		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
-		if ((status != GNI_RC_SUCCESS) &&
-					(status != GNI_RC_NO_MATCH)) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-		gnix_list_del_init(&dg_ptr->list);
-	}
-
-	/*
-	 * destroy all the endpoints
-	 */
-
-	n_dgrams = the_hndl->n_dgrams + the_hndl->n_wc_dgrams;
-	dg_ptr = the_hndl->datagram_base;
-
-	for (i = 0; i < n_dgrams; i++, dg_ptr++) {
-		if (dg_ptr->gni_ep != NULL)
-			GNI_EpDestroy(dg_ptr->gni_ep);
-	}
-
-err:
-	free(the_hndl->datagram_base);
-	free(the_hndl);
-
-	return ret;
 }
