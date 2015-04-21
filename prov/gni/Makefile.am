@@ -10,8 +10,6 @@ if HAVE_GNI
 AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni
 
 _gni_files = \
-	prov/gni/src/gnix.h \
-	prov/gni/src/gnix_cq.h \
 	prov/gni/src/gnix_init.c \
 	prov/gni/src/gnix_fabric.c \
 	prov/gni/src/gnix_dom.c \
@@ -21,6 +19,7 @@ _gni_files = \
 	prov/gni/src/gnix_eq.c \
 	prov/gni/src/gnix_mr.c \
 	prov/gni/src/gnix_cm.c \
+	prov/gni/src/gnix_wait.c \
 	prov/gni/src/gnix_ep_rdm.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_datagram.c \
