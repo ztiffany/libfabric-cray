@@ -108,6 +108,8 @@ static int gnix_fabric_close(fid_t fid)
 		return -FI_EBUSY;
 	}
 
+	_gnix_alps_cleanup();
+
 	free(fab);
 	return FI_SUCCESS;
 }

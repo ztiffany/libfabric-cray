@@ -63,27 +63,73 @@
 #include "gnix.h"
 #include "gnix_util.h"
 
-int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
+static int alps_init;
+static uint64_t gnix_apid;
+static alpsAppLayout_t gnix_appLayout;
+static uint8_t gnix_app_ptag;
+static uint32_t gnix_app_cookie;
+static uint32_t gnix_device_id;
+
+static int *gnix_app_placementList;
+static int *gnix_app_targetNids;
+static int *gnix_app_targetPes;
+static int *gnix_app_targetLen;
+struct in_addr *gnix_app_targetIps;
+static int *gnix_app_startPe;
+static int *gnix_app_totalPes;
+static int *gnix_app_nodePes;
+static int *gnix_app_peCpus;
+
+void _gnix_alps_cleanup(void)
+{
+	alps_app_lli_lock();
+
+	if (alps_init) {
+		/* alps lli lock protects alps_init for now */
+		alps_app_lli_unlock();
+		return;
+	}
+
+	if (gnix_app_placementList)
+		free(gnix_app_placementList);
+	if (gnix_app_targetNids)
+		free(gnix_app_targetNids);
+	if (gnix_app_targetPes)
+		free(gnix_app_targetPes);
+	if (gnix_app_targetLen)
+		free(gnix_app_targetLen);
+	if (gnix_app_targetIps)
+		free(gnix_app_targetIps);
+	if (gnix_app_startPe)
+		free(gnix_app_startPe);
+	if (gnix_app_totalPes)
+		free(gnix_app_totalPes);
+	if (gnix_app_nodePes)
+		free(gnix_app_nodePes);
+	if (gnix_app_peCpus)
+		free(gnix_app_peCpus);
+
+	alps_init = 0;
+
+	alps_app_lli_unlock();
+}
+
+static int gnix_alps_init(void)
 {
 	int ret = FI_SUCCESS;
 	int alps_status = 0;
-	uint64_t apid;
 	size_t alps_count;
 	alpsAppLLIGni_t *rdmacred_rsp = NULL;
 	alpsAppGni_t *rdmacred_buf = NULL;
 
-	if ((ptag == NULL) || (cookie == NULL)) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
-	/*
-	 * TODO: need to handle non null addr differently at some point,
-	 * a non-NULL addr can be used to acquire RDMA credentials other than
-	 * those assigned by ALPS/nativized slurm.
-	 */
 	/* lli_lock doesn't return anything useful */
 	ret = alps_app_lli_lock();
+
+	if (alps_init) {
+		/* alps lli lock protects alps_init for now */
+		alps_app_lli_unlock();
+		return ret;
+	}
 
 	/*
 	 * First get our apid
@@ -105,7 +151,7 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 		goto err;
 	}
 
-	ret = alps_app_lli_get_response_bytes(&apid, sizeof(apid));
+	ret = alps_app_lli_get_response_bytes(&gnix_apid, sizeof(gnix_apid));
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
 		GNIX_ERR(FI_LOG_FABRIC,
 			 "lli get response failed, ret=%d(%s)\n",
@@ -157,13 +203,69 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 	 * just use the first ptag/cookie for now
 	 */
 
-	*ptag = rdmacred_buf[0].ptag;
-	*cookie = rdmacred_buf[0].cookie;
+	gnix_app_ptag = rdmacred_buf[0].ptag;
+	gnix_app_cookie = rdmacred_buf[0].cookie;
+
+	/*
+	 * alps_get_placement_info(uint64_t apid, alpsAppLayout_t *appLayout,
+	 *	int **placementList, int **targetNids, int **targetPes,
+	 *	int **targetLen, struct in_addr **targetIps, int **startPe,
+	 *	int **totalPes, int **nodePes, int **peCpus);
+	 */
+	ret = alps_get_placement_info(gnix_apid, &gnix_appLayout,
+				      &gnix_app_placementList,
+				      &gnix_app_targetNids,
+				      &gnix_app_targetPes,
+				      &gnix_app_targetLen,
+				      &gnix_app_targetIps,
+				      &gnix_app_startPe,
+				      &gnix_app_totalPes,
+				      &gnix_app_nodePes,
+				      &gnix_app_peCpus);
+	if (ret != 1) {
+		GNIX_ERR(FI_LOG_FABRIC,
+			 "alps_get_placement_info failed, ret=%d(%s)\n",
+			 ret, strerror(errno));
+		ret = -FI_EIO;
+		goto err;
+	}
+
+	gnix_device_id = 0;
+	alps_init++;
+
+	ret = 0;
 err:
 	alps_app_lli_unlock();
 	if (rdmacred_rsp != NULL) {
 		free(rdmacred_rsp);
 	}
+
+	return ret;
+}
+
+int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
+{
+	int ret = FI_SUCCESS;
+
+	if ((ptag == NULL) || (cookie == NULL)) {
+		return -FI_EINVAL;
+	}
+
+	ret = gnix_alps_init();
+	if (ret) {
+		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
+			       ret, strerror(errno));
+		return ret;
+	}
+
+	/*
+	 * TODO: need to handle non null addr differently at some point,
+	 * a non-NULL addr can be used to acquire RDMA credentials other than
+	 * those assigned by ALPS/nativized slurm.
+	 */
+	*ptag = gnix_app_ptag;
+	*cookie = gnix_app_cookie;
+
 	return ret;
 }
 
@@ -276,5 +378,71 @@ int _gnix_job_enable_affinity_apply(void)
 int _gnix_job_disable_affinity_apply(void)
 {
 	return gnix_write_proc_job("disable_affinity_apply");
+}
+
+
+int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit)
+{
+	gni_return_t status;
+	gni_job_res_desc_t job_res_desc;
+
+	if (!limit) {
+		return -FI_EINVAL;
+	}
+
+	status = GNI_GetJobResInfo(dev_id, ptag, GNI_JOB_RES_FMA, &job_res_desc);
+	if (status) {
+		GNIX_ERR(FI_LOG_FABRIC, "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
+			 dev_id, ptag, gni_err_str[status]);
+		return -FI_EINVAL;
+	}
+
+	*limit = job_res_desc.limit;
+
+	return FI_SUCCESS;
+}
+
+int _gnix_pes_on_node(uint32_t *num_pes)
+{
+	int rc;
+
+	if (!num_pes) {
+		return -FI_EINVAL;
+	}
+
+	rc = gnix_alps_init();
+	if (rc) {
+		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
+			       rc, strerror(errno));
+		return rc;
+	}
+
+	*num_pes = gnix_appLayout.numPesHere;
+
+	return FI_SUCCESS;
+}
+
+int _gnix_nics_per_rank(uint32_t *nics_per_rank)
+{
+	int rc;
+	uint32_t npes, fmas;
+
+	if (!nics_per_rank) {
+		return -FI_EINVAL;
+	}
+
+	rc = _gnix_job_fma_limit(gnix_device_id, gnix_app_ptag, &fmas);
+	if (rc) {
+		return rc;
+	}
+
+	rc = _gnix_pes_on_node(&npes);
+	if (rc) {
+		return rc;
+	}
+
+	*nics_per_rank = fmas / npes;
+
+	return FI_SUCCESS;
 }
 
