@@ -159,19 +159,6 @@ void _gnix_signal_wait_obj(struct fid_wait *wait)
 /*******************************************************************************
  * Internal helper functions.
  ******************************************************************************/
-static void gnix_wait_set_free(struct slist *set)
-{
-	struct slist_entry *entry;
-	struct gnix_wait_entry *wait_entry;
-
-	while (!slist_empty(set)) {
-		entry = slist_remove_head(set);
-		wait_entry = container_of(entry, struct gnix_wait_entry,
-					  entry);
-		free(wait_entry);
-	}
-}
-
 static int gnix_verify_wait_attr(struct fi_wait_attr *attr)
 {
 	if (!attr || attr->flags)

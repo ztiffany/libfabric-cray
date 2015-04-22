@@ -50,6 +50,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_cq.h"
+#include "gnix.h"
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -58,6 +59,10 @@ static struct fi_info *hints;
 static struct fi_info *fi;
 static struct fi_cq_attr cq_attr;
 static struct gnix_fid_cq *cq_priv;
+
+static struct gnix_fid_wait *wait_priv;
+static struct fid_wait *wait_set;
+static struct fi_wait_attr wait_attr;
 
 void setup(void)
 {
@@ -95,41 +100,72 @@ void teardown(void)
 	fi_freeinfo(hints);
 }
 
-void cq_create(enum fi_cq_format format, size_t size)
+void cq_create(enum fi_cq_format format, enum fi_wait_obj wait_obj,
+	       size_t size)
 {
 	int ret = 0;
 
 	cq_attr.format = format;
 	cq_attr.size = size;
+	cq_attr.wait_obj = wait_obj;
 
 	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
 	assert(!ret, "fi_cq_open");
 
 	cq_priv = container_of(rcq, struct gnix_fid_cq, cq_fid);
+
+	if (cq_priv->wait) {
+		wait_priv = container_of(cq_priv->wait, struct gnix_fid_wait,
+					 wait);
+	}
 }
 
 void cq_setup(void)
 {
 	setup();
-	cq_create(FI_CQ_FORMAT_UNSPEC, 0);
+	cq_create(FI_CQ_FORMAT_UNSPEC, FI_WAIT_NONE, 0);
 }
 
 void cq_msg_setup(void)
 {
 	setup();
-	cq_create(FI_CQ_FORMAT_MSG, 8);
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_NONE, 8);
 }
 
 void cq_data_setup(void)
 {
 	setup();
-	cq_create(FI_CQ_FORMAT_DATA, 8);
+	cq_create(FI_CQ_FORMAT_DATA, FI_WAIT_NONE, 8);
 }
 
 void cq_tagged_setup(void)
 {
 	setup();
-	cq_create(FI_CQ_FORMAT_TAGGED, 8);
+	cq_create(FI_CQ_FORMAT_TAGGED, FI_WAIT_NONE, 8);
+}
+
+void cq_wait_none_setup(void)
+{
+	setup();
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_NONE, 8);
+}
+
+void cq_wait_fd_setup(void)
+{
+	setup();
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_FD, 8);
+}
+
+void cq_wait_unspec_setup(void)
+{
+	setup();
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_UNSPEC, 8);
+}
+
+void cq_wait_mutex_cond_setup(void)
+{
+	setup();
+	cq_create(FI_CQ_FORMAT_MSG, FI_WAIT_MUTEX_COND, 8);
 }
 
 void cq_teardown(void)
@@ -440,4 +476,148 @@ Test(cq_msg, multi_read)
 
 	for (size_t j = 0; j < count; j++)
 		assert_eq(entry[j].flags, (uint64_t) j);
+}
+
+TestSuite(cq_wait_obj, .fini = cq_teardown);
+TestSuite(cq_wait_control, .fini = cq_teardown);
+TestSuite(cq_wait_ops, .fini = cq_teardown);
+
+Test(cq_wait_obj, none, .init = cq_wait_none_setup)
+{
+	expect(!wait_priv, "wait_priv is not null.");
+}
+
+Test(cq_wait_obj, unspec, .init = cq_wait_unspec_setup)
+{
+	expect_eq(wait_priv->type, FI_WAIT_FD);
+	expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
+	expect_eq(wait_priv->type, cq_attr.wait_obj);
+	expect_eq(&wait_priv->fabric->fab_fid, fab);
+	expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
+}
+
+Test(cq_wait_obj, fd, .init = cq_wait_fd_setup)
+{
+	expect_eq(wait_priv->type, FI_WAIT_FD);
+	expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
+	expect_eq(wait_priv->type, cq_attr.wait_obj);
+	expect_eq(&wait_priv->fabric->fab_fid, fab);
+	expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
+}
+
+Test(cq_wait_obj, mutex_cond, .init = cq_wait_mutex_cond_setup)
+{
+	expect_eq(wait_priv->type, FI_WAIT_MUTEX_COND);
+	expect_eq(wait_priv->type, cq_priv->attr.wait_obj);
+	expect_eq(wait_priv->type, cq_attr.wait_obj);
+	expect_eq(&wait_priv->fabric->fab_fid, fab);
+	expect_eq(wait_priv->cond_type, FI_CQ_COND_NONE);
+}
+
+Test(cq_wait_control, none, .init = cq_wait_none_setup)
+{
+	int ret;
+	int fd;
+
+	ret = fi_control(&cq_priv->cq_fid.fid, FI_GETWAIT, &fd);
+	expect_eq(-FI_ENOSYS, ret, "fi_control exists for none.");
+}
+
+Test(cq_wait_control, unspec, .init = cq_wait_unspec_setup)
+{
+	int ret;
+	int fd;
+
+	ret = fi_control(&cq_priv->cq_fid.fid, FI_GETWAIT, &fd);
+	expect_eq(FI_SUCCESS, ret, "fi_control failed.");
+
+	expect_eq(wait_priv->fd[WAIT_READ], fd);
+}
+
+Test(cq_wait_control, fd, .init = cq_wait_fd_setup)
+{
+	int ret;
+	int fd;
+
+	ret = fi_control(&cq_priv->cq_fid.fid, FI_GETWAIT, &fd);
+	expect_eq(FI_SUCCESS, ret, "fi_control failed.");
+
+	expect_eq(wait_priv->fd[WAIT_READ], fd);
+}
+
+Test(cq_wait_control, mutex_cond, .init = cq_wait_mutex_cond_setup)
+{
+	int ret;
+	struct fi_mutex_cond mutex_cond;
+
+	ret = fi_control(&cq_priv->cq_fid.fid, FI_GETWAIT, &mutex_cond);
+	expect_eq(FI_SUCCESS, ret, "fi_control failed.");
+
+	ret = memcmp(&wait_priv->mutex, mutex_cond.mutex,
+		     sizeof(*mutex_cond.mutex));
+	expect_eq(0, ret, "mutex compare failed.");
+
+	ret = memcmp(&wait_priv->cond, mutex_cond.cond,
+		     sizeof(*mutex_cond.cond));
+	expect_eq(0, ret, "cond compare failed.");
+}
+
+Test(cq_wait_ops, none, cq_wait_none_setup)
+{
+	expect_eq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
+		  "signal implementation available.");
+	expect_eq(cq_priv->cq_fid.ops->sread, fi_no_cq_sread,
+		  "sread implementation available.");
+	expect_eq(cq_priv->cq_fid.ops->sreadfrom, fi_no_cq_sreadfrom,
+		  "sreadfrom implementation available.");
+	expect_eq(cq_priv->cq_fid.fid.ops->control, fi_no_control,
+		  "control implementation available.");
+}
+
+Test(cq_wait_ops, fd, cq_wait_fd_setup)
+{
+	expect_neq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
+		  "signal implementation not available.");
+	expect_neq(cq_priv->cq_fid.ops->sread, fi_no_cq_sread,
+		  "sread implementation not available.");
+	expect_neq(cq_priv->cq_fid.ops->sreadfrom, fi_no_cq_sreadfrom,
+		  "sreadfrom implementation not available.");
+	expect_neq(cq_priv->cq_fid.fid.ops->control, fi_no_control,
+		  "control implementation not available.");
+}
+
+Test(cq_wait_set, fd, .init = setup)
+{
+	int ret;
+	int fd;
+
+	wait_attr.wait_obj = FI_WAIT_FD;
+
+	ret = fi_wait_open(fab, &wait_attr, &wait_set);
+	expect_eq(FI_SUCCESS, ret, "fi_wait_open failed.");
+
+	wait_priv = container_of(wait_set, struct gnix_fid_wait, wait);
+
+	cq_attr.format = FI_CQ_FORMAT_MSG;
+	cq_attr.size = 8;
+	cq_attr.wait_obj = FI_WAIT_SET;
+	cq_attr.wait_set = wait_set;
+
+	ret = fi_cq_open(dom, &cq_attr, &rcq, NULL);
+	expect_eq(FI_SUCCESS, ret, "fi_cq_open failed.");
+
+	cq_priv = container_of(rcq, struct gnix_fid_cq, cq_fid);
+
+	ret = fi_control(&cq_priv->cq_fid.fid, FI_GETWAIT, &fd);
+	expect_eq(FI_SUCCESS, ret, "fi_control failed.");
+
+	expect_eq(wait_priv->fd[WAIT_READ], fd);
+
+	ret = fi_close(&rcq->fid);
+	expect_eq(FI_SUCCESS, ret, "failure in closing cq.");
+
+	ret = fi_close(&wait_set->fid);
+	expect_eq(FI_SUCCESS, ret, "failure in closing waitset.");
+
+	teardown();
 }

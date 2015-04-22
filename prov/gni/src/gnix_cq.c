@@ -61,7 +61,7 @@ static void fill_cq_tagged(void *cq_entry, void *op_context, uint64_t flags,
 /*******************************************************************************
  * Forward declarations for ops structures.
  ******************************************************************************/
-static struct fi_ops gnix_cq_fi_ops;
+static const struct fi_ops gnix_cq_fi_ops;
 static const struct fi_ops_cq gnix_cq_ops;
 
 /*******************************************************************************
@@ -205,9 +205,10 @@ static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
 	return read_count;
 }
 
-static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops)
+static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
+			  struct fi_ops *fi_cq_ops)
 {
-	if (!attr || !ops)
+	if (!attr || !ops || !fi_cq_ops)
 		return -FI_EINVAL;
 
 	if (!attr->size)
@@ -232,6 +233,7 @@ static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops)
 		ops->sread = fi_no_cq_sread;
 		ops->signal = fi_no_cq_signal;
 		ops->sreadfrom = fi_no_cq_sreadfrom;
+		fi_cq_ops->control = fi_no_control;
 		break;
 	case FI_WAIT_SET:
 		if (!attr->wait_set) {
@@ -270,6 +272,7 @@ static int gnix_cq_set_wait(struct gnix_fid_cq *cq)
 				&requested, &cq->wait);
 		break;
 	case FI_WAIT_SET:
+		cq->wait = cq->attr.wait_set;
 		ret = _gnix_wait_set_add(cq->wait, &cq->cq_fid.fid);
 
 		if (!ret)
@@ -406,6 +409,7 @@ static int gnix_cq_close(fid_t fid)
 
 	fastlock_destroy(&cq->lock);
 	free(cq->cq_fid.ops);
+	free(cq->cq_fid.fid.ops);
 	free(cq);
 
 	return FI_SUCCESS;
@@ -517,6 +521,8 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct gnix_cq_entry *entry;
 	struct gnix_fid_cq *cq_priv;
 	struct fi_ops_cq *cq_ops;
+	struct fi_ops *fi_cq_ops;
+
 	int ret = FI_SUCCESS;
 
 	cq_ops = calloc(1, sizeof(*cq_ops));
@@ -525,22 +531,29 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		goto err;
 	}
 
-	*cq_ops = gnix_cq_ops;
-
-	ret = verify_cq_attr(attr, cq_ops);
-	if (ret)
+	fi_cq_ops = calloc(1, sizeof(*fi_cq_ops));
+	if (!fi_cq_ops) {
+		ret = -FI_ENOMEM;
 		goto err1;
+	}
+
+	*cq_ops = gnix_cq_ops;
+	*fi_cq_ops = gnix_cq_fi_ops;
+
+	ret = verify_cq_attr(attr, cq_ops, fi_cq_ops);
+	if (ret)
+		goto err2;
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 	if (!domain_priv) {
 		ret = -FI_EINVAL;
-		goto err1;
+		goto err2;
 	}
 
 	cq_priv = calloc(1, sizeof(*cq_priv));
 	if (!cq_priv) {
 		ret = -FI_ENOMEM;
-		goto err1;
+		goto err2;
 	}
 
 	cq_priv->domain = domain_priv;
@@ -550,7 +563,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq_fid.fid.context = context;
-	cq_priv->cq_fid.fid.ops = &gnix_cq_fi_ops;
+	cq_priv->cq_fid.fid.ops = fi_cq_ops;
 	cq_priv->cq_fid.ops = cq_ops;
 
 	/*
@@ -567,7 +580,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	ret = gnix_cq_set_wait(cq_priv);
 	if (ret)
-		goto err1;
+		goto err2;
 
 	fastlock_init(&cq_priv->lock);
 
@@ -578,7 +591,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		if (!entry) {
 			GNIX_WARN(FI_LOG_CQ, "Out of memory.\n");
 			ret = -FI_ENOMEM;
-			goto err2;
+			goto err3;
 		}
 
 		slist_insert_tail(&entry->item, &cq_priv->ev_free);
@@ -592,11 +605,13 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 /*
  *  TODO: Cleanup allocated CQ entries in the event of FI_ENOMEM
  */
-err2:
+err3:
 	atomic_dec(&cq_priv->domain->ref_cnt);
 	fastlock_release(&cq_priv->lock);
 	fastlock_destroy(&cq_priv->lock);
 	free(cq_priv);
+err2:
+	free(fi_cq_ops);
 err1:
 	free(cq_ops);
 err:
@@ -607,7 +622,7 @@ err:
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
-static struct fi_ops gnix_cq_fi_ops = {
+static const struct fi_ops gnix_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_cq_close,
 	.bind = fi_no_bind,
