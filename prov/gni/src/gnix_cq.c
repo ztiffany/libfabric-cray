@@ -208,6 +208,8 @@ static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
 static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
 			  struct fi_ops *fi_cq_ops)
 {
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
 	if (!attr || !ops || !fi_cq_ops)
 		return -FI_EINVAL;
 
@@ -260,6 +262,8 @@ static int gnix_cq_set_wait(struct gnix_fid_cq *cq)
 {
 	int ret = FI_SUCCESS;
 
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
 	struct fi_wait_attr requested = {
 		.wait_obj = cq->attr.wait_obj,
 		.flags = 0
@@ -290,6 +294,8 @@ static void free_cq_list(struct slist *cq)
 {
 	struct slist_entry *entry;
 	struct gnix_cq_entry *item;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
 
 	while (!slist_empty(cq)) {
 		entry = slist_remove_head(cq);
@@ -382,6 +388,8 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 static int gnix_cq_close(fid_t fid)
 {
 	struct gnix_fid_cq *cq;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
 
 	cq = container_of(fid, struct gnix_fid_cq, cq_fid);
 	if (atomic_get(&cq->ref_cnt) != 0) {
@@ -524,6 +532,8 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	struct fi_ops *fi_cq_ops;
 
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
 
 	cq_ops = calloc(1, sizeof(*cq_ops));
 	if (!cq_ops) {

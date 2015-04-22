@@ -59,6 +59,8 @@ int _gnix_wait_set_add(struct fid_wait *wait, struct fid *wait_obj)
 	struct gnix_fid_wait *wait_priv;
 	struct gnix_wait_entry *wait_entry;
 
+	GNIX_TRACE(WAIT_SUB, "\n");
+
 	wait_entry = calloc(1, sizeof(*wait_entry));
 	if (!wait_entry) {
 		GNIX_ERR(WAIT_SUB,
@@ -80,6 +82,8 @@ int _gnix_wait_set_remove(struct fid_wait *wait, struct fid *wait_obj)
 	struct gnix_fid_wait *wait_priv;
 	struct gnix_wait_entry *wait_entry;
 	struct slist_entry *found;
+
+	GNIX_TRACE(WAIT_SUB, "\n");
 
 	wait_priv = container_of(wait, struct gnix_fid_wait, wait.fid);
 
@@ -103,6 +107,8 @@ int _gnix_get_wait_obj(struct fid_wait *wait, void *arg)
 	struct gnix_fid_wait *wait_priv;
 	size_t copy_size;
 	const void *src;
+
+	GNIX_TRACE(WAIT_SUB, "\n");
 
 	if (!wait || !arg)
 		return -FI_EINVAL;
@@ -161,6 +167,8 @@ void _gnix_signal_wait_obj(struct fid_wait *wait)
  ******************************************************************************/
 static int gnix_verify_wait_attr(struct fi_wait_attr *attr)
 {
+	GNIX_TRACE(WAIT_SUB, "\n");
+
 	if (!attr || attr->flags)
 		return -FI_EINVAL;
 
@@ -182,6 +190,8 @@ static int gnix_verify_wait_attr(struct fi_wait_attr *attr)
 static int gnix_init_wait_obj(struct gnix_fid_wait *wait, enum fi_wait_obj type)
 {
 	long flags = 0;
+
+	GNIX_TRACE(WAIT_SUB, "\n");
 
 	wait->type = type;
 
@@ -221,6 +231,8 @@ static int gnix_wait_control(struct fid *wait, int command, void *arg)
 {
 	struct fid_wait *wait_fid_priv;
 
+	GNIX_TRACE(WAIT_SUB, "\n");
+
 	wait_fid_priv = container_of(wait, struct fid_wait, fid);
 
 	switch (command) {
@@ -239,6 +251,8 @@ static int gnix_wait_wait(struct fid_wait *wait, int timeout)
 static int gnix_wait_close(struct fid *wait)
 {
 	struct gnix_fid_wait *wait_priv;
+
+	GNIX_TRACE(WAIT_SUB, "\n");
 
 	wait_priv = container_of(wait, struct gnix_fid_wait, wait.fid);
 
@@ -266,6 +280,8 @@ int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 	struct gnix_fid_fabric *fab_priv;
 	struct gnix_fid_wait *wait_priv;
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(WAIT_SUB, "\n");
 
 	ret = gnix_verify_wait_attr(attr);
 	if (ret)
