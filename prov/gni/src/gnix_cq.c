@@ -164,10 +164,10 @@ static inline void cq_enqueue(struct gnix_fid_cq *cq,
 
 	slist_insert_tail(&event->item, &cq->ev_queue);
 
+	fastlock_release(&cq->lock);
+
 	if (cq->wait)
 		_gnix_signal_wait_obj(cq->wait);
-
-	fastlock_release(&cq->lock);
 }
 
 static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
@@ -286,7 +286,7 @@ static int gnix_cq_set_wait(struct gnix_fid_cq *cq)
 	return ret;
 }
 
-static void free_cq(struct slist *cq)
+static void free_cq_list(struct slist *cq)
 {
 	struct slist_entry *entry;
 	struct gnix_cq_entry *item;
@@ -400,10 +400,10 @@ static int gnix_cq_close(fid_t fid)
 
 	GNIX_INFO(FI_LOG_CQ, "Freeing all resources associated with CQ.\n");
 
-	free_cq(&cq->ev_free);
-	free_cq(&cq->err_free);
-	free_cq(&cq->ev_queue);
-	free_cq(&cq->err_queue);
+	free_cq_list(&cq->ev_free);
+	free_cq_list(&cq->err_free);
+	free_cq_list(&cq->ev_queue);
+	free_cq_list(&cq->err_queue);
 
 	fastlock_release(&cq->lock);
 

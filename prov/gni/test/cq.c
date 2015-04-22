@@ -565,7 +565,7 @@ Test(cq_wait_control, mutex_cond, .init = cq_wait_mutex_cond_setup)
 	expect_eq(0, ret, "cond compare failed.");
 }
 
-Test(cq_wait_ops, none, cq_wait_none_setup)
+Test(cq_wait_ops, none, .init = cq_wait_none_setup)
 {
 	expect_eq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
 		  "signal implementation available.");
@@ -577,7 +577,7 @@ Test(cq_wait_ops, none, cq_wait_none_setup)
 		  "control implementation available.");
 }
 
-Test(cq_wait_ops, fd, cq_wait_fd_setup)
+Test(cq_wait_ops, fd, .init = cq_wait_fd_setup)
 {
 	expect_neq(cq_priv->cq_fid.ops->signal, fi_no_cq_signal,
 		  "signal implementation not available.");
