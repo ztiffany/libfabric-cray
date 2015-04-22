@@ -121,12 +121,12 @@ union gnix_tx_descriptor0 {
 		int id;
 	};
 	char padding[GNIX_CACHELINE_SIZE];
-} __attribute__((__aligned__(GNIX_CACHELINE_SIZE)));
+} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
 
 struct gnix_tx_descriptor {
 	union gnix_tx_descriptor0 desc;
 	char inject_buf[GNIX_CACHELINE_SIZE];
-} __attribute__((__aligned__(GNIX_CACHELINE_SIZE)));
+} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
 
 
 /*
@@ -153,6 +153,7 @@ static inline struct gnix_tx_descriptor *
 				     int desc_id)
 {
 	struct gnix_tx_descriptor *tx_desc;
+
 	assert((id >= 0) && (id < nic->max_tx_desc_id));
 	tx_desc = &nic->tx_desc_base[desc_id];
 	return tx_desc;
