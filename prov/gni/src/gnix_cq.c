@@ -467,7 +467,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_priv->domain = domain_priv;
 	cq_priv->attr = *attr;
-	atomic_init(&cq_priv->ref_cnt, 0);
+	atomic_initialize(&cq_priv->ref_cnt, 0);
 	atomic_inc(&cq_priv->domain->ref_cnt);
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;

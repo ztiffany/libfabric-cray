@@ -538,7 +538,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
-	atomic_init(&ep_priv->active_fab_reqs, 0);
+	atomic_initialize(&ep_priv->active_fab_reqs, 0);
 
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;

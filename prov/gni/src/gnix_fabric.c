@@ -145,7 +145,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &gnix_fab_fi_ops;
 	fab->fab_fid.ops = &gnix_fab_ops;
-	atomic_init(&fab->ref_cnt, 0);
+	atomic_initialize(&fab->ref_cnt, 0);
 	list_head_init(&fab->domain_list);
 
 	*fabric = &fab->fab_fid;
@@ -415,7 +415,7 @@ GNI_INI
 		provider = &gnix_prov;
 	}
 
-	atomic_init(&gnix_id_counter, 0);
+	atomic_initialize(&gnix_id_counter, 0);
 
 	return (provider);
 }
