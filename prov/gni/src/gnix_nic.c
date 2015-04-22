@@ -307,8 +307,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		 * TODO: set up work queue
 		 */
 
-		atomic_init(&nic->ref_cnt, 1);
-		atomic_init(&nic->outstanding_fab_reqs_nic, 0);
+		atomic_initialize(&nic->ref_cnt, 1);
+		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
 
 		list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
 		++gnix_nics_per_ptag[domain->ptag];

@@ -522,7 +522,7 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->av_fid.fid.context = context;
 	int_av->av_fid.fid.ops = &gnix_fi_av_ops;
 	int_av->av_fid.ops = &gnix_av_ops;
-	atomic_init(&int_av->ref_cnt, 0);
+	atomic_initialize(&int_av->ref_cnt, 0);
 
 	*av = &int_av->av_fid;
 
