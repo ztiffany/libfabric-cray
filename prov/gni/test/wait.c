@@ -35,6 +35,7 @@
 #include <fi_list.h>
 #include <string.h>
 #include <criterion/criterion.h>
+#include <stdio.h>
 
 static struct fid_fabric *fab;
 static struct fi_info *hints;
@@ -172,7 +173,7 @@ Test(wait_set, add, .init = fd_setup)
 	struct gnix_wait_entry *entry;
 
 	struct fid temp_wait = {
-		.fclass = FI_CLASS_CQ,
+		.fclass = FI_CLASS_CQ
 	};
 
 	expect(slist_empty(&wait_priv->set),
@@ -198,11 +199,54 @@ Test(wait_set, add, .init = fd_setup)
 	expect_eq(FI_SUCCESS, ret, "gnix_wait_set_remove failed.");
 
 	ret = fi_close(&wait_set->fid);
-	expect_eq(FI_SUCCESS, ret);
+	expect_eq(FI_SUCCESS, ret, "fi_close on wait set failed.");
 
 	ret = fi_close(&fab->fid);
-	assert(!ret, "failure in closing fabric.");
+	expect_eq(FI_SUCCESS, ret, "failure in closing fabric.");
 
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
+}
+
+Test(wait_set, empty_remove, .init = fd_setup)
+{
+	int ret;
+
+	struct fid temp_wait = {
+		.fclass = FI_CLASS_CQ
+	};
+
+	expect(slist_empty(&wait_priv->set));
+	ret = _gnix_wait_set_remove(&wait_priv->wait, &temp_wait);
+	expect_eq(-FI_EINVAL, ret);
+	expect(slist_empty(&wait_priv->set));
+
+	ret = fi_close(&wait_set->fid);
+	expect_eq(FI_SUCCESS, ret, "fi_close on wait set failed.");
+
+	ret = fi_close(&fab->fid);
+	expect_eq(FI_SUCCESS, ret, "fi_close on fabric failed.");
+
+	fi_freeinfo(fi);
+	fi_freeinfo(hints);
+}
+
+Test(wait_verify, invalid_type, .init = wait_setup)
+{
+	int ret;
+
+	wait_attr.wait_obj = FI_WAIT_SET;
+
+	ret = fi_wait_open(fab, &wait_attr, &wait_set);
+	expect_eq(-FI_EINVAL, ret,
+		  "Requesting incorrect type FI_WAIT_SET succeeded.");
+
+	ret = fi_wait_open(fab, NULL, &wait_set);
+	expect_eq(-FI_EINVAL, ret,
+		  "Requesting verification with NULL attr succeeded.");
+
+	wait_attr.flags = 1;
+	ret = fi_wait_open(fab, &wait_attr, &wait_set);
+	expect_eq(-FI_EINVAL, ret,
+		  "Requesting verifications with flags set succeeded.");
 }
