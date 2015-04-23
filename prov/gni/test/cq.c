@@ -48,8 +48,13 @@
 #include <stdlib.h>
 #include <inttypes.h>
 
-#include <criterion/criterion.h>
 #include "gnix_cq.h"
+
+#ifdef assert
+#undef assert
+#endif
+
+#include <criterion/criterion.h>
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
