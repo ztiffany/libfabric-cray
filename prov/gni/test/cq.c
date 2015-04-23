@@ -51,10 +51,6 @@
 #include "gnix_cq.h"
 #include "gnix.h"
 
-#undef assert
-
-#include <criterion/criterion.h>
-
 #ifdef assert
 #undef assert
 #endif
