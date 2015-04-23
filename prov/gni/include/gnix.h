@@ -43,7 +43,6 @@ extern "C" {
 #endif /* HAVE_CONFIG_H */
 
 #include <stdbool.h>
-#include <assert.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>

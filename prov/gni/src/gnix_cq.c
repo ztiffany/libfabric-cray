@@ -61,8 +61,8 @@ static void fill_cq_tagged(void *cq_entry, void *op_context, uint64_t flags,
 /*******************************************************************************
  * Forward declarations for ops structures.
  ******************************************************************************/
-static struct fi_ops gnix_cq_fi_ops;
-static struct fi_ops_cq gnix_cq_ops;
+static const struct fi_ops gnix_cq_fi_ops;
+static const struct fi_ops_cq gnix_cq_ops;
 
 /*******************************************************************************
  * Size array corresponding format type to format size.
@@ -84,7 +84,7 @@ static const fill_entry const fill_function[] = {
 };
 
 /*******************************************************************************
- * Helper functions
+ * Internal helper functions
  ******************************************************************************/
 static struct gnix_cq_entry *alloc_cq_entry(size_t size)
 {
@@ -162,12 +162,12 @@ static inline void cq_enqueue(struct gnix_fid_cq *cq,
 
 	fastlock_acquire(&cq->lock);
 
-	/*
-	 * TODO: Handle wait signal support.
-	 */
 	slist_insert_tail(&event->item, &cq->ev_queue);
 
 	fastlock_release(&cq->lock);
+
+	if (cq->wait)
+		_gnix_signal_wait_obj(cq->wait);
 }
 
 static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
@@ -205,6 +205,109 @@ static ssize_t cq_dequeue(struct gnix_fid_cq *cq, void *buf, size_t count,
 	return read_count;
 }
 
+static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
+			  struct fi_ops *fi_cq_ops)
+{
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	if (!attr || !ops || !fi_cq_ops)
+		return -FI_EINVAL;
+
+	if (!attr->size)
+		attr->size = GNIX_CQ_DEFAULT_SIZE;
+
+	switch (attr->format) {
+	case FI_CQ_FORMAT_UNSPEC:
+		attr->format = FI_CQ_FORMAT_CONTEXT;
+	case FI_CQ_FORMAT_CONTEXT:
+	case FI_CQ_FORMAT_MSG:
+	case FI_CQ_FORMAT_DATA:
+	case FI_CQ_FORMAT_TAGGED:
+		break;
+	default:
+		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
+			  attr->format);
+		return -FI_EINVAL;
+	}
+
+	switch (attr->wait_obj) {
+	case FI_WAIT_NONE:
+		ops->sread = fi_no_cq_sread;
+		ops->signal = fi_no_cq_signal;
+		ops->sreadfrom = fi_no_cq_sreadfrom;
+		fi_cq_ops->control = fi_no_control;
+		break;
+	case FI_WAIT_SET:
+		if (!attr->wait_set) {
+			GNIX_WARN(FI_LOG_CQ,
+				  "FI_WAIT_SET is set, but wait_set field doesn't reference a wait object.\n");
+			return -FI_EINVAL;
+		}
+		break;
+	case FI_WAIT_UNSPEC:
+		attr->wait_obj = FI_WAIT_FD;
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		break;
+	default:
+		GNIX_WARN(FI_LOG_CQ, "wait type: %d unsupported.\n",
+			  attr->wait_obj);
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int gnix_cq_set_wait(struct gnix_fid_cq *cq)
+{
+	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	struct fi_wait_attr requested = {
+		.wait_obj = cq->attr.wait_obj,
+		.flags = 0
+	};
+
+	switch (cq->attr.wait_obj) {
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		ret = gnix_wait_open(&cq->domain->fabric->fab_fid,
+				&requested, &cq->wait);
+		break;
+	case FI_WAIT_SET:
+		cq->wait = cq->attr.wait_set;
+		ret = _gnix_wait_set_add(cq->wait, &cq->cq_fid.fid);
+
+		if (!ret)
+			cq->wait = cq->attr.wait_set;
+
+		break;
+	default:
+		break;
+	}
+
+	return ret;
+}
+
+static void free_cq_list(struct slist *cq)
+{
+	struct slist_entry *entry;
+	struct gnix_cq_entry *item;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	while (!slist_empty(cq)) {
+		entry = slist_remove_head(cq);
+		item = container_of(entry, struct gnix_cq_entry, item);
+		free(item->the_entry);
+		free(item);
+	}
+}
+
+/*******************************************************************************
+ * Exposed helper functions
+ ******************************************************************************/
 ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, void *op_context,
 			   uint64_t flags, size_t len, void *buf,
 			   uint64_t data, uint64_t tag)
@@ -279,67 +382,14 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 	return FI_SUCCESS;
 }
 
-static int verify_cq_attr(struct fi_cq_attr *attr)
-{
-	if (!attr)
-		return -FI_EINVAL;
-
-	if (!attr->size)
-		attr->size = GNIX_CQ_DEFAULT_SIZE;
-
-	switch (attr->format) {
-	case FI_CQ_FORMAT_UNSPEC:
-		attr->format = FI_CQ_FORMAT_CONTEXT;
-	case FI_CQ_FORMAT_CONTEXT:
-	case FI_CQ_FORMAT_MSG:
-	case FI_CQ_FORMAT_DATA:
-	case FI_CQ_FORMAT_TAGGED:
-		break;
-	default:
-		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
-			  attr->format);
-		return -FI_EINVAL;
-	}
-
-	switch (attr->wait_obj) {
-	case FI_WAIT_NONE:
-	case FI_WAIT_UNSPEC:
-		break;
-	case FI_WAIT_SET:
-	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
-		GNIX_WARN(FI_LOG_CQ, "wait type: %d unsupported.\n",
-			  attr->wait_obj);
-		return -FI_ENOSYS;
-	default:
-		GNIX_WARN(FI_LOG_CQ, "wait type: %d unsupported.\n",
-			  attr->wait_obj);
-		return -FI_EINVAL;
-	}
-
-	return FI_SUCCESS;
-}
-
-void free_cq(struct slist *cq)
-{
-	struct slist_entry *entry;
-	struct gnix_cq_entry *item;
-
-	while (!slist_empty(cq)) {
-		entry = slist_remove_head(cq);
-		item = container_of(entry, struct gnix_cq_entry, item);
-		free(item->the_entry);
-		free(item);
-	}
-}
-
-
 /*******************************************************************************
  * API functions.
  ******************************************************************************/
 static int gnix_cq_close(fid_t fid)
 {
 	struct gnix_fid_cq *cq;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
 
 	cq = container_of(fid, struct gnix_fid_cq, cq_fid);
 	if (atomic_get(&cq->ref_cnt) != 0) {
@@ -351,18 +401,23 @@ static int gnix_cq_close(fid_t fid)
 	atomic_dec(&cq->domain->ref_cnt);
 	assert(atomic_get(&cq->domain->ref_cnt) >= 0);
 
+	if (cq->attr.wait_obj == FI_WAIT_SET)
+		_gnix_wait_set_remove(cq->wait, &cq->cq_fid.fid);
+
 	fastlock_acquire(&cq->lock);
 
 	GNIX_INFO(FI_LOG_CQ, "Freeing all resources associated with CQ.\n");
 
-	free_cq(&cq->ev_free);
-	free_cq(&cq->err_free);
-	free_cq(&cq->ev_queue);
-	free_cq(&cq->err_queue);
+	free_cq_list(&cq->ev_free);
+	free_cq_list(&cq->err_free);
+	free_cq_list(&cq->ev_queue);
+	free_cq_list(&cq->err_queue);
 
 	fastlock_release(&cq->lock);
 
 	fastlock_destroy(&cq->lock);
+	free(cq->cq_fid.ops);
+	free(cq->cq_fid.fid.ops);
 	free(cq);
 
 	return FI_SUCCESS;
@@ -441,28 +496,74 @@ static const char *gnix_cq_strerror(struct fid_cq *cq, int prov_errno,
 	return NULL;
 }
 
+static int gnix_cq_signal(struct fid_cq *cq)
+{
+	struct gnix_fid_cq *cq_priv;
+
+	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
+
+	if (cq_priv->wait)
+		_gnix_signal_wait_obj(cq_priv->wait);
+
+	return FI_SUCCESS;
+}
+
+static int gnix_cq_control(struct fid *cq, int command, void *arg)
+{
+	struct gnix_fid_cq *cq_priv;
+
+	cq_priv = container_of(cq, struct gnix_fid_cq, cq_fid);
+
+	switch (command) {
+	case FI_GETWAIT:
+		return _gnix_get_wait_obj(cq_priv->wait, arg);
+	default:
+		return -FI_EINVAL;
+	}
+}
+
 int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context)
 {
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_cq_entry *entry;
 	struct gnix_fid_cq *cq_priv;
+	struct fi_ops_cq *cq_ops;
+	struct fi_ops *fi_cq_ops;
+
 	int ret = FI_SUCCESS;
 
-	ret = verify_cq_attr(attr);
-	if (ret)
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	cq_ops = calloc(1, sizeof(*cq_ops));
+	if (!cq_ops) {
+		ret = -FI_ENOMEM;
 		goto err;
+	}
+
+	fi_cq_ops = calloc(1, sizeof(*fi_cq_ops));
+	if (!fi_cq_ops) {
+		ret = -FI_ENOMEM;
+		goto err1;
+	}
+
+	*cq_ops = gnix_cq_ops;
+	*fi_cq_ops = gnix_cq_fi_ops;
+
+	ret = verify_cq_attr(attr, cq_ops, fi_cq_ops);
+	if (ret)
+		goto err2;
 
 	domain_priv = container_of(domain, struct gnix_fid_domain, domain_fid);
 	if (!domain_priv) {
 		ret = -FI_EINVAL;
-		goto err;
+		goto err2;
 	}
 
 	cq_priv = calloc(1, sizeof(*cq_priv));
 	if (!cq_priv) {
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err2;
 	}
 
 	cq_priv->domain = domain_priv;
@@ -472,8 +573,8 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_priv->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq_priv->cq_fid.fid.context = context;
-	cq_priv->cq_fid.fid.ops = &gnix_cq_fi_ops;
-	cq_priv->cq_fid.ops = &gnix_cq_ops;
+	cq_priv->cq_fid.fid.ops = fi_cq_ops;
+	cq_priv->cq_fid.ops = cq_ops;
 
 	/*
 	 * Although we don't need to store entry_size since we're already
@@ -487,6 +588,10 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 	slist_init(&cq_priv->err_queue);
 	slist_init(&cq_priv->err_free);
 
+	ret = gnix_cq_set_wait(cq_priv);
+	if (ret)
+		goto err2;
+
 	fastlock_init(&cq_priv->lock);
 
 	fastlock_acquire(&cq_priv->lock);
@@ -496,7 +601,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		if (!entry) {
 			GNIX_WARN(FI_LOG_CQ, "Out of memory.\n");
 			ret = -FI_ENOMEM;
-			goto cleanup;
+			goto err3;
 		}
 
 		slist_insert_tail(&entry->item, &cq_priv->ev_free);
@@ -510,11 +615,15 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 /*
  *  TODO: Cleanup allocated CQ entries in the event of FI_ENOMEM
  */
-cleanup:
+err3:
 	atomic_dec(&cq_priv->domain->ref_cnt);
 	fastlock_release(&cq_priv->lock);
 	fastlock_destroy(&cq_priv->lock);
 	free(cq_priv);
+err2:
+	free(fi_cq_ops);
+err1:
+	free(cq_ops);
 err:
 	return ret;
 }
@@ -523,20 +632,20 @@ err:
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
-static struct fi_ops gnix_cq_fi_ops = {
+static const struct fi_ops gnix_cq_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_cq_close,
 	.bind = fi_no_bind,
-	.control = fi_no_control
+	.control = gnix_cq_control
 };
 
-static struct fi_ops_cq gnix_cq_ops = {
+static const struct fi_ops_cq gnix_cq_ops = {
 	.size = sizeof(struct fi_ops_cq),
 	.read = gnix_cq_read,
 	.readfrom = gnix_cq_readfrom,
 	.readerr = gnix_cq_readerr,
 	.sread = gnix_cq_sread,
 	.sreadfrom = gnix_cq_sreadfrom,
-	.signal = fi_no_cq_signal,
+	.signal = gnix_cq_signal,
 	.strerror = gnix_cq_strerror
 };

@@ -57,6 +57,7 @@
 #include "gnix_cm_nic.h"
 #include "gnix_util.h"
 #include "gnix_nameserver.h"
+#include "gnix_wait.h"
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
@@ -85,8 +86,7 @@ static struct fi_ops_fabric gnix_fab_ops = {
 	/* TODO: need to define for FI_EP_MSG */
 	.passive_ep = fi_no_passive_ep,
 	.eq_open = gnix_eq_open,
-	/* TODO: what's this about */
-	.wait_open = fi_no_wait_open,
+	.wait_open = gnix_wait_open
 };
 
 static int gnix_fabric_close(fid_t fid)

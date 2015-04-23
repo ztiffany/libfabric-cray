@@ -43,6 +43,7 @@ extern "C" {
 #endif /* HAVE_CONFIG_H */
 
 #include "gnix.h"
+#include <assert.h>
 
 /*
  * gnix nic struct - to be used for GNI_PostRdma/PostFma,
