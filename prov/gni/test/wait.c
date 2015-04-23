@@ -34,8 +34,12 @@
 #include "gnix_wait.h"
 #include <fi_list.h>
 #include <string.h>
+
+#ifdef assert
+#undef assert
+#endif
+
 #include <criterion/criterion.h>
-#include <stdio.h>
 
 static struct fid_fabric *fab;
 static struct fi_info *hints;
