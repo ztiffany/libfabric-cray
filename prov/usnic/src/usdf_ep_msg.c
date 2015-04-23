@@ -61,6 +61,7 @@
 #include "usnic_direct.h"
 #include "usd.h"
 #include "usdf.h"
+#include "usdf_cm.h"
 #include "usdf_endpoint.h"
 #include "usdf_rudp.h"
 #include "usdf_msg.h"
@@ -119,6 +120,7 @@ usdf_tx_msg_enable(struct usdf_tx *tx)
 		TAILQ_INSERT_TAIL(&tx->t.msg.tx_free_wqe, wqe, ms_link);
 		++wqe;
 	}
+	tx->t.msg.tx_num_free_wqe = tx->tx_attr.size;
 
 	return 0;
 
@@ -127,6 +129,7 @@ fail:
 		free(tx->t.msg.tx_wqe_buf);
 		tx->t.msg.tx_wqe_buf = NULL;
 		TAILQ_INIT(&tx->t.msg.tx_free_wqe);
+		tx->t.msg.tx_num_free_wqe = 0;
 	}
 	if (tx->tx_qp != NULL) {
 		usd_destroy_qp(tx->tx_qp);
@@ -207,6 +210,7 @@ usdf_rx_msg_enable(struct usdf_rx *rx)
 		TAILQ_INSERT_TAIL(&rx->r.msg.rx_free_rqe, rqe, ms_link);
 		++rqe;
 	}
+	rx->r.msg.rx_num_free_rqe = rx->rx_attr.size;
 
 	return 0;
 
@@ -215,6 +219,7 @@ fail:
 		free(rx->r.msg.rx_rqe_buf);
 		rx->r.msg.rx_rqe_buf = NULL;
 		TAILQ_INIT(&rx->r.msg.rx_free_rqe);
+		rx->r.msg.rx_num_free_rqe = 0;
 	}
 	if (rx->r.msg.rx_bufs != NULL) {
 		usd_free_mr(rx->r.msg.rx_bufs);
@@ -294,6 +299,12 @@ usdf_ep_msg_getopt(fid_t fid, int level, int optname,
 	(void)ep;
 
 	switch (level) {
+	case FI_OPT_CM_DATA_SIZE:
+		if (*optlen < sizeof(size_t))
+			return -FI_ETOOSMALL;
+		*((size_t *) optval) = USDF_MAX_CONN_DATA;
+		*optlen = sizeof(size_t);
+		return 0;
 	case FI_OPT_ENDPOINT:
 		return -FI_ENOPROTOOPT;
 	default:
@@ -599,8 +610,8 @@ static struct fi_ops_ep usdf_base_msg_ops = {
 	.setopt = usdf_ep_msg_setopt,
 	.tx_ctx = fi_no_tx_ctx,
 	.rx_ctx = fi_no_rx_ctx,
-	.rx_size_left = fi_no_rx_size_left,
-	.tx_size_left = fi_no_tx_size_left,
+	.rx_size_left = usdf_msg_rx_size_left,
+	.tx_size_left = usdf_msg_tx_size_left,
 };
 
 static struct fi_ops_cm usdf_cm_msg_ops = {
