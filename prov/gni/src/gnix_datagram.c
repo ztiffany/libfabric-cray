@@ -201,6 +201,8 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 	int ret = FI_SUCCESS;
 	gni_return_t status;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	status = GNI_EpPostDataWId(d->gni_ep,
 				   d->dgram_in_buf,
 				   GNI_DATAGRAM_MAXSIZE,
@@ -223,6 +225,8 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 {
 	gni_return_t status;
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/*
 	 * bind the datagram ep
@@ -283,7 +287,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	struct gnix_dgram_hndl *the_hndl = NULL;
 	gni_return_t status;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
 	if (the_hndl == NULL) {
@@ -386,7 +390,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	struct gnix_datagram *p, *next, *dg_ptr;
 	gni_return_t status;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (the_hndl->dgram_base == NULL) {
 		ret = -FI_EINVAL;
@@ -399,12 +403,13 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 
 	list_for_each_safe(&the_hndl->bnd_dgram_active_list, p, next, list) {
 		dg_ptr = p;
-		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) continue;
-		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
-		if ((status != GNI_RC_SUCCESS) &&
+		if (dg_ptr->state != GNIX_DGRAM_STATE_FREE) {
+			status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
+			if ((status != GNI_RC_SUCCESS) &&
 					(status != GNI_RC_NO_MATCH)) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		}
 		gnix_list_del_init(&dg_ptr->list);
 	}
@@ -412,12 +417,13 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	list_for_each_safe(&the_hndl->wc_dgram_active_list,
 				p, next, list) {
 		dg_ptr = p;
-		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) continue;
-		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
-		if ((status != GNI_RC_SUCCESS) &&
+		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) {
+			status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
+			if ((status != GNI_RC_SUCCESS) &&
 					(status != GNI_RC_NO_MATCH)) {
-			ret = gnixu_to_fi_errno(status);
-			goto err;
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
 		}
 		gnix_list_del_init(&dg_ptr->list);
 	}
@@ -436,8 +442,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 
 err:
 	if (ret != FI_SUCCESS)
-		GNIX_INFO(FI_LOG_EP_CTRL, "%s returning error %d\n",
-			  __func__,ret);
+		GNIX_INFO(FI_LOG_EP_CTRL, "returning error %d\n", ret);
 	free(the_hndl->dgram_base);
 	free(the_hndl);
 
