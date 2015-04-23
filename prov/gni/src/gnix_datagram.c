@@ -283,6 +283,8 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 	struct gnix_dgram_hndl *the_hndl = NULL;
 	gni_return_t status;
 
+	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+
 	the_hndl = calloc(1, sizeof(struct gnix_dgram_hndl));
 	if (the_hndl == NULL) {
 		ret = -FI_ENOMEM;
@@ -384,8 +386,12 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	struct gnix_datagram *p, *next, *dg_ptr;
 	gni_return_t status;
 
-	if (the_hndl->dgram_base == NULL)
-		return -FI_EINVAL;
+	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+
+	if (the_hndl->dgram_base == NULL) {
+		ret = -FI_EINVAL;
+		goto err;
+	}
 
 	/*
 	 * cancel any active datagrams - GNI_RC_NO_MATCH is okay.
@@ -393,6 +399,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 
 	list_for_each_safe(&the_hndl->bnd_dgram_active_list, p, next, list) {
 		dg_ptr = p;
+		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) continue;
 		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
 		if ((status != GNI_RC_SUCCESS) &&
 					(status != GNI_RC_NO_MATCH)) {
@@ -405,6 +412,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	list_for_each_safe(&the_hndl->wc_dgram_active_list,
 				p, next, list) {
 		dg_ptr = p;
+		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) continue;
 		status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
 		if ((status != GNI_RC_SUCCESS) &&
 					(status != GNI_RC_NO_MATCH)) {
@@ -427,6 +435,9 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	}
 
 err:
+	if (ret != FI_SUCCESS)
+		GNIX_INFO(FI_LOG_EP_CTRL, "%s returning error %d\n",
+			  __func__,ret);
 	free(the_hndl->dgram_base);
 	free(the_hndl);
 

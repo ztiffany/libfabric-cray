@@ -117,7 +117,7 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	if (ret != FI_SUCCESS)
 		goto err;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u",
+	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
 		      domain->ptag, domain->cookie, cdm_id);
 
 	status = GNI_CdmCreate(cdm_id,
