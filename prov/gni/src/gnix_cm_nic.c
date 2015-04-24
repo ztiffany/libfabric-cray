@@ -39,6 +39,7 @@
 #include <assert.h>
 
 #include "gnix.h"
+#include "gnix_datagram.h"
 #include "gnix_cm_nic.h"
 
 
@@ -72,15 +73,25 @@ int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
+	if (cm_nic->dgram_hndl != NULL) {
+		ret = _gnix_dgram_hndl_free(cm_nic->dgram_hndl);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "gnix_dgram_hndl_free returned %d\n",
+				  ret);
+	}
+
 	if (cm_nic->gni_cdm_hndl != NULL) {
 		status = GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
 		if (status != GNI_RC_SUCCESS) {
-			GNIX_ERR(FI_LOG_EP_CTRL, "oops, cdm destroy failed\n");
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "cdm destroy failed - %s\n",
+				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
-			free(cm_nic);
 		}
 	}
 
+	free(cm_nic);
 	return ret;
 }
 
@@ -106,7 +117,7 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	if (ret != FI_SUCCESS)
 		goto err;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u",
+	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
 		      domain->ptag, domain->cookie, cdm_id);
 
 	status = GNI_CdmCreate(cdm_id,
@@ -142,9 +153,9 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	/*
 	 * prep the cm nic's dgram component
 	 */
-	ret = gnix_dgram_hndl_alloc(domain->fabric,
-				    cm_nic,
-				    &cm_nic->dgram_hndl);
+	ret = _gnix_dgram_hndl_alloc(domain->fabric,
+				     cm_nic,
+				     &cm_nic->dgram_hndl);
 	if (ret != FI_SUCCESS)
 		goto err;
 
@@ -153,7 +164,7 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 
 err:
 	if (cm_nic->dgram_hndl)
-		gnix_dgram_hndl_free(cm_nic->dgram_hndl);
+		_gnix_dgram_hndl_free(cm_nic->dgram_hndl);
 
 	if (cm_nic->gni_cdm_hndl)
 		GNI_CdmDestroy(cm_nic->gni_cdm_hndl);
