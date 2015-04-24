@@ -149,13 +149,13 @@ static inline void sock_av_report_success(struct sock_av *av, void *context,
 }
 
 static inline void sock_av_report_error(struct sock_av *av, 
-					void *context, int index)
+					void *context, int index, int err)
 {
 	if (!av->eq) 
 		return;
 	
 	sock_eq_report_error(av->eq, &av->av_fid.fid,
-			     context, index, FI_EINVAL, -FI_EINVAL, NULL, 0);
+			     context, index, err, -err, NULL, 0);
 }
 
 static int sock_av_is_valid_address(struct sockaddr_in *addr)
@@ -183,7 +183,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 				if (!sock_av_is_valid_address(&addr[i])) {
 					if (fi_addr)
 						fi_addr[i] = FI_ADDR_NOTAVAIL;
-					sock_av_report_error(_av, context, i);
+					sock_av_report_error(_av, context, i, FI_EINVAL);
 					continue;
 				}
 
@@ -195,7 +195,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					if (idm_set(&_av->addr_idm, _av->key[j], av_addr) < 0) {
 						if (fi_addr)
 							fi_addr[i] = FI_ADDR_NOTAVAIL;
-						sock_av_report_error(_av, context, i);
+						sock_av_report_error(_av, context, i, FI_EINVAL);
 						continue;
 					}
 					
@@ -207,21 +207,28 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 			}
 		}
 		sock_av_report_success(_av, context, ret, flags);
-		return ret;
+		return (_av->attr.flags & FI_EVENT) ? 0 : ret;
 	}
 
 	for (i = 0, ret = 0; i < count; i++) {
 
 		if (_av->table_hdr->stored == _av->table_hdr->size) {
 			if (_av->table_hdr->req_sz) {
+				if (fi_addr)
+					fi_addr[i] = FI_ADDR_NOTAVAIL;
+				sock_av_report_error(_av, context, i, FI_ENOSPC);
 				SOCK_LOG_ERROR("Cannot insert to AV table\n");
-				return -FI_EINVAL;
+				continue;
 			} else{
 				new_count = _av->table_hdr->size * 2;
 				_av->key = realloc(_av->key, 
 						   sizeof(uint16_t) * new_count);
-				if (!_av->key)
-					return -FI_ENOMEM;
+				if (!_av->key) {
+					if (fi_addr)
+						fi_addr[i] = FI_ADDR_NOTAVAIL;
+					sock_av_report_error(_av, context, i, FI_ENOMEM);
+					continue;
+				}
 				
 				table_sz = sizeof(struct sock_av_table_hdr) +
 					new_count * sizeof(struct sock_av_addr);
@@ -229,14 +236,22 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 					_av->table_hdr->size * sizeof(struct sock_av_addr);
 
 				if (_av->attr.name) {
-					new_addr = mremap(_av->table_hdr, 
-							  old_sz, table_sz, 0);
-					if (new_addr == ((void*) -1))
-						return -FI_ENOMEM;
+					new_addr = sock_mremap(_av->table_hdr, 
+							       old_sz, table_sz);
+					if (new_addr == ((void*) -1)) {
+						if (fi_addr)
+							fi_addr[i] = FI_ADDR_NOTAVAIL;
+						sock_av_report_error(_av, context, i, FI_ENOMEM);
+						continue;
+					}
 				} else {
 					new_addr = realloc(_av->table_hdr, table_sz);
-					if (!new_addr)
-						return -FI_ENOMEM;
+					if (!new_addr) {
+						if (fi_addr)
+							fi_addr[i] = FI_ADDR_NOTAVAIL;
+						sock_av_report_error(_av, context, i, FI_ENOMEM);
+						continue;
+					}
 				}
 				_av->table_hdr = new_addr;
 				_av->table_hdr->size = new_count;
@@ -248,7 +263,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		if (!sock_av_is_valid_address(&addr[i])) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context, i);
+			sock_av_report_error(_av, context, i, FI_EINVAL);
 			continue;
 		}
 
@@ -262,7 +277,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		if (idm_set(&_av->addr_idm, _av->table_hdr->stored, av_addr) < 0) {
 			if (fi_addr)
 				fi_addr[i] = FI_ADDR_NOTAVAIL;
-			sock_av_report_error(_av, context, i);
+			sock_av_report_error(_av, context, i, FI_EINVAL);
 			continue;
 		}
 		
@@ -274,7 +289,7 @@ static int sock_check_table_in(struct sock_av *_av, struct sockaddr_in *addr,
 		ret++;
 	}
 	sock_av_report_success(_av, context, ret, flags);
-	return ret;
+	return (_av->attr.flags & FI_EVENT) ? 0 : ret;
 }
 
 static int sock_av_insert(struct fid_av *av, const void *addr, size_t count,
@@ -315,11 +330,6 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	struct addrinfo *result = NULL;
 	struct sock_av *_av;
 	
-	if (!service) {
-		SOCK_LOG_ERROR("Port not provided\n");
-		return -FI_EINVAL;
-	}
-	
 	_av = container_of(av, struct sock_av, av_fid);
 	memset(&sock_hints, 0, sizeof(struct addrinfo));
 	sock_hints.ai_family = AF_INET;
@@ -328,7 +338,7 @@ static int _sock_av_insertsvc(struct fid_av *av, const char *node,
 	ret = getaddrinfo(node, service, &sock_hints, &result);
 	if (ret) {
 		if (_av->eq) {
-			sock_av_report_error(_av, context, 0);
+			sock_av_report_error(_av, context, 0, FI_EINVAL);
 			sock_av_report_success(_av, context, 0, flags);
 		}
 		return -ret;
@@ -344,6 +354,11 @@ static int sock_av_insertsvc(struct fid_av *av, const char *node,
 		   const char *service, fi_addr_t *fi_addr,
 		   uint64_t flags, void *context)
 {
+	if (!service) {
+		SOCK_LOG_ERROR("Port not provided\n");
+		return -FI_EINVAL;
+	}
+
 	return _sock_av_insertsvc(av, node, service, fi_addr, flags, context, 0);
 }
 
@@ -351,7 +366,7 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		      const char *service, size_t svccnt, fi_addr_t *fi_addr,
 		      uint64_t flags, void *context)
 {
-	int ret = 0;
+	int ret = 0, success = 0, err_code = 0;
 	int var_port, var_host;
 	char base_host[FI_NAME_MAX] = {0};
 	char tmp_host[FI_NAME_MAX] = {0};
@@ -380,13 +395,15 @@ static int sock_av_insertsym(struct fid_av *av, const char *node, size_t nodecnt
 		for (j = 0; j < svccnt; j++) {
 			sprintf(tmp_host, "%s%0*d", base_host, fmt, var_host + i);
 			sprintf(tmp_port, "%d", var_port + j);
-
-			if (_sock_av_insertsvc(av, node, service, fi_addr, flags, 
-					       context, i * nodecnt + j) == 1)
-				ret++;
+			if ((ret = _sock_av_insertsvc(av, node, service, fi_addr, flags, 
+						      context, i * nodecnt + j)) == 1) {
+				success++;
+			} else {
+				err_code = ret;
+			}
 		}
 	}
-	return ret;
+	return success > 0 ? success : err_code;
 }
 
 
