@@ -158,7 +158,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			struct fi_info **info)
 {
 	int ret = 0;
-	int mode = GNIX_FAB_MODES;
+	uint64_t mode = GNIX_FAB_MODES;
 	struct fi_info *gnix_info = NULL;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
