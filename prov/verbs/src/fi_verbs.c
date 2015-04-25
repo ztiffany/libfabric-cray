@@ -894,14 +894,11 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	struct rdma_cm_id *id;
 	struct rdma_addrinfo *rai;
 	struct fi_info *fi;
-	const char *dev_name;
 	int ret;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(hints);
-		if (ret)
-			return ret;
-	}
+	ret = fi_ibv_init_info(hints);
+	if (ret)
+		return ret;
 
 	/* TODO When multiple devices are present verbs_info would be list
 	 * of info. In that case we have to choose the correct verbs_info to 
@@ -910,10 +907,8 @@ static int fi_ibv_getinfo(uint32_t version, const char *node, const char *servic
 	if (ret)
 		return ret;
 
-	if (id->verbs) {
-		dev_name = ibv_get_device_name(id->verbs->device);
-		assert(!strcmp(verbs_info->domain_attr->name, dev_name));
-	}
+	assert(!id->verbs || !strcmp(verbs_info->domain_attr->name,
+				     ibv_get_device_name(id->verbs->device)));
 
 	if (!(fi = fi_dupinfo(verbs_info))) {
 		ret = -FI_ENOMEM;
@@ -963,11 +958,11 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 	switch (bfid->fclass) {
 	case FI_CLASS_CQ:
 		/* Must bind a CQ to either RECV or SEND completions, and
-		 * the FI_COMPLETION flag is only valid when binding the
+		 * the FI_SELECTIVE_COMPLETION flag is only valid when binding the
 		 * FI_SEND CQ. */
 		if (!(flags & (FI_RECV|FI_SEND))
-				|| (flags & (FI_SEND|FI_COMPLETION))
-							== FI_COMPLETION) {
+				|| (flags & (FI_SEND|FI_SELECTIVE_COMPLETION))
+							== FI_SELECTIVE_COMPLETION) {
 			return -EINVAL;
 		}
 		if (flags & FI_RECV) {
@@ -979,8 +974,8 @@ static int fi_ibv_msg_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 			if (ep->scq)
 				return -EINVAL;
 			ep->scq = container_of(bfid, struct fi_ibv_cq, cq_fid.fid);
-			if (flags & FI_COMPLETION)
-				ep->ep_flags |= FI_COMPLETION;
+			if (flags & FI_SELECTIVE_COMPLETION)
+				ep->ep_flags |= FI_SELECTIVE_COMPLETION;
 			else
 				ep->tx_op_flags |= FI_COMPLETION;
 		}
@@ -1115,7 +1110,7 @@ fi_ibv_msg_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flag
 
 		wr.sg_list = sge;
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
@@ -1302,7 +1297,7 @@ fi_ibv_msg_ep_rma_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 			}
 		}
 	}
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	wr.sg_list = sge;
@@ -1407,7 +1402,7 @@ fi_ibv_msg_ep_rma_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	wr.wr.rdma.rkey = (uint32_t) msg->rma_iov->key;
 
 	_ep = container_of(ep, struct fi_ibv_msg_ep, ep_fid);
-	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & (FI_COMPLETION))) {
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) || (flags & (FI_COMPLETION))) {
 		wr.send_flags = IBV_SEND_SIGNALED;
 	} else {
 		wr.send_flags = 0;
@@ -1580,7 +1575,7 @@ fi_ibv_msg_ep_atomic_writemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) || (flags & FI_COMPLETION))
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) || (flags & FI_COMPLETION))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 
 	return fi_ibv_post_send(_ep->id->qp, &wr, &bad);
@@ -1723,7 +1718,7 @@ fi_ibv_msg_ep_atomic_readwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -1862,7 +1857,7 @@ fi_ibv_msg_ep_atomic_compwritemsg(struct fid_ep *ep,
 	if ((_ep->tx_op_flags & FI_INJECT)
 				|| (sizeof(uint64_t) <= _ep->inline_size))
 		wr.send_flags |= IBV_SEND_INLINE;
-	if (!(_ep->ep_flags & FI_COMPLETION) ||
+	if (!(_ep->ep_flags & FI_SELECTIVE_COMPLETION) ||
 	    (flags & (FI_COMPLETION | FI_TRANSMIT_COMPLETE)))
 		wr.send_flags |= IBV_SEND_SIGNALED;
 	if (flags & FI_REMOTE_CQ_DATA)
@@ -2204,12 +2199,6 @@ fi_ibv_open_ep(struct fid_domain *domain, struct fi_info *info,
 	if (strcmp(_domain->verbs->device->name, info->domain_attr->name))
 		return -FI_EINVAL;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(NULL);
-		if (ret)
-			return ret;
-	}
-
 	if (info->ep_attr) {
 		ret = fi_ibv_check_ep_attr(info->ep_attr, verbs_info);
 		if (ret)
@@ -2297,11 +2286,9 @@ fi_ibv_eq_cm_getinfo(struct fi_ibv_fabric *fab, struct rdma_cm_event *event)
 	struct fi_info *info;
 	struct fi_ibv_connreq *connreq;
 
-	if (!verbs_info) {
-		if(fi_ibv_init_info(NULL)) {
-			FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
-			goto err;
-		}
+	if (fi_ibv_init_info(NULL)) {
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unable to initialize verbs_info\n");
+		return NULL;
 	}
 
 	info = fi_dupinfo(verbs_info);
@@ -3293,11 +3280,10 @@ static int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric
 	struct fi_ibv_fabric *fab;
 	int ret;
 
-	if (!verbs_info) {
-		ret = fi_ibv_init_info(NULL);
-		if (ret)
-			return ret;
-	}
+	ret = fi_ibv_init_info(NULL);
+	if (ret)
+		return ret;
+
 
 	ret = fi_ibv_check_fabric_attr(attr, verbs_info);
 	if (ret)

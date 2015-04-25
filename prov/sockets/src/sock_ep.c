@@ -133,19 +133,19 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.ctx);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
@@ -158,7 +158,7 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		rx_ctx = container_of(fid, struct sock_rx_ctx, ctx.fid);
 		if (flags & FI_RECV) {
 			rx_ctx->comp.recv_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				rx_ctx->comp.recv_cq_event = 1;
 		}
 
@@ -171,19 +171,19 @@ static int sock_ctx_bind_cq(struct fid *fid, struct fid *bfid, uint64_t flags)
 		tx_ctx = container_of(fid, struct sock_tx_ctx, fid.stx.fid);
 		if (flags & FI_SEND) {
 			tx_ctx->comp.send_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			tx_ctx->comp.read_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			tx_ctx->comp.write_cq = sock_cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				tx_ctx->comp.write_cq_event = 1;
 		}
 
@@ -295,6 +295,10 @@ static int sock_ctx_enable(struct fid_ep *ep)
 			sock_pe_add_rx_ctx(rx_ctx->domain->pe, rx_ctx);
 			rx_ctx->progress = 1;
 		}
+		if (!rx_ctx->ep->listener.listener_thread &&
+		    sock_conn_listen(rx_ctx->ep)) {
+			SOCK_LOG_ERROR("failed to create listener\n");
+		}
 		return 0;
 
 	case FI_CLASS_TX_CTX:
@@ -303,6 +307,10 @@ static int sock_ctx_enable(struct fid_ep *ep)
 		if (!tx_ctx->progress) {
 			sock_pe_add_tx_ctx(tx_ctx->domain->pe, tx_ctx);
 			tx_ctx->progress = 1;
+		}
+		if (!tx_ctx->ep->listener.listener_thread &&
+		    sock_conn_listen(tx_ctx->ep)) {
+			SOCK_LOG_ERROR("failed to create listener\n");
 		}
 		return 0;
 
@@ -591,7 +599,8 @@ static int sock_ep_close(struct fid *fid)
 		SOCK_LOG_INFO("Failed to signal\n");
 	}
 	
-	if (pthread_join(sock_ep->listener.listener_thread, NULL)) {
+	if (sock_ep->listener.listener_thread && 
+	    pthread_join(sock_ep->listener.listener_thread, NULL)) {
 		SOCK_LOG_ERROR("pthread join failed (%d)\n", errno);
 	}
 	
@@ -665,25 +674,25 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 		if (flags & FI_SEND) {
 			ep->comp.send_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.send_cq_event = 1;
 		}
 
 		if (flags & FI_READ) {
 			ep->comp.read_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.read_cq_event = 1;
 		}
 
 		if (flags & FI_WRITE) {
 			ep->comp.write_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.write_cq_event = 1;
 		}
 
 		if (flags & FI_RECV) {
 			ep->comp.recv_cq = cq;
-			if (flags & FI_COMPLETION)
+			if (flags & FI_SELECTIVE_COMPLETION)
 				ep->comp.recv_cq_event = 1;
 		}
 
@@ -710,7 +719,7 @@ static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 				if (rx_ctx->ctx.fid.fclass == FI_CLASS_SRX_CTX) {
 					if (flags & FI_RECV) {
 						ep->comp.recv_cq = cq;
-						if (flags & FI_COMPLETION)
+						if (flags & FI_SELECTIVE_COMPLETION)
 							ep->comp.recv_cq_event = 1;
 					}
 
@@ -946,6 +955,10 @@ int sock_ep_enable(struct fid_ep *ep)
 			}
 		}
 	}
+
+	if (sock_ep->ep_type != FI_EP_MSG && 
+	    !sock_ep->listener.listener_thread && sock_conn_listen(sock_ep))
+		SOCK_LOG_ERROR("cannot start connection thread\n");
 	return 0;
 }
 
@@ -1461,9 +1474,6 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	}
 
   	sock_ep->domain = sock_dom;
-	if (sock_conn_listen(sock_ep))
-		goto err;
-
 	fastlock_init(&sock_ep->cm.lock);
 	if (sock_ep->ep_type == FI_EP_MSG) {
 		dlist_init(&sock_ep->cm.msg_list);

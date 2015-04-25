@@ -101,7 +101,7 @@
 			 FI_DIRECTED_RECV | FI_MULTI_RECV | \
 			 FI_SOURCE | FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
 			 FI_REMOTE_READ | FI_REMOTE_WRITE | \
-			 FI_COMPLETION | FI_RMA_EVENT | \
+			 FI_RMA_EVENT | \
 			 FI_MORE | FI_FENCE)
 
 #define SOCK_EP_MSG_CAP SOCK_EP_RDM_CAP
@@ -109,7 +109,6 @@
 #define SOCK_EP_DGRAM_CAP (FI_MSG | FI_TAGGED | \
 			   FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
 			   FI_MULTI_RECV | FI_SOURCE | FI_RECV | FI_SEND | \
-			   FI_COMPLETION | \
 			   FI_MORE | FI_FENCE)
 
 #define SOCK_EP_MSG_ORDER (FI_ORDER_RAR | FI_ORDER_RAW | FI_ORDER_RAS|	\
@@ -416,6 +415,7 @@ struct sock_cm_entry {
 struct sock_conn_listener {
 	int sock;
 	int do_listen;
+	int is_ready;
 	int signal_fds[2];
 	pthread_t listener_thread;
 	char service[NI_MAXSERV];
@@ -616,7 +616,8 @@ struct sock_atomic_req {
 struct sock_msg_response {
 	struct sock_msg_hdr msg_hdr;
 	uint16_t pe_entry_id;
-	uint8_t reserved[6];
+	int32_t err;
+	uint8_t reserved[2];
 };
 
 struct sock_rma_read_req {
@@ -694,11 +695,13 @@ struct sock_pe_entry {
 
 	uint8_t type;
 	uint8_t is_complete;
-	uint8_t reserved[6];
+	uint8_t is_error;
+	uint8_t reserved[5];
 
 	uint64_t done_len;
 	uint64_t total_len;
 	uint64_t data_len;
+	uint64_t rem;
 	struct sock_ep *ep;
 	struct sock_conn *conn;
 	struct sock_comp *comp;
@@ -1001,6 +1004,7 @@ void sock_comm_buffer_finalize(struct sock_conn *conn);
 ssize_t sock_comm_send(struct sock_conn *conn, const void *buf, size_t len);
 ssize_t sock_comm_recv(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
+ssize_t sock_comm_discard(struct sock_conn *conn, size_t len);
 ssize_t sock_comm_data_avail(struct sock_conn *conn);
 ssize_t sock_comm_flush(struct sock_conn *conn);
 
