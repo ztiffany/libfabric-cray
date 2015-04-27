@@ -84,12 +84,13 @@ extern "C" {
  */
 
 struct gnix_dgram_hndl {
-	struct gnix_cm_nic *nic;
+	struct gnix_cm_nic *cm_nic;
 	struct list_head bnd_dgram_free_list;
 	struct list_head bnd_dgram_active_list;
 	struct list_head wc_dgram_free_list;
 	struct list_head wc_dgram_active_list;
 	struct gnix_datagram *dgram_base;
+	pthread_t progress_thread;
 	int n_dgrams;
 	int n_wc_dgrams;
 };
@@ -112,6 +113,11 @@ enum gnix_dgram_buf {
 	GNIX_DGRAM_OUT_BUF
 };
 
+enum gnix_dgram_poll_type {
+	GNIX_DGRAM_NOBLOCK,
+	GNIX_DGRAM_BLOCK
+};
+
 struct gnix_datagram {
 	struct list_node        list;
 	struct list_head        *free_list_head;
@@ -124,8 +130,10 @@ struct gnix_datagram {
 	int  (*callback_fn)(struct gnix_datagram *,
 			    struct gnix_address,
 			    gni_post_state_t);
-	int index_in_buf;
-	int index_out_buf;
+	int r_index_in_buf;
+	int w_index_in_buf;
+	int r_index_out_buf;
+	int w_index_out_buf;
 	char dgram_in_buf[GNI_DATAGRAM_MAXSIZE];
 	char dgram_out_buf[GNI_DATAGRAM_MAXSIZE];
 };
@@ -136,9 +144,11 @@ struct gnix_datagram {
 
 int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 				struct gnix_cm_nic *cm_nic,
+				enum fi_progress progress,
 				struct gnix_dgram_hndl **hndl_ptr);
 int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *hndl);
-int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
+int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl,
+			enum gnix_dgram_type type,
 			struct gnix_datagram **d_ptr);
 int _gnix_dgram_free(struct gnix_datagram *d);
 int _gnix_dgram_wc_post(struct gnix_datagram *d,
@@ -150,7 +160,8 @@ ssize_t _gnix_dgram_pack_buf(struct gnix_datagram *d, enum gnix_dgram_buf,
 ssize_t _gnix_dgram_unpack_buf(struct gnix_datagram *d, enum gnix_dgram_buf,
 			   void *data, uint32_t nbytes);
 int _gnix_dgram_rewind_buf(struct gnix_datagram *d, enum gnix_dgram_buf);
-void _gnix_dgram_prog_thread_fn(void *the_arg);
+int _gnix_dgram_poll(struct gnix_dgram_hndl *hndl_ptr,
+			enum gnix_dgram_poll_type type);
 
 
 #ifdef __cplusplus

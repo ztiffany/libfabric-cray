@@ -155,6 +155,7 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	 */
 	ret = _gnix_dgram_hndl_alloc(domain->fabric,
 				     cm_nic,
+				     domain->control_progress,
 				     &cm_nic->dgram_hndl);
 	if (ret != FI_SUCCESS)
 		goto err;

@@ -226,6 +226,9 @@ struct gnix_fid_domain {
 	uint32_t gni_rx_cq_size;
 	/* additional gni cq modes to use for this domain */
 	gni_cq_mode_t gni_cq_modes;
+	/* additional gni cq modes to use for this domain */
+	enum fi_progress control_progress;
+	enum fi_progress data_progress;
 	atomic_t ref_cnt;
 };
 
