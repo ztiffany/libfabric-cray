@@ -40,6 +40,7 @@ extern "C" {
 #include <rdma/fi_eq.h>
 
 #include "gnix_queue.h"
+#include "gnix_wait.h"
 
 #define GNIX_EQ_DEFAULT_SIZE 256
 
@@ -66,12 +67,14 @@ struct gnix_eq_entry {
  */
 struct gnix_fid_eq {
 	struct fid_eq eq_fid;
-	struct gnix_fid_fabric *eq_fabric;
+	struct gnix_fid_fabric *fabric;
 
 	struct gnix_queue *events;
 	struct gnix_queue *errors;
 
 	struct fi_eq_attr attr;
+
+	struct fid_wait *wait;
 
 	fastlock_t lock;
 	atomic_t ref_cnt;
