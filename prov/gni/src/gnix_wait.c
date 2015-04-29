@@ -248,7 +248,7 @@ static int gnix_wait_wait(struct fid_wait *wait, int timeout)
 	return -FI_ENOSYS;
 }
 
-static int gnix_wait_close(struct fid *wait)
+int gnix_wait_close(struct fid *wait)
 {
 	struct gnix_fid_wait *wait_priv;
 

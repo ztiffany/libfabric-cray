@@ -346,8 +346,23 @@ static int gnix_cq_close(fid_t fid)
 	atomic_dec(&cq->domain->ref_cnt);
 	assert(atomic_get(&cq->domain->ref_cnt) >= 0);
 
-	if (cq->attr.wait_obj == FI_WAIT_SET)
+	switch (cq->attr.wait_obj) {
+	case FI_WAIT_NONE:
+		break;
+	case FI_WAIT_SET:
 		_gnix_wait_set_remove(cq->wait, &cq->cq_fid.fid);
+		break;
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		assert(cq->wait);
+		gnix_wait_close(&cq->wait->fid);
+		break;
+	default:
+		GNIX_WARN(FI_LOG_CQ, "format: %d unsupported\n.",
+			  cq->attr.wait_obj);
+		break;
+	}
 
 	_gnix_queue_destroy(cq->events);
 	_gnix_queue_destroy(cq->errors);
