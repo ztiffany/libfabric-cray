@@ -431,7 +431,20 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 			goto err;
 		}
 
+		/*
+		 * pass COMPLETED and error post state cases to
+		 * callback function if present.  If a callback funciton
+		 * is not present, the error states set ret to -FI_EIO.
+		 *
+		 * TODO should we also pass pending/remote_data states to
+		 * the callback?  maybe useful for debugging weird
+		 * datagram problems?
+		 */
 		switch (post_state) {
+		case GNI_POST_TIMEOUT:
+		case GNI_POST_TERMINATED:
+		case GNI_POST_ERROR:
+			ret = -FI_EIO;
 		case GNI_POST_COMPLETED:
 			if (dg_ptr->callback_fn != NULL) {
 				responding_addr.device_addr =
@@ -442,11 +455,6 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 							responding_addr,
 							post_state);
 			}
-			break;
-		case GNI_POST_TIMEOUT:
-		case GNI_POST_TERMINATED:
-		case GNI_POST_ERROR:
-			ret = -FI_EIO;
 			break;
 		case GNI_POST_PENDING:
 		case GNI_POST_REMOTE_DATA:
