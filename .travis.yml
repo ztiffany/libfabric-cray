@@ -4,6 +4,10 @@ compiler:
   - gcc
 
 before_install:
+  - sudo add-apt-repository ppa:ubuntu-toolchain-r/test -y;
+    sudo apt-get update;
+    sudo apt-get install gcc-4.9;
+    export CC="gcc-4.9";
   - git clone https://github.com/bturrubiates/ugni-build.git;
     pushd ugni-build;
     tar -xf ugni.build.tgz;
@@ -11,9 +15,16 @@ before_install:
     sudo tar -C / -xzvf opt-cray.tgz;
     source set_pkg_path.sh;
     popd;
-    popd
+    popd;
+  - git clone https://github.com/Snaipe/Criterion.git;
+    pushd Criterion;
+    git checkout v1.1.0;
+    ./autogen.sh;
+    ./configure --prefix=/usr;
+    sudo make install;
+    popd;
 
 os:
   - linux
 
-script: ./autogen.sh && ./configure && make V=1
+script: ./autogen.sh && ./configure --with-criterion="/usr" && make V=1
