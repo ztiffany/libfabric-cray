@@ -293,8 +293,23 @@ static int gnix_eq_close(struct fid *fid)
 
 	fastlock_destroy(&eq->lock);
 
-	if (eq->attr.wait_obj == FI_WAIT_SET)
+	switch (eq->attr.wait_obj) {
+	case FI_WAIT_NONE:
+		break;
+	case FI_WAIT_SET:
 		_gnix_wait_set_remove(eq->wait, &eq->eq_fid.fid);
+		break;
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		assert(eq->wait);
+		gnix_wait_close(&eq->wait->fid);
+		break;
+	default:
+		GNIX_WARN(FI_LOG_EQ, "format: %d unsupported\n.",
+			  eq->attr.wait_obj);
+		break;
+	}
 
 	_gnix_queue_destroy(eq->events);
 	_gnix_queue_destroy(eq->errors);
