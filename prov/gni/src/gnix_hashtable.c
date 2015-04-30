@@ -322,6 +322,8 @@ static inline void __gnix_ht_resize_hashtable(gnix_hashtable_t *ht)
 
 	__gnix_ht_rehash_table(ht, old_table, old_size);
 
+	free(old_table);
+
 	pthread_rwlock_unlock(&ht->ht_lock);
 }
 
@@ -444,6 +446,8 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry)
 
 	if (ret == 0)
 		atomic_inc(&ht->ht_elements);
+	else
+		free(list_entry);
 
 	return ret;
 }

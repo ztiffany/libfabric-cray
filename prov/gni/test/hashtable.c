@@ -522,7 +522,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 	gnix_test_element_t *test_elements;
 	gnix_test_element_t *found = NULL, *to_find = NULL;
 	gnix_test_element_t *item;
-	gnix_bitmap_t allocated;
+	gnix_bitmap_t allocated = {0};
 	int test_size = 8 * 1024;
 	int bitmap_size = 64 * test_size;
 	int lookups = 128 * 1024;
