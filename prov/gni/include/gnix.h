@@ -432,6 +432,8 @@ struct gnix_work_req {
 extern const char gnix_fab_name[];
 extern const char gnix_dom_name[];
 extern uint32_t gnix_cdm_modes;
+extern atomic_t gnix_id_counter;
+
 
 /*
  * linked list helpers

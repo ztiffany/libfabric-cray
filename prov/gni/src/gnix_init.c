@@ -37,3 +37,21 @@
 #include "gnix.h"
 #include "fi.h"
 #include "prov.h"
+
+/**
+ * @note  To make sure that static linking will work, there must be at
+ *        least one symbol in the file that requires gnix_init.o to have
+ *        to be linked in when building the executable. This insures the
+ *        ctor will run even with static linking.
+ */
+
+atomic_t gnix_id_counter;
+
+/**
+ * Initialization function for performing global setup
+ */
+__attribute__((constructor))
+void gnix_init(void)
+{
+	atomic_initialize(&gnix_id_counter, 0);
+}
