@@ -42,9 +42,6 @@
 #include "gnix_datagram.h"
 #include "gnix_cm_nic.h"
 
-
-atomic_t gnix_id_counter;
-
 /*
  * generate a cdm_id, use the 16 LSB of base_id from domain
  * with 16 MSBs being obtained from atomic increment of

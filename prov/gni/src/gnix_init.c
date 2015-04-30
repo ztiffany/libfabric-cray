@@ -37,3 +37,14 @@
 #include "gnix.h"
 #include "fi.h"
 #include "prov.h"
+
+atomic_t gnix_id_counter;
+
+/**
+ * Initialization function for performing global setup
+ */
+__attribute__((constructor))
+void gnix_init(void)
+{
+	atomic_initialize(&gnix_id_counter, 0);
+}

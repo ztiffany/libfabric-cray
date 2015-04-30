@@ -36,7 +36,6 @@
 
 #include "gnix.h"
 
-extern atomic_t gnix_id_counter;
 /*
  * prototypes for GNI CM NIC methods
  */

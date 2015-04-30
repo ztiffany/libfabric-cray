@@ -415,7 +415,5 @@ GNI_INI
 		provider = &gnix_prov;
 	}
 
-	atomic_initialize(&gnix_id_counter, 0);
-
 	return (provider);
 }
