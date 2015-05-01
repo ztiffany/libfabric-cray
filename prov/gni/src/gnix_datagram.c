@@ -42,6 +42,8 @@
 #include <string.h>
 #include <stdio.h>
 #include <assert.h>
+#include <pthread.h>
+#include <signal.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_cm.h>
@@ -56,6 +58,88 @@
 #include "gnix_util.h"
 
 
+/*******************************************************************************
+ * Helper functions.
+ ******************************************************************************/
+
+/*
+ * this function is intended to be invoked as an argument to pthread_create,
+ */
+static void *_gnix_dgram_prog_thread_fn(void *the_arg)
+{
+	int ret = FI_SUCCESS, prev_state;
+	struct gnix_dgram_hndl *the_hndl = (struct gnix_dgram_hndl *)the_arg;
+	sigset_t  sigmask;
+
+	/*
+	 * TODO: need to add a lock?
+	 */
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	/*
+	 * temporarily disable cancelability while we set up
+	 * some stuff
+	 */
+
+	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &prev_state);
+
+	/*
+	 * help out Cray core-spec, say we're not an app thread
+	 * and can be run on core-spec cpus.
+	 */
+
+	ret = _gnix_task_is_not_app();
+	if (ret)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+		"_gnix_task_is_not_app call returned %d\n", ret);
+
+	/*
+	 * block all signals, don't want this thread to catch
+	 * signals that may be for app threads
+	 */
+
+	memset(&sigmask, 0, sizeof(sigset_t));
+	ret = sigfillset(&sigmask);
+	if (ret) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+		"sigfillset call returned %d\n", ret);
+	} else {
+
+		ret = pthread_sigmask(SIG_SETMASK,
+					&sigmask, NULL);
+		if (ret)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_sigmask call returned %d\n", ret);
+	}
+
+	/*
+	 * okay now we're ready to be cancelable.
+	 */
+
+	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &prev_state);
+
+	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+
+retry:
+	ret = _gnix_dgram_poll(the_hndl, GNIX_DGRAM_BLOCK);
+	if ((ret == -FI_ETIMEDOUT) || (ret == FI_SUCCESS))
+		goto retry;
+
+	GNIX_WARN(FI_LOG_EP_CTRL,
+		"_gni_dgram_poll returned %d\n", ret);
+
+	/*
+	 * TODO: need to be able to enqueue events on to the
+	 * ep associated with the cm_nic.
+	 */
+	return NULL;
+}
+
+/*******************************************************************************
+ * API function implementations.
+ ******************************************************************************/
+
 /*
  * function to pack data into datagram in/out buffers.
  * On success, returns number of bytes packed in to the buffer,
@@ -69,10 +153,10 @@ ssize_t _gnix_dgram_pack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
 
 	assert(d != NULL);
 	if (buf == GNIX_DGRAM_IN_BUF) {
-		index = d->index_in_buf;
+		index = d->w_index_in_buf;
 		dptr = &d->dgram_in_buf[index];
 	} else {
-		index = d->index_out_buf;
+		index = d->w_index_out_buf;
 		dptr = &d->dgram_out_buf[index];
 	}
 
@@ -85,16 +169,16 @@ ssize_t _gnix_dgram_pack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
 	memcpy(dptr, data, nbytes);
 
 	if (buf == GNIX_DGRAM_IN_BUF)
-		d->index_in_buf += nbytes;
+		d->w_index_in_buf += nbytes;
 	else
-		d->index_out_buf += nbytes;
+		d->w_index_out_buf += nbytes;
 
 	return nbytes;
 }
 
 
 /*
- * function to unpack data fromdatagram in/out buffers.
+ * function to unpack data from datagram in/out buffers.
  * On success, returns number of bytes unpacked,
  * otherwise -FI errno.
  */
@@ -106,10 +190,10 @@ ssize_t _gnix_dgram_unpack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
 
 	assert(d != NULL);
 	if (buf == GNIX_DGRAM_IN_BUF) {
-		index = d->index_in_buf;
+		index = d->r_index_in_buf;
 		dptr = &d->dgram_in_buf[index];
 	} else {
-		index = d->index_out_buf;
+		index = d->r_index_out_buf;
 		dptr = &d->dgram_out_buf[index];
 	}
 
@@ -124,9 +208,9 @@ ssize_t _gnix_dgram_unpack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
 	memcpy(data, dptr, nbytes);
 
 	if (buf == GNIX_DGRAM_IN_BUF)
-		d->index_in_buf += nbytes;
+		d->r_index_in_buf += nbytes;
 	else
-		d->index_out_buf += nbytes;
+		d->r_index_out_buf += nbytes;
 
 	return nbytes;
 }
@@ -138,10 +222,13 @@ ssize_t _gnix_dgram_unpack_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf,
 int _gnix_dgram_rewind_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf)
 {
 	assert(d != NULL);
-	if (buf == GNIX_DGRAM_IN_BUF)
-		d->index_in_buf = 0;
-	else
-		d->index_out_buf = 0;
+	if (buf == GNIX_DGRAM_IN_BUF) {
+		d->r_index_in_buf = 0;
+		d->w_index_in_buf = 0;
+	} else {
+		d->r_index_out_buf = 0;
+		d->w_index_out_buf = 0;
+	}
 	return FI_SUCCESS;
 }
 
@@ -171,8 +258,12 @@ int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 		}
 	}
 
-	if (d != NULL)
-		d->index_in_buf = d->index_out_buf = 0;
+	if (d != NULL) {
+		d->r_index_in_buf = 0;
+		d->w_index_in_buf = 0;
+		d->w_index_in_buf = 0;
+		d->w_index_out_buf = 0;
+	}
 
 	*d_ptr = d;
 	return ret;
@@ -236,6 +327,8 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 			    d->target_addr.device_addr,
 			    d->target_addr.cdm_id);
 	if (status != GNI_RC_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			"GNI_EpBind returned %s\n", gni_err_str[status]);
 		ret = gnixu_to_fi_errno(status);
 		goto err;
 	}
@@ -258,6 +351,9 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 	fastlock_release(&d->nic->lock);
 	if ((status != GNI_RC_SUCCESS) &&
 		(status != GNI_RC_ERROR_RESOURCE)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			    "GNI_EpBind returned %s\n",
+			     gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 	}
@@ -277,8 +373,105 @@ err:
 	return ret;
 }
 
+int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
+			enum gnix_dgram_poll_type type)
+{
+	int ret = FI_SUCCESS;
+	gni_return_t status;
+	gni_post_state_t post_state = GNI_POST_PENDING;
+	uint32_t responding_remote_id;
+	unsigned int responding_remote_addr;
+	struct gnix_datagram *dg_ptr;
+	uint64_t datagram_id = 0UL;
+	struct gnix_cm_nic *cm_nic = NULL;
+	struct gnix_address responding_addr;
+
+	cm_nic = hndl->cm_nic;
+	assert(cm_nic != NULL);
+
+	if (type == GNIX_DGRAM_BLOCK) {
+		status = GNI_PostdataProbeWaitById(cm_nic->gni_nic_hndl,
+						   -1,
+						   &datagram_id);
+		if ((status != GNI_RC_SUCCESS) &&
+			(status  != GNI_RC_TIMEOUT)) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	} else {
+		status = GNI_PostDataProbeById(cm_nic->gni_nic_hndl,
+						   &datagram_id);
+		if ((status != GNI_RC_SUCCESS) &&
+			(status  != GNI_RC_NO_MATCH)) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
+	if (status == GNI_RC_SUCCESS) {
+
+		dg_ptr = (struct gnix_datagram *)datagram_id;
+		assert(dg_ptr != NULL);
+
+		assert((dg_ptr->state == GNIX_DGRAM_STATE_CONNECTING) ||
+			(dg_ptr->state = GNIX_DGRAM_STATE_LISTENING));
+
+		/*
+		 * do need to take lock here
+		 */
+		fastlock_acquire(&cm_nic->lock);
+		status = GNI_EpPostDataTestById(dg_ptr->gni_ep,
+						datagram_id,
+						&post_state,
+						&responding_remote_addr,
+						&responding_remote_id);
+		fastlock_release(&cm_nic->lock);
+		if (status != GNI_RC_SUCCESS) {
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+
+		/*
+		 * pass COMPLETED and error post state cases to
+		 * callback function if present.  If a callback funciton
+		 * is not present, the error states set ret to -FI_EIO.
+		 *
+		 * TODO should we also pass pending/remote_data states to
+		 * the callback?  maybe useful for debugging weird
+		 * datagram problems?
+		 */
+		switch (post_state) {
+		case GNI_POST_TIMEOUT:
+		case GNI_POST_TERMINATED:
+		case GNI_POST_ERROR:
+			ret = -FI_EIO;
+		case GNI_POST_COMPLETED:
+			if (dg_ptr->callback_fn != NULL) {
+				responding_addr.device_addr =
+					responding_remote_addr;
+				responding_addr.cdm_id =
+					responding_remote_id;
+				ret = dg_ptr->callback_fn((void *)datagram_id,
+							responding_addr,
+							post_state);
+			}
+			break;
+		case GNI_POST_PENDING:
+		case GNI_POST_REMOTE_DATA:
+			break;
+		default:
+			assert(0); /* TODO: need something better */
+			break;
+		}
+	}
+
+err:
+	return ret;
+}
+
 int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 				struct gnix_cm_nic *cm_nic,
+				enum fi_progress progress,
 				struct gnix_dgram_hndl **hndl_ptr)
 {
 	int i, ret = FI_SUCCESS;
@@ -295,7 +488,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 		goto err;
 	}
 
-	the_hndl->nic = cm_nic;
+	the_hndl->cm_nic = cm_nic;
 
 	list_head_init(&the_hndl->bnd_dgram_free_list);
 	list_head_init(&the_hndl->bnd_dgram_active_list);
@@ -332,6 +525,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	for (i = 0; i < fabric->n_bnd_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
+		dg_ptr->nic = cm_nic;
 		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
@@ -350,6 +544,7 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	for (i = 0; i < fabric->n_wc_dgrams; i++, dg_ptr++) {
 		dg_ptr->d_hndl = the_hndl;
+		dg_ptr->nic = cm_nic;
 		status = GNI_EpCreate(cm_nic->gni_nic_hndl,
 					NULL,
 					&dg_ptr->gni_ep);
@@ -362,11 +557,44 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 		dg_ptr->free_list_head = &the_hndl->wc_dgram_free_list;
 	}
 
+	/*
+	 * check the progress model, if FI_PROGRESS_AUTO, fire off
+	 * a progress thread
+	 */
+
+	if (progress == FI_PROGRESS_AUTO) {
+
+		/*
+		 * tell CLE job container that next thread should be
+		 * runnable anywhere in the cpuset, don't treat as
+		 * an error if one is returned, may have perf issues
+		 * though...
+		 */
+
+		ret = _gnix_job_disable_affinity_apply();
+		if (ret != 0)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"_gnix_job_disable call returned %d\n", ret);
+
+		ret = pthread_create(&the_hndl->progress_thread,
+				     NULL,
+				     _gnix_dgram_prog_thread_fn,
+				     (void *)the_hndl);
+		if (ret) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_ceate  call returned %d\n", ret);
+			goto err1;
+		}
+	}
+
 	the_hndl->dgram_base = dgram_base;
 
 	*hndl_ptr = the_hndl;
 
 	return ret;
+
+err1:
+
 err:
 	dg_ptr = dgram_base;
 	if (dg_ptr) {
@@ -440,6 +668,29 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 			GNI_EpDestroy(dg_ptr->gni_ep);
 	}
 
+	/*
+	 * cancel the progress thread, if any
+	 */
+
+	if (the_hndl->progress_thread) {
+
+		ret = pthread_cancel(the_hndl->progress_thread);
+		if ((ret != 0) && (ret != ESRCH)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_cancel returned %d\n", ret);
+			goto err;
+		}
+
+		ret = pthread_join(the_hndl->progress_thread,
+				   NULL);
+		if ((ret != 0) && (ret != ESRCH)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			"pthread_join returned %d\n", ret);
+			goto err;
+		}
+
+		GNIX_INFO(FI_LOG_EP_CTRL, "pthread_join returned %d\n", ret);
+	}
 err:
 	if (ret != FI_SUCCESS)
 		GNIX_INFO(FI_LOG_EP_CTRL, "returning error %d\n", ret);
@@ -447,87 +698,4 @@ err:
 	free(the_hndl);
 
 	return ret;
-}
-
-/*
- * this function is intended to be invoked as an argument to pthread_create,
- */
-void _gnix_dgram_prog_thread_fn(void *the_arg)
-{
-	int ret = FI_SUCCESS;
-	gni_return_t status;
-	gni_post_state_t post_state = GNI_POST_PENDING;
-	uint32_t responding_remote_id;
-	unsigned int responding_remote_addr;
-	struct gnix_datagram *dg_ptr;
-	uint64_t datagram_id = 0UL;
-	struct gnix_cm_nic *nic = (struct gnix_cm_nic *)the_arg;
-	struct gnix_address responding_addr;
-
-	/*
-	 * block waiting for datagrams - no need for a lock here
-	 */
-
-	status = GNI_PostdataProbeWaitById(nic->gni_nic_hndl,
-					   -1,
-					   &datagram_id);
-	if ((status != GNI_RC_SUCCESS) && (status  != GNI_RC_TIMEOUT)) {
-		ret = gnixu_to_fi_errno(status);
-		/* TODO: need to post something on event queue */
-	}
-
-	if (status == GNI_RC_SUCCESS) {
-
-		dg_ptr = (struct gnix_datagram *)datagram_id;
-		assert(dg_ptr != NULL);
-
-		assert((dg_ptr->state == GNIX_DGRAM_STATE_CONNECTING) ||
-			(dg_ptr->state = GNIX_DGRAM_STATE_LISTENING));
-
-		/*
-		 * do need to take lock here
-		 */
-		fastlock_acquire(&nic->lock);
-		status = GNI_EpPostDataTestById(dg_ptr->gni_ep,
-						datagram_id,
-						&post_state,
-						&responding_remote_addr,
-						&responding_remote_id);
-		fastlock_release(&nic->lock);
-		if (status != GNI_RC_SUCCESS) {
-			ret = gnixu_to_fi_errno(status);
-			/* TODO: need to post something on event queue */
-		}
-
-		switch (post_state) {
-		case GNI_POST_COMPLETED:
-			if (dg_ptr->callback_fn != NULL) {
-				responding_addr.device_addr =
-					responding_remote_addr;
-				responding_addr.cdm_id =
-					responding_remote_id;
-				ret = dg_ptr->callback_fn((void *)datagram_id,
-							responding_addr,
-							post_state);
-				if (ret != FI_SUCCESS) {
-					ret = gnixu_to_fi_errno(status);
-					/* TODO: need to post something
-					 * on event queue
-					 * */
-				}
-			}
-			break;
-		case GNI_POST_TIMEOUT:
-		case GNI_POST_TERMINATED:
-		case GNI_POST_ERROR:
-			ret = -FI_EIO;
-			break;
-		case GNI_POST_PENDING:
-		case GNI_POST_REMOTE_DATA:
-			break;
-		default:
-			assert(0);
-			break;
-		}
-	}
 }

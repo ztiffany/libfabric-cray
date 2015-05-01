@@ -222,6 +222,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->domain_fid.ops = &gnix_domain_ops;
 	domain->domain_fid.mr = &gnix_domain_mr_ops;
 
+	domain->control_progress = info->domain_attr->control_progress;
+	domain->data_progress = info->domain_attr->data_progress;
+
 	*dom = &domain->domain_fid;
 	return FI_SUCCESS;
 

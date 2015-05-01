@@ -37,6 +37,7 @@
 #include <poll.h>
 #include <time.h>
 #include <string.h>
+#include <pthread.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -223,4 +224,135 @@ Test(dg_allocation, dgram_alloc_wc_bnd)
 		ret = _gnix_dgram_free(dgram_ptr);
 		assert(!ret, "_gnix_dgram_free bnd");
 	}
+}
+
+Test(dg_allocation, dgram_pack_unpack)
+{
+	int ret = 0;
+	ssize_t len;
+	struct gnix_cm_nic *cm_nic;
+	struct gnix_datagram *dgram_ptr;
+	char in_buf[] = "0xdeadbeef";
+	char out_buf[GNI_DATAGRAM_MAXSIZE];
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+	cm_nic = ep_priv->cm_nic;
+	assert((cm_nic != NULL), "cm_nic NULL");
+
+	assert((cm_nic->dgram_hndl != NULL), "cm_nic dgram_hndl NULL");
+
+	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_BND,
+				&dgram_ptr);
+	assert(!ret, "_gnix_dgram_alloc bnd");
+
+	/*
+	 * check pack/unpack for GNIX_DGRAM_IN_BUF
+	 */
+
+	len = _gnix_dgram_pack_buf(dgram_ptr, GNIX_DGRAM_IN_BUF,
+					in_buf, sizeof(in_buf));
+	assert(len > 0);
+	assert_eq(len, (ssize_t)sizeof(in_buf));
+
+	len = _gnix_dgram_unpack_buf(dgram_ptr, GNIX_DGRAM_IN_BUF,
+					out_buf, sizeof(in_buf));
+	assert(len > 0);
+	assert_eq(len, (ssize_t)sizeof(in_buf));
+
+	assert_eq(0, strcmp(in_buf, out_buf));
+
+	/*
+	 * check pack/unpack for GNIX_DGRAM_OUT_BUF
+	 */
+
+	len = _gnix_dgram_pack_buf(dgram_ptr, GNIX_DGRAM_OUT_BUF,
+					in_buf, sizeof(in_buf));
+	assert(len > 0);
+	assert_eq(len, (ssize_t)sizeof(in_buf));
+
+	memset(out_buf, 0, sizeof(out_buf));
+
+	len = _gnix_dgram_unpack_buf(dgram_ptr, GNIX_DGRAM_OUT_BUF,
+					out_buf, sizeof(in_buf));
+	assert(len > 0);
+	assert_eq(len, (ssize_t)sizeof(in_buf));
+
+	assert_eq(0, strcmp(in_buf, out_buf));
+
+	ret = _gnix_dgram_free(dgram_ptr);
+	assert(!ret, "_gnix_dgram_free bnd");
+
+}
+
+static struct gnix_address local_address;
+static int dgram_match;
+
+static int dgram_callback_fn(struct gnix_datagram *the_dgram,
+			     struct gnix_address where_from,
+			     gni_post_state_t dgram_state)
+{
+	if (dgram_state != GNI_POST_COMPLETED) {
+		fprintf(stderr, "dgram_state check failed %s %d\n",
+			__func__, __LINE__);
+		return -FI_EIO;
+	}
+
+	if ((where_from.device_addr != local_address.device_addr) ||
+	    (where_from.cdm_id != local_address.cdm_id)) {
+		fprintf(stderr, "where from check failed %s %d\n",
+			__func__, __LINE__);
+		return -FI_EIO;
+	}
+
+	dgram_match = 1;
+	return 0;
+}
+
+Test(dg_allocation,  dgram_wc_post_exchg)
+{
+	int ret = 0;
+	gni_return_t status;
+	struct gnix_cm_nic *cm_nic;
+	struct gnix_datagram *dgram_wc, *dgram_bnd;
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+	cm_nic = ep_priv->cm_nic;
+	assert((cm_nic != NULL), "cm_nic NULL");
+
+	assert((cm_nic->dgram_hndl != NULL), "cm_nic dgram_hndl NULL");
+
+	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_WC,
+				&dgram_wc);
+	assert(!ret, "_gnix_dgram_alloc wc");
+
+	dgram_wc->callback_fn = dgram_callback_fn;
+	ret = _gnix_dgram_wc_post(dgram_wc, &status);
+	assert((ret == 0), "_gnix_dgram_alloc wc");
+
+	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_BND,
+				&dgram_bnd);
+	assert((ret == 0), "_gnix_dgram_alloc bnd");
+
+	dgram_bnd->target_addr.device_addr = cm_nic->device_addr;
+	dgram_bnd->target_addr.cdm_id = cm_nic->cdm_id;
+
+	local_address.device_addr = cm_nic->device_addr;
+	local_address.cdm_id = cm_nic->cdm_id;
+
+	dgram_bnd->callback_fn = dgram_callback_fn;
+	ret = _gnix_dgram_bnd_post(dgram_bnd, &status);
+	assert(ret == 0);
+
+	/*
+	 * progress auto, don't need to do anything
+	 */
+	while (dgram_match != 1)
+		pthread_yield();
+
+	ret = _gnix_dgram_free(dgram_bnd);
+	assert(!ret, "_gnix_dgram_free bnd");
+
+	ret = _gnix_dgram_free(dgram_wc);
+	assert(!ret, "_gnix_dgram_free wc");
+
 }
