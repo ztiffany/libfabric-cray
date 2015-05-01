@@ -418,9 +418,6 @@ static int __gnix_ht_lf_resize(
 	if (!new_tbl)
 		return -ENOMEM;
 
-	for (i = 0; i < new_size; ++i)
-		__gnix_ht_init_lf_list_head(&new_tbl[i]);
-
 	old_tbl = ht->ht_lf_tbl;
 	ht->ht_lf_tbl = new_tbl;
 	ht->ht_size = new_size;
