@@ -10,8 +10,9 @@
 
 #include <stdint.h>
 #include <pthread.h>
-#include <errno.h>
-#include "fi.h"
+#include <fi.h>
+#include <rdma/fi_errno.h>
+
 
 #define GNIX_BITMAP_BUCKET_BITS 6
 #define GNIX_BITMAP_BUCKET_LENGTH (1ULL << GNIX_BITMAP_BUCKET_BITS)
@@ -198,8 +199,10 @@ static inline int test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   nbits   number of bits to request space for
  * @return  0       on success
- * @return  -EINVAL if bitmap is already initialized, or 0 is given as nbits
- * @return  -ENOMEM if there isn't sufficient memory available to create bitmap
+ * @return  -FI_EINVAL if bitmap is already initialized, or 0 is given
+ *          as nbits
+ * @return  -FI_ENOMEM if there isn't sufficient memory available to
+ *          create bitmap
  */
 int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
 
@@ -215,8 +218,8 @@ int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   nbits   number of bits to resize the bitmap to
  * @return  0       on success
- * @return  -EINVAL if the bitmap hasn't been allocated yet or nbits == 0
- * @return  -ENOMEM if there wasn't sufficient memory to expand the bitmap.
+ * @return  -FI_EINVAL if the bitmap hasn't been allocated yet or nbits == 0
+ * @return  -FI_ENOMEM if there wasn't sufficient memory to expand the bitmap.
  */
 int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
 
@@ -225,7 +228,7 @@ int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
  *
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @return  0       on success
- * @return  -EINVAL if the internal resources are uninitialized or already free
+ * @return  -FI_EINVAL if the internal resources are uninitialized or already free
  */
 int free_bitmap(gnix_bitmap_t *bitmap);
 
@@ -243,7 +246,7 @@ void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value);
  * @param   bitmap	a gnix_bitmap pointer to the bitmap struct
  * @return  index	on success, returns an index s.t.
  *                    0 <= index < bitmap->length
- * @return  -EAGAIN on failure to find a zero bit
+ * @return  -FI_EAGAIN on failure to find a zero bit
  */
 int find_first_zero_bit(gnix_bitmap_t *bitmap);
 
@@ -253,7 +256,7 @@ int find_first_zero_bit(gnix_bitmap_t *bitmap);
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @return  index   on success, returns a index s.t.
  *                    0 <= index < bitmap->length
- * @return  -EAGAIN on failure to find a set bit
+ * @return  -FI_EAGAIN on failure to find a set bit
  */
 int find_first_set_bit(gnix_bitmap_t *bitmap);
 
@@ -276,7 +279,7 @@ static inline int bitmap_full(gnix_bitmap_t *bitmap)
  */
 static inline int bitmap_empty(gnix_bitmap_t *bitmap)
 {
-	return find_first_set_bit(bitmap) == -EAGAIN;
+	return find_first_set_bit(bitmap) == -FI_EAGAIN;
 }
 
 #endif /* BITMAP_H_ */
