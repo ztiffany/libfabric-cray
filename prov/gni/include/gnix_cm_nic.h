@@ -36,13 +36,84 @@
 
 #include "gnix.h"
 
-/*
- * prototypes for GNI CM NIC methods
+/**
+ * @brief GNI provider connection management (cm) nic structure
+ *
+ * @var lock           spin lock for protecting calls in to GNI using
+ *                     gni_nic_hndl
+ * @var gni_cdm_hndl   underlying gni cdm handle associated with this nic
+ * @var gni_nic_hndl   underlying gni nic handle associated with this nic
+ * @var dgram_hndl     handle to dgram allocator associated with this nic
+ * @var domain         GNI provider domain associated with this nic
+ * @var wq_lock        spin lock for cm nic's work queue
+ * @var cm_nic_wq      workqueue associated with this nic
+ * @var cdm_id         cdm_id of this nic.  This is unique
+ *                     on the local node for a given ptag/cookie.
+ * @var ptag           ptag of this nic.
+ * @var cookie         cookie of this nic.
+ * @var device_id      local Aries device id associated with this nic.
+ *                     This will always be zero unless Cray starts
+ *                     selling systems with multiple aries/node.
+ * @var device_addr    Aries network address associated with this nic.
  */
+struct gnix_cm_nic {
+	fastlock_t lock;
+	gni_cdm_handle_t gni_cdm_hndl;
+	gni_nic_handle_t gni_nic_hndl;
+	struct gnix_dgram_hndl *dgram_hndl;
+	struct gnix_fid_domain *domain;
+	fastlock_t wq_lock;
+	struct list_head cm_nic_wq;
+	enum fi_progress control_progress;
+	uint32_t cdm_id;
+	uint8_t ptag;
+	uint32_t cookie;
+	uint32_t device_id;
+	uint32_t device_addr;
+};
 
-int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
-int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
+/**
+ * @brief Frees a previously allocated cm nic structure
+ *
+ * @param[in] cm_nic   pointer to previously allocated gnix_cm_nic struct
+ * @return             FI_SUCCESS on success, -EINVAL on invalid argument
+ */
+int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
+
+/**
+ * @brief allocates a cm nic structure
+ *
+ * @param[in]  domain   pointer to a previously allocated gnix_fid_domain struct
+ * @param[out] cm_nic   pointer to address where address of the allocated
+ *                      cm nic structure should be returned
+ * @return              FI_SUCCESS on success, -EINVAL on invalid argument,
+ *                      -FI_ENOMEM if insufficient memory to allocate
+ *                      the cm nic structure
+ */
+int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 			struct gnix_cm_nic **cm_nic);
-int gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id);
+
+/**
+ * @brief poke the cm nic's progress engine
+ *
+ * @param[in] cm_nic   pointer to previously allocated gnix_cm_nic struct
+ * @return              FI_SUCCESS on success, -EINVAL on invalid argument.
+ *                     Other error codes may be returned depending on the
+ *                     error codes returned from callback function
+ *                     that had been added to the nic's work queue.
+ */
+int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic);
+
+/**
+ * @brief function to return a unique 32 bit id for the ptag/cookie associated
+ *        with the supplied domain.
+ *
+ * @param[in]  domain  pointer to a previously allocated gnix_fid_domain struct
+ * @param[out] id      Unique id on the local node for the given ptag/cookie
+ *                     associated with the supplied domain.
+ * @return             FI_SUCCESS on success.  Currently no other error codes
+ *                     can be returned.
+ */
+int _gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id);
 
 #endif /* _GNIX_CM_NIC_H_ */

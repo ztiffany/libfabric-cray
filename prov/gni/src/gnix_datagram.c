@@ -56,6 +56,7 @@
 #include "gnix.h"
 #include "gnix_datagram.h"
 #include "gnix_util.h"
+#include "gnix_cm_nic.h"
 
 
 /*******************************************************************************

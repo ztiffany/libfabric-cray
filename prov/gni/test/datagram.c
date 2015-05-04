@@ -50,6 +50,7 @@
 #include <inttypes.h>
 
 #include "gnix_datagram.h"
+#include "gnix_cm_nic.h"
 
 #ifdef assert
 #undef assert
@@ -80,6 +81,32 @@ void dg_setup(void)
 	assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	assert(!ret, "fi_fabric");
+
+	ret = fi_domain(fab, fi, &dom, NULL);
+	assert(!ret, "fi_domain");
+
+	ret = fi_endpoint(dom, fi, &ep, NULL);
+	assert(!ret, "fi_endpoint");
+}
+
+void dg_setup_prog_manual(void)
+{
+	int ret = 0;
+
+	hints = fi_allocinfo();
+	assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->cq_data_size = 4;
+	hints->domain_attr->control_progress = FI_PROGRESS_MANUAL;
+	hints->mode = ~0;
+
+	hints->fabric_attr->name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
+	assert(!ret, "fi_getinfo");
+
+       ret = fi_fabric(fi->fabric_attr, &fab, NULL);
 	assert(!ret, "fi_fabric");
 
 	ret = fi_domain(fab, fi, &dom, NULL);
@@ -346,8 +373,65 @@ Test(dg_allocation,  dgram_wc_post_exchg)
 	/*
 	 * progress auto, don't need to do anything
 	 */
-	while (dgram_match != 1)
+	while (dgram_match != 1) {
+		ret = _gnix_cm_nic_progress(cm_nic);
+		assert(ret == 0);
 		pthread_yield();
+	}
+
+	ret = _gnix_dgram_free(dgram_bnd);
+	assert(!ret, "_gnix_dgram_free bnd");
+
+	ret = _gnix_dgram_free(dgram_wc);
+	assert(!ret, "_gnix_dgram_free wc");
+
+}
+
+Test(dg_allocation,  dgram_wc_post_exchg_manual, .init = dg_setup_prog_manual)
+{
+	int ret = 0;
+	gni_return_t status;
+	struct gnix_cm_nic *cm_nic;
+	struct gnix_datagram *dgram_wc, *dgram_bnd;
+
+	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
+	cm_nic = ep_priv->cm_nic;
+	assert((cm_nic != NULL), "cm_nic NULL");
+
+	assert(cm_nic->control_progress == FI_PROGRESS_MANUAL);
+
+	assert((cm_nic->dgram_hndl != NULL), "cm_nic dgram_hndl NULL");
+
+	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_WC,
+				&dgram_wc);
+	assert(!ret, "_gnix_dgram_alloc wc");
+
+	dgram_wc->callback_fn = dgram_callback_fn;
+	ret = _gnix_dgram_wc_post(dgram_wc, &status);
+	assert((ret == 0), "_gnix_dgram_alloc wc");
+
+	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl, GNIX_DGRAM_BND,
+				&dgram_bnd);
+	assert((ret == 0), "_gnix_dgram_alloc bnd");
+
+	dgram_bnd->target_addr.device_addr = cm_nic->device_addr;
+	dgram_bnd->target_addr.cdm_id = cm_nic->cdm_id;
+
+	local_address.device_addr = cm_nic->device_addr;
+	local_address.cdm_id = cm_nic->cdm_id;
+
+	dgram_bnd->callback_fn = dgram_callback_fn;
+	ret = _gnix_dgram_bnd_post(dgram_bnd, &status);
+	assert(ret == 0);
+
+	/*
+	 * progress auto, don't need to do anything
+	 */
+	while (dgram_match != 1) {
+		ret = _gnix_cm_nic_progress(cm_nic);
+		assert(ret == 0);
+		pthread_yield();
+	}
 
 	ret = _gnix_dgram_free(dgram_bnd);
 	assert(!ret, "_gnix_dgram_free bnd");

@@ -204,7 +204,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err_w_lock;
 		}
 
-		ret = gnix_get_new_cdm_id(domain, &fake_cdm_id);
+		ret = _gnix_get_new_cdm_id(domain, &fake_cdm_id);
 		if (ret != FI_SUCCESS)
 			goto err_w_lock;
 
