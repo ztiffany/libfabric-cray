@@ -48,7 +48,7 @@
  * a local variable.
  */
 
-int gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
+int _gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
 {
 	uint32_t cdm_id;
 	int v;
@@ -60,7 +60,79 @@ int gnix_get_new_cdm_id(struct gnix_fid_domain *domain, uint32_t *id)
 	return FI_SUCCESS;
 }
 
-int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
+int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic)
+{
+	int ret = FI_SUCCESS;
+	int complete;
+	struct gnix_work_req *p = NULL;
+
+	/*
+	 * if we're doing FI_PROGRESS_MANUAL,
+	 * see what's going on inside kgni's datagram
+	 * box...
+	 */
+
+	if (cm_nic->control_progress == FI_PROGRESS_MANUAL) {
+		ret = _gnix_dgram_poll(cm_nic->dgram_hndl,
+					  GNIX_DGRAM_NOBLOCK);
+		if (ret != FI_SUCCESS)
+			goto err;
+	}
+
+	/*
+	 * do a quick check if queue doesn't have anything yet,
+	 * don't need this to be atomic
+	 */
+
+check_again:
+	if (list_empty(&cm_nic->cm_nic_wq))
+		return ret;
+
+	/*
+	 * okay, stuff to do, lock work queue,
+	 * dequeue head, unlock, process work element,
+	 * if it doesn't compete, put back at the tail
+	 * of the queue.
+	 */
+
+	fastlock_acquire(&cm_nic->wq_lock);
+	p = list_top(&cm_nic->cm_nic_wq, struct gnix_work_req, list);
+	if (p == NULL) {
+		fastlock_release(&cm_nic->wq_lock);
+		return ret;
+	}
+
+	gnix_list_del_init(&p->list);
+	fastlock_release(&cm_nic->wq_lock);
+
+	assert(p->progress_func);
+
+	ret = p->progress_func(p->data, &complete);
+	if (ret != FI_SUCCESS) {
+		/*
+		 * TODO: fix this
+		 */
+	}
+
+	if (complete == 1) {
+		if (p->completer_func) {
+			ret = p->completer_func(p->completer_data);
+			free(p);
+			if (ret != FI_SUCCESS)
+				goto err;
+		}
+		goto check_again;
+	} else {
+		fastlock_acquire(&cm_nic->wq_lock);
+		list_add_tail(&cm_nic->cm_nic_wq, &p->list);
+		fastlock_release(&cm_nic->wq_lock);
+	}
+
+err:
+	return ret;
+}
+
+int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t status;
@@ -92,7 +164,7 @@ int gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 	return ret;
 }
 
-int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
+int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 			struct gnix_cm_nic **cm_nic_ptr)
 {
 	int ret = FI_SUCCESS;
@@ -110,7 +182,7 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		goto err;
 	}
 
-	ret = gnix_get_new_cdm_id(domain, &cdm_id);
+	ret = _gnix_get_new_cdm_id(domain, &cdm_id);
 	if (ret != FI_SUCCESS)
 		goto err;
 
@@ -145,7 +217,9 @@ int gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->ptag = domain->ptag;
 	cm_nic->cookie = domain->cookie;
 	cm_nic->device_addr = device_addr;
+	cm_nic->control_progress = domain->control_progress;
 	fastlock_init(&cm_nic->lock);
+	fastlock_init(&cm_nic->wq_lock);
 
 	/*
 	 * prep the cm nic's dgram component

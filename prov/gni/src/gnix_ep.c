@@ -442,7 +442,7 @@ static int gnix_ep_close(fid_t fid)
 
 	cm_nic = ep->cm_nic;
 	assert(cm_nic != NULL);
-	gnix_cm_nic_free(cm_nic);
+	_gnix_cm_nic_free(cm_nic);
 
 	nic = ep->nic;
 	assert(nic != NULL);
@@ -552,7 +552,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ep_priv->vc_hash_hndl = NULL;
-		ret = gnix_cm_nic_alloc(domain_priv,
+		ret = _gnix_cm_nic_alloc(domain_priv,
 					 &ep_priv->cm_nic);
 		if (ret != FI_SUCCESS)
 			goto err;

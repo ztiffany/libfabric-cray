@@ -297,29 +297,6 @@ struct gnix_fid_av {
 };
 
 /*
- * work queue struct, used for handling delay ops, etc. in a generic wat
- */
-/*
- * gnix cm nic struct - to be used only for GNI_EpPostData, etc.
- */
-
-
-struct gnix_cm_nic {
-	fastlock_t lock;
-	gni_cdm_handle_t gni_cdm_hndl;
-	gni_nic_handle_t gni_nic_hndl;
-	struct gnix_dgram_hndl *dgram_hndl;
-	struct gnix_fid_domain *domain;
-	/* work queue for cm nic */
-	struct list_head cm_nic_wq;
-	uint32_t cdm_id;
-	uint8_t ptag;
-	uint32_t cookie;
-	uint32_t device_id;
-	uint32_t device_addr;
-};
-
-/*
  * defines for connection state for gnix VC
  */
 enum gnix_vc_conn_state {
