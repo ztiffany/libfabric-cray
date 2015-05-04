@@ -72,7 +72,7 @@ void __gnix_hashtable_test_uninitialized(void)
 {
 	assert(test_ht->ht_state == GNIX_HT_STATE_UNINITIALIZED);
 	assert(test_ht->ht_size == 0);
-	assert(test_ht->ht_tbl == NULL);
+	assert(test_ht->ht_lf_tbl == NULL);
 }
 
 void __gnix_hashtable_test_setup_bare(void)
@@ -97,7 +97,7 @@ void __gnix_hashtable_test_initialized(void)
 	assert(test_ht->ht_state == GNIX_HT_STATE_READY);
 	assert(atomic_get(&test_ht->ht_elements) == 0);
 	assert(test_ht->ht_size == test_ht->ht_attr.ht_initial_size);
-	assert(test_ht->ht_tbl != NULL);
+	assert(test_ht->ht_lf_tbl != NULL);
 }
 
 void __gnix_hashtable_test_destroyed_clean(void)
@@ -105,7 +105,7 @@ void __gnix_hashtable_test_destroyed_clean(void)
 	assert(test_ht->ht_state == GNIX_HT_STATE_DEAD);
 	assert(atomic_get(&test_ht->ht_elements) == 0);
 	assert(test_ht->ht_size == 0);
-	assert(test_ht->ht_tbl == NULL);
+	assert(test_ht->ht_lf_tbl == NULL);
 }
 
 void __gnix_hashtable_destroy(void)
@@ -163,6 +163,21 @@ Test(gnix_hashtable_basic, uninitialized)
 Test(gnix_hashtable_basic, initialize_ht)
 {
 	__gnix_hashtable_initialize();
+}
+
+Test(gnix_hashtable_basic, initialize_locked_ht)
+{
+	int ret;
+	gnix_hashtable_attr_t attr;
+
+	memcpy(&attr, &default_attr, sizeof(gnix_hashtable_attr_t));
+
+	attr.ht_internal_locking = 1;
+
+	ret = gnix_ht_init(test_ht, &attr);
+	assert(ret == 0);
+
+	__gnix_hashtable_test_initialized();
 }
 
 Test(gnix_hashtable_basic, err_initialize_twice)

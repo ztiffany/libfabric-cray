@@ -53,10 +53,14 @@ typedef struct gnix_ht_entry {
 	void *value;
 } gnix_ht_entry_t;
 
-typedef struct gnix_ht_list_head {
+typedef struct gnix_ht_lk_lh {
 	pthread_rwlock_t lh_lock;
-	struct list_head bucket_list;
-} gnix_ht_list_head_t;
+	struct list_head head;
+} gnix_ht_lk_lh_t;
+
+typedef struct gnix_ht_lf_lh {
+	struct list_head head;
+} gnix_ht_lf_lh_t;
 
 enum gnix_ht_increase {
 	GNIX_HT_INCREASE_ADD = 0,
@@ -86,6 +90,8 @@ enum gnix_ht_increase {
  *                           internally. Using the same seed value and the same
  *                           insertion pattern will allow for repeatable
  *                           results.
+ * @var ht_internal_locking  if non-zero, uses a version of the hash table with
+ *                           internal locking implemented
  */
 typedef struct gnix_hashtable_attr {
 	int ht_initial_size;
@@ -94,7 +100,20 @@ typedef struct gnix_hashtable_attr {
 	int ht_increase_type;
 	int ht_collision_thresh;
 	uint64_t ht_hash_seed;
+	int ht_internal_locking;
 } gnix_hashtable_attr_t;
+
+struct gnix_hashtable;
+
+typedef struct gnix_hashtable_ops {
+	int   (*init)(struct gnix_hashtable *);
+	int   (*destroy)(struct gnix_hashtable *);
+	int   (*insert)(struct gnix_hashtable *, gnix_ht_entry_t *, uint64_t *);
+	int   (*remove)(struct gnix_hashtable *, gnix_ht_key_t);
+	void *(*lookup)(struct gnix_hashtable *, gnix_ht_key_t);
+	int   (*resize)(struct gnix_hashtable *, int, int);
+	struct list_head *(*retrieve_list)(struct gnix_hashtable *, int bucket);
+} gnix_hashtable_ops_t;
 
 /**
  * Hashtable structure
@@ -104,9 +123,10 @@ typedef struct gnix_hashtable_attr {
  * @var ht_state       internal state mechanism for detecting valid state
  *                     transitions
  * @var ht_attr        attributes for the hash map to follow after init
+ * @var ht_ops         function table for internal hash map calls
  * @var ht_elements    number of items in the hash map
  * @var ht_collisions  number of insertion collisions since the last resize
- * @var ht_ops         number of insertions since the last resize
+ * @var ht_insertions  number of insertions since the last resize
  * @var ht_size        number of hash buckets
  * @var ht_tbl         array of hash buckets
  */
@@ -114,11 +134,15 @@ typedef struct gnix_hashtable {
 	pthread_rwlock_t ht_lock;
 	gnix_ht_state_e ht_state;
 	gnix_hashtable_attr_t ht_attr;
+	gnix_hashtable_ops_t *ht_ops;
 	atomic_t ht_elements;
 	atomic_t ht_collisions;
-	atomic_t ht_ops;
+	atomic_t ht_insertions;
 	int ht_size;
-	gnix_ht_list_head_t *ht_tbl;
+	union {
+		gnix_ht_lf_lh_t *ht_lf_tbl;
+		gnix_ht_lk_lh_t *ht_lk_tbl;
+	};
 } gnix_hashtable_t;
 
 /**
