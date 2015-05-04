@@ -41,7 +41,7 @@
 #include <stdint.h>
 #include <sys/time.h>
 
-#include <errno.h>
+#include <rdma/fi_errno.h>
 #include <gnix_bitmap.h>
 
 #ifdef assert
@@ -172,7 +172,7 @@ Test(gnix_bitmap, initialize_0)
 	int ret;
 
 	ret = alloc_bitmap(test_bitmap, 0);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 
 	call_free_bitmap = 0;
 }
@@ -184,7 +184,7 @@ Test(gnix_bitmap, already_initialized)
 	__test_initialize_bitmap(test_bitmap, 128);
 
 	ret = alloc_bitmap(test_bitmap, 128);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 
 	call_free_bitmap = 0;
 }
@@ -201,7 +201,7 @@ Test(gnix_bitmap, destroy_bitmap_uninitialized)
 	int ret;
 
 	ret = free_bitmap(test_bitmap);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	expect(test_bitmap->arr == NULL);
 	expect(test_bitmap->length == 0);
 	expect(test_bitmap->state == GNIX_BITMAP_STATE_UNINITIALIZED);
@@ -216,7 +216,7 @@ Test(gnix_bitmap, destroy_bitmap_already_freed)
 	__test_free_bitmap_clean(test_bitmap);
 
 	ret = free_bitmap(test_bitmap);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	expect(test_bitmap->arr == NULL);
 	expect(test_bitmap->length == 0);
 	expect(test_bitmap->state == GNIX_BITMAP_STATE_FREE);
@@ -367,7 +367,7 @@ Test(gnix_bitmap, ffs_clean_bitmap)
 {
 	__test_initialize_bitmap_clean(test_bitmap, 64);
 
-	assert(find_first_set_bit(test_bitmap) == -EAGAIN);
+	assert(find_first_set_bit(test_bitmap) == -FI_EAGAIN);
 }
 
 Test(gnix_bitmap, ffs_first_bit_set)
@@ -406,7 +406,7 @@ Test(gnix_bitmap, ffz_full_bitmap)
 		assert(test_bit(test_bitmap, i));
 	}
 
-	assert(find_first_zero_bit(test_bitmap) == -EAGAIN);
+	assert(find_first_zero_bit(test_bitmap) == -FI_EAGAIN);
 }
 
 Test(gnix_bitmap, ffz_first_half_set)

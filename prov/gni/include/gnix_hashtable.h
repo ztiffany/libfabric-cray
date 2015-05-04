@@ -36,7 +36,7 @@
 #include <stdint.h>
 #include <pthread.h>
 
-#include "fi.h"
+#include <fi.h>
 #include "prov/gni/ccan/list.h"
 
 typedef uint64_t gnix_ht_key_t;
@@ -150,8 +150,8 @@ typedef struct gnix_hashtable {
  *
  * @param ht      pointer to the hash table structure
  * @param attr    pointer to the hash table attributes to initialize with
- * @return        0 on success, -EINVAL on initialization error, or -ENOMEM
- *                if allocation of the bucket array fails
+ * @return        0 on success, -FI_EINVAL on initialization error, or
+ *                -FI_ENOMEM if allocation of the bucket array fails
  */
 int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr);
 
@@ -159,8 +159,8 @@ int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr);
  * Destroys the hash table
  *
  * @param ht      pointer to the hash table structure
- * @return        0 on success, -EINVAL upon passing an uninitialized or dead
- *                structure
+ * @return        0 on success, -FI_EINVAL upon passing an uninitialized
+ *                or dead structure
  */
 int gnix_ht_destroy(gnix_hashtable_t *ht);
 
@@ -170,9 +170,9 @@ int gnix_ht_destroy(gnix_hashtable_t *ht);
  * @param ht      pointer to the hash table structure
  * @param key     key used to hash the entry
  * @param entry   entry to be stored
- * @return        0 on success, -ENOSPC when another entry with the same key
- *                exists in the hashtable, or -EINVAL when called on a dead or
- *                uninitialized hash table
+ * @return        0 on success, -FI_ENOSPC when another entry with the same key
+ *                exists in the hashtable, or -FI_EINVAL when called on a
+ *                dead or uninitialized hash table
  */
 int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry);
 
@@ -181,9 +181,9 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry);
  *
  * @param ht      pointer to the hash table structure
  * @param key     key used to hash the entry
- * @return        0 on success, -ENOENT when the key doesn't exist in the hash
- *                table, or -EINVAL when called on a dead or uninitialized hash
- *                table
+ * @return        0 on success, -FI_ENOENT when the key doesn't exist in
+ *                the hash table, or -FI_EINVAL when called on a dead or
+ *                uninitialized hash table
  */
 int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key);
 

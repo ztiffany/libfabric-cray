@@ -31,11 +31,11 @@
  */
 
 #include <stdlib.h>
-#include <errno.h>
 #include <stdio.h>
+#include <rdma/fi_errno.h>
 
-#include <gnix_hashtable.h>
-#include <prov/gni/fasthash/fasthash.h>
+#include "gnix_hashtable.h"
+#include "fasthash/fasthash.h"
 
 #define __GNIX_HT_INITIAL_SIZE 128
 #define __GNIX_HT_MAXIMUM_SIZE 1024
@@ -113,24 +113,24 @@ static int __gnix_ht_check_attr_sanity(gnix_hashtable_attr_t *attr)
 {
 	if (attr->ht_initial_size == 0 ||
 			attr->ht_initial_size > attr->ht_maximum_size)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (attr->ht_maximum_size == 0)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (attr->ht_increase_step == 0)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (!(attr->ht_increase_type == GNIX_HT_INCREASE_ADD ||
 			attr->ht_increase_type == GNIX_HT_INCREASE_MULT))
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (attr->ht_increase_step == 1 &&
 			attr->ht_increase_type == GNIX_HT_INCREASE_MULT)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (attr->ht_collision_thresh == 0)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	return 0;
 }
@@ -223,7 +223,7 @@ static inline int __gnix_ht_insert_list(
 	if (!found) {
 		list_add_tail(head, &ht_entry->entry);
 	} else {
-		return -ENOSPC;
+		return -FI_ENOSPC;
 	}
 
 	return 0;
@@ -237,7 +237,7 @@ static inline int __gnix_ht_remove_list(
 
 	ht_entry = __gnix_ht_lookup_entry(head, key, NULL);
 	if (!ht_entry) {
-		return -ENOENT;
+		return -FI_ENOENT;
 	}
 	__gnix_ht_delete_entry(ht_entry);
 
@@ -328,7 +328,7 @@ static int __gnix_ht_lf_init(gnix_hashtable_t *ht)
 {
 	ht->ht_lf_tbl = __gnix_ht_lf_init_new_table(ht->ht_size);
 	if (!ht->ht_lf_tbl)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	__gnix_ht_common_init(ht);
 
@@ -412,11 +412,11 @@ static int __gnix_ht_lf_resize(
 	int i;
 
 	if (ht->ht_size != old_size)
-		return -EBUSY;
+		return -FI_EBUSY;
 
 	new_tbl = __gnix_ht_lf_init_new_table(new_size);
 	if (!new_tbl)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	old_tbl = ht->ht_lf_tbl;
 	ht->ht_lf_tbl = new_tbl;
@@ -454,7 +454,7 @@ static int __gnix_ht_lk_init(gnix_hashtable_t *ht)
 	ht->ht_lk_tbl = __gnix_ht_lk_init_new_table(ht->ht_size);
 	if (!ht->ht_lk_tbl) {
 		pthread_rwlock_unlock(&ht->ht_lock);
-		return -ENOMEM;
+		return -FI_ENOMEM;
 	}
 
 	__gnix_ht_common_init(ht);
@@ -470,7 +470,7 @@ static int __gnix_ht_lk_destroy(gnix_hashtable_t *ht)
 	gnix_ht_lk_lh_t *lh;
 
 	if (ht->ht_state != GNIX_HT_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	pthread_rwlock_wrlock(&ht->ht_lock);
 
@@ -576,13 +576,13 @@ static int __gnix_ht_lk_resize(
 	pthread_rwlock_wrlock(&ht->ht_lock);
 	if (ht->ht_size != old_size) {
 		pthread_rwlock_unlock(&ht->ht_lock);
-		return -EBUSY;
+		return -FI_EBUSY;
 	}
 
 	new_tbl = __gnix_ht_lk_init_new_table(new_size);
 	if (!new_tbl) {
 		pthread_rwlock_unlock(&ht->ht_lock);
-		return -ENOMEM;
+		return -FI_ENOMEM;
 	}
 
 	old_tbl = ht->ht_lk_tbl;
@@ -613,7 +613,7 @@ int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
 	}
 
 	if (ht->ht_state == GNIX_HT_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	memcpy(&ht->ht_attr, tbl_attr, sizeof(gnix_hashtable_attr_t));
 	ht->ht_size = ht->ht_attr.ht_initial_size;
@@ -629,7 +629,7 @@ int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
 int gnix_ht_destroy(gnix_hashtable_t *ht)
 {
 	if (ht->ht_state != GNIX_HT_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	return ht->ht_ops->destroy(ht);
 }
@@ -642,11 +642,11 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *value)
 	gnix_ht_entry_t *list_entry;
 
 	if (ht->ht_state != GNIX_HT_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	list_entry = calloc(1, sizeof(gnix_ht_entry_t));
 	if (!list_entry)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	list_entry->value = value;
 	list_entry->key = key;
@@ -681,7 +681,7 @@ int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
 	int ret;
 
 	if (ht->ht_state != GNIX_HT_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	ret = ht->ht_ops->remove(ht, key);
 

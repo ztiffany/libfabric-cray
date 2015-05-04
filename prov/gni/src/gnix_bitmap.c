@@ -6,7 +6,8 @@
  */
 
 #include <stdlib.h>
-#include <errno.h>
+#include <rdma/fi_errno.h>
+
 #include "gnix_bitmap.h"
 
 int find_first_zero_bit(gnix_bitmap_t *bitmap)
@@ -29,7 +30,7 @@ int find_first_zero_bit(gnix_bitmap_t *bitmap)
 		}
 	}
 
-	return -EAGAIN;
+	return -FI_EAGAIN;
 }
 
 int find_first_set_bit(gnix_bitmap_t *bitmap)
@@ -51,7 +52,7 @@ int find_first_set_bit(gnix_bitmap_t *bitmap)
 		}
 	}
 
-	return -EAGAIN;
+	return -FI_EAGAIN;
 }
 
 void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value)
@@ -69,15 +70,15 @@ int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 	int i;
 
 	if (bitmap->state == GNIX_BITMAP_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (bitmap->length != 0 || nbits == 0)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	bitmap->arr = calloc(GNIX_BITMAP_BLOCKS(nbits),
 			sizeof(gnix_bitmap_block_t));
 	if (!bitmap->arr)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	bitmap->length = nbits;
 
@@ -96,17 +97,17 @@ int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 	int i;
 
 	if (bitmap->state != GNIX_BITMAP_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	if (nbits == 0 || bitmap->arr == NULL)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	new_allocation = realloc(bitmap->arr,
 			(blocks_to_allocate *
 					sizeof(gnix_bitmap_block_t)));
 
 	if (!new_allocation)
-		return -ENOMEM;
+		return -FI_ENOMEM;
 
 	bitmap->arr = new_allocation;
 
@@ -128,7 +129,7 @@ int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 int free_bitmap(gnix_bitmap_t *bitmap)
 {
 	if (bitmap->state != GNIX_BITMAP_STATE_READY)
-		return -EINVAL;
+		return -FI_EINVAL;
 
 	bitmap->length = 0;
 	if (bitmap->arr) {

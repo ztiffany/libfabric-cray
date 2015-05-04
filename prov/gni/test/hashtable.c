@@ -35,7 +35,7 @@
 #include <stdio.h>
 #include <stdint.h>
 
-#include <errno.h>
+#include <rdma/fi_errno.h>
 #include <gnix_hashtable.h>
 #include <gnix_bitmap.h>
 
@@ -187,7 +187,7 @@ Test(gnix_hashtable_basic, err_initialize_twice)
 	__gnix_hashtable_initialize();
 
 	ret = gnix_ht_init(test_ht, NULL);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_initialized();
 }
 
@@ -201,7 +201,7 @@ Test(gnix_hashtable_basic, err_invalid_initial_size_0)
 	attr.ht_initial_size = 0;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -215,7 +215,7 @@ Test(gnix_hashtable_basic, err_invalid_initial_size_gt_max)
 	attr.ht_initial_size = attr.ht_maximum_size * 2;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -229,7 +229,7 @@ Test(gnix_hashtable_basic, err_invalid_max_size)
 	attr.ht_maximum_size = 0;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -243,7 +243,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_step_all)
 	attr.ht_increase_step = 0;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -258,7 +258,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_step_mult)
 	attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -272,7 +272,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_type)
 	attr.ht_increase_type = -1;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -286,7 +286,7 @@ Test(gnix_hashtable_basic, err_invalid_collision)
 	attr.ht_collision_thresh = 0;
 
 	ret = gnix_ht_init(test_ht, &attr);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
 
@@ -295,7 +295,7 @@ Test(gnix_hashtable_basic, err_destroy_uninitialized)
 	int ret;
 
 	ret = gnix_ht_destroy(test_ht);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 
 	__gnix_hashtable_test_uninitialized();
 }
@@ -316,7 +316,7 @@ Test(gnix_hashtable_basic, destroy_twice)
 	__gnix_hashtable_destroy();
 
 	ret = gnix_ht_destroy(test_ht);
-	assert(ret == -EINVAL);
+	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_destroyed_clean();
 }
 
@@ -340,7 +340,7 @@ Test(gnix_hashtable_advanced, insert_duplicate)
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 
 	ret = gnix_ht_insert(test_ht, simple_element->key, simple_element);
-	assert(ret == -ENOSPC);
+	assert(ret == -FI_ENOSPC);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 }
