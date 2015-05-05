@@ -265,7 +265,7 @@ static inline void __gnix_ht_rehash_list(
 	}
 }
 
-static inline void __gnix_ht_resize_hashtable(gnix_hashtable_t *ht)
+static inline void __gnix_ht_resize_hashtable_inc(gnix_hashtable_t *ht)
 {
 	int old_size = ht->ht_size;
 	int new_size;
@@ -277,6 +277,27 @@ static inline void __gnix_ht_resize_hashtable(gnix_hashtable_t *ht)
 		new_size = old_size * ht->ht_attr.ht_increase_step;
 
 	new_size = MIN(new_size, ht->ht_attr.ht_maximum_size);
+
+	/* ignore ret code for now. In the future, we might provide an info
+	 *   if the hash table wont resize. It is generally a performance
+	 *   issue if we cannot, and not really a bug.
+	 */
+
+	ht->ht_ops->resize(ht, new_size, old_size);
+}
+
+static inline void __gnix_ht_resize_hashtable_dec(gnix_hashtable_t *ht)
+{
+	int old_size = ht->ht_size;
+	int new_size;
+
+	/* set up the new bucket list size */
+	if (ht->ht_attr.ht_increase_type == GNIX_HT_INCREASE_ADD)
+		new_size = old_size - ht->ht_attr.ht_increase_step;
+	else
+		new_size = old_size / ht->ht_attr.ht_increase_step;
+
+	new_size = MAX(new_size, ht->ht_attr.ht_initial_size);
 
 	/* ignore ret code for now. In the future, we might provide an info
 	 *   if the hash table wont resize. It is generally a performance
@@ -599,6 +620,23 @@ static int __gnix_ht_lk_resize(
 	return 0;
 }
 
+static inline int __gnix_ht_should_decrease_size(gnix_hashtable_t *ht)
+{
+	int decrease;
+	int desired_thresh = (ht->ht_attr.ht_collision_thresh >> 2) * 3;
+
+	if (ht->ht_attr.ht_increase_type == GNIX_HT_INCREASE_ADD)
+		decrease = ht->ht_attr.ht_increase_step;
+	else
+		decrease = ht->ht_size / ht->ht_attr.ht_increase_step;
+
+	/* This is just an approximation of the collision rate since we
+	 *     don't track collisions on removal
+	 */
+	return ((atomic_get(&ht->ht_elements) * 100) /
+			(ht->ht_size - decrease)) <= desired_thresh;
+}
+
 int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
 {
 	int ret;
@@ -667,7 +705,7 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *value)
 			atomic_set(&ht->ht_collisions, 0);
 			atomic_set(&ht->ht_insertions, 0);
 
-			__gnix_ht_resize_hashtable(ht);
+			__gnix_ht_resize_hashtable_inc(ht);
 		}
 	}
 
@@ -685,8 +723,22 @@ int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
 
 	ret = ht->ht_ops->remove(ht, key);
 
-	if (ret == 0)
+	/* on success, we may have to resize */
+	if (ret == 0) {
 		atomic_dec(&ht->ht_elements);
+
+		if (ht->ht_size > ht->ht_attr.ht_initial_size &&
+				__gnix_ht_should_decrease_size(ht)) {
+
+			/* since we are resizing the table,
+			 * reset the collision info
+			 */
+			atomic_set(&ht->ht_collisions, 0);
+			atomic_set(&ht->ht_insertions, 0);
+
+			__gnix_ht_resize_hashtable_dec(ht);
+		}
+	}
 
 	return ret;
 }

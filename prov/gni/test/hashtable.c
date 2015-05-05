@@ -425,6 +425,49 @@ Test(gnix_hashtable_advanced, insert_1024_remove_1024)
 	assert(atomic_get(&test_ht->ht_elements) == 0);
 }
 
+Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
+{
+	int ret, i;
+	int nelem = 2048;
+	gnix_test_element_t test_elements[2048];
+	gnix_test_element_t *item;
+
+	srand(time(NULL));
+
+	for (i = 0; i < nelem; ++i) {
+		item = &test_elements[i];
+		item->key = i;
+		item->val = rand() % (1024 * 1024);
+		item->magic = __GNIX_MAGIC_VALUE;
+	}
+
+	for (i = 0; i < nelem; ++i) {
+		item = &test_elements[i];
+		ret = gnix_ht_insert(test_ht,
+				item->key, item);
+		assert(ret == 0);
+		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
+	}
+
+	assert(test_ht->ht_size > test_ht->ht_attr.ht_initial_size);
+
+	for (i = nelem - 1; i >= 0; --i) {
+		item = &test_elements[i];
+		assert(i == item->key);
+
+		ret = gnix_ht_remove(test_ht,
+				item->key);
+		assert(ret == 0);
+		assert(atomic_get(&test_ht->ht_elements) == i);
+	}
+
+	assert(atomic_get(&test_ht->ht_elements) == 0);
+	/* on default settings, the hash table should resize to initial on
+	 *   removal of all elements
+	 */
+	assert(test_ht->ht_size == test_ht->ht_attr.ht_initial_size);
+}
+
 
 Test(gnix_hashtable_advanced, insert_1_lookup_pass)
 {
