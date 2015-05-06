@@ -26,7 +26,10 @@ int find_first_zero_bit(gnix_bitmap_t *bitmap)
 			   established there is an unset bit */
 			pos += ffsll(value) - 1;
 
-			return pos;
+			if (pos < bitmap->length)
+				return pos;
+			else
+				return -FI_EAGAIN;
 		}
 	}
 
@@ -48,8 +51,10 @@ int find_first_set_bit(gnix_bitmap_t *bitmap)
 			   established there is a set bit */
 			pos += ffsll(value) - 1;
 
-			return pos;
-		}
+			if (pos < bitmap->length)
+				return pos;
+			else
+				return -FI_EAGAIN;		}
 	}
 
 	return -FI_EAGAIN;
