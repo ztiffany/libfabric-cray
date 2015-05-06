@@ -527,3 +527,31 @@ Test(gnix_bitmap, performance_set_test_random)
 	expect(secs < 1);
 }
 
+Test(gnix_bitmap, fill_bitmap_60_ffz_eagain)
+{
+	int i;
+
+	__test_initialize_bitmap_clean(test_bitmap, 60);
+
+	for (i = 0; i < 60; ++i)
+		set_bit(test_bitmap, i);
+
+	assert(find_first_zero_bit(test_bitmap) == -FI_EAGAIN);
+}
+
+Test(gnix_bitmap, fill_bitmap_60_ffs_eagain)
+{
+	int i;
+
+	__test_initialize_bitmap_clean(test_bitmap, 60);
+
+	/* this will succeed because set_bit doesn't account for bounds of the
+	 *   bitmap as the user should be responsible for handling the bitmap
+	 *   properly.
+	 */
+	for (i = 60; i < 64; ++i)
+		set_bit(test_bitmap, i);
+
+	assert(find_first_set_bit(test_bitmap) == -FI_EAGAIN);
+}
+
