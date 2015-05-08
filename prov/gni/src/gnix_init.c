@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. Allrights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
@@ -46,6 +46,7 @@
  */
 
 atomic_t gnix_id_counter;
+atomic_t file_id_counter;
 
 /**
  * Initialization function for performing global setup
@@ -54,4 +55,5 @@ __attribute__((constructor))
 void gnix_init(void)
 {
 	atomic_initialize(&gnix_id_counter, 0);
+	atomic_initialize(&file_id_counter, 0);
 }

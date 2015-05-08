@@ -155,7 +155,7 @@ static inline struct gnix_tx_descriptor *
 {
 	struct gnix_tx_descriptor *tx_desc;
 
-	assert((id >= 0) && (id < nic->max_tx_desc_id));
+	assert((desc_id >= 0) && (desc_id < nic->max_tx_desc_id));
 	tx_desc = &nic->tx_desc_base[desc_id];
 	return tx_desc;
 }
