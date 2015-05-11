@@ -74,7 +74,7 @@ static int gnix_domain_close(fid_t fid)
 	}
 
 	/*
-	 * if non-zero refcnt, there are eps and/or an eq associated
+	 * if non-zero refcnt, there are eps, mrs, and/or an eq associated
 	 * with this domain which have not been closed.
 	 */
 
