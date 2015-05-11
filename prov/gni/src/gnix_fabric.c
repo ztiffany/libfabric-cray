@@ -159,6 +159,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 {
 	int ret = 0;
 	uint64_t mode = GNIX_FAB_MODES;
+	enum fi_progress control_progress = FI_PROGRESS_AUTO;
+	enum fi_progress data_progress = FI_PROGRESS_AUTO;
 	struct fi_info *gnix_info = NULL;
 	struct gnix_ep_name *dest_addr = NULL;
 	struct gnix_ep_name *src_addr = NULL;
@@ -266,12 +268,25 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		/* TODO: use hardwared kgni const string */
-		if (hints->domain_attr && hints->domain_attr->name &&
-		    strncmp(hints->domain_attr->name, gnix_dom_name,
-			    strlen(gnix_dom_name))) {
-			ret = -FI_ENODATA;
-			goto err;
+		if (hints->domain_attr) {
+			if (hints->domain_attr->name &&
+			    strncmp(hints->domain_attr->name, gnix_dom_name,
+				    strlen(gnix_dom_name))) {
+				ret = -FI_ENODATA;
+				goto err;
+			}
+
+			if (hints->domain_attr->control_progress !=
+				FI_PROGRESS_UNSPEC)
+				control_progress =
+					hints->domain_attr->control_progress;
+
+			if (hints->domain_attr->data_progress !=
+				FI_PROGRESS_UNSPEC)
+				data_progress =
+					hints->domain_attr->control_progress;
 		}
+
 
 		if (hints->ep_attr) {
 			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
@@ -304,8 +319,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->ep_attr->rx_ctx_cnt = 1;
 
 	gnix_info->domain_attr->threading = FI_THREAD_COMPLETION;
-	gnix_info->domain_attr->control_progress = FI_PROGRESS_AUTO;
-	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
+	gnix_info->domain_attr->control_progress = control_progress;
+	gnix_info->domain_attr->data_progress = data_progress;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
 	/* only one aries per node */
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
