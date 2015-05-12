@@ -293,7 +293,6 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	int fi_gnix_access = 0;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
-	gni_cq_handle_t cq_hndl = NULL;
 	gni_return_t grc = GNI_RC_INVALID_PARAM;
 
 	if (flags)
@@ -330,7 +329,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		 *         set the cq_hndl pointer
 		 */
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uintptr_t) buf, len,
-					cq_hndl, fi_gnix_access,
+					NULL, fi_gnix_access,
 					-1, &mr->md.mem_hndl);
 		if (grc == GNI_RC_SUCCESS)
 			break;
