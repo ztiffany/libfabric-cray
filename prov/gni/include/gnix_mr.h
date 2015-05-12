@@ -13,13 +13,6 @@
 #include "gnix_util.h"
 #include "ccan/list.h"
 
-typedef struct gnix_mr {
-	struct gnix_fid_mem_desc md;
-	struct gnix_nic *nic;
-	atomic_t ref_cnt;
-	struct list_node entry;
-} gnix_mr_t;
-
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
 #define GNIX_MR_MDD_BITS GNIX_MR_PAGE_SHIFT

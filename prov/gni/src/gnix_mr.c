@@ -212,19 +212,19 @@ static inline int64_t sign_extend(uint64_t val, int len)
 	return r;
 }
 
-static inline gni_return_t __gnix_mr_free(gnix_mr_t *mr)
+static inline gni_return_t __gnix_mr_free(struct gnix_fid_mem_desc *mr)
 {
 	gni_return_t ret;
 
-	ret = GNI_MemDeregister(mr->nic->gni_nic_hndl, &mr->md.mem_hndl);
+	ret = GNI_MemDeregister(mr->nic->gni_nic_hndl, &mr->mem_hndl);
 	if (ret == GNI_RC_SUCCESS) {
-		atomic_dec(&mr->md.domain->ref_cnt);
+		atomic_dec(&mr->domain->ref_cnt);
 		atomic_dec(&mr->nic->ref_cnt);
 
 		/* Change the fid class to prevent user from calling into
 		 *   close again on a dead atomic.
 		 */
-		mr->md.mr_fid.fid.fclass = FI_CLASS_UNSPEC;
+		mr->mr_fid.fid.fclass = FI_CLASS_UNSPEC;
 
 		free(mr);
 	} else {
@@ -236,7 +236,7 @@ static inline gni_return_t __gnix_mr_free(gnix_mr_t *mr)
 }
 
 __attribute__((unused))
-static inline void __gnix_mr_put(gnix_mr_t *mr)
+static inline void __gnix_mr_put(struct gnix_fid_mem_desc *mr)
 {
 	if (!atomic_dec(&mr->ref_cnt)) {
 		__gnix_mr_free(mr);
@@ -244,7 +244,7 @@ static inline void __gnix_mr_put(gnix_mr_t *mr)
 }
 
 __attribute__((unused))
-static inline void __gnix_mr_get(gnix_mr_t *mr)
+static inline void __gnix_mr_get(struct gnix_fid_mem_desc *mr)
 {
 	atomic_inc(&mr->ref_cnt);
 }
@@ -289,7 +289,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context)
 {
-	gnix_mr_t *mr;
+	struct gnix_fid_mem_desc *mr;
 	int fi_gnix_access = 0;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
@@ -330,7 +330,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		 */
 		grc = GNI_MemRegister(nic->gni_nic_hndl, (uintptr_t) buf, len,
 					NULL, fi_gnix_access,
-					-1, &mr->md.mem_hndl);
+					-1, &mr->mem_hndl);
 		if (grc == GNI_RC_SUCCESS)
 			break;
 	}
@@ -339,13 +339,13 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		goto err;
 
 	/* md.domain */
-	mr->md.domain = domain;
+	mr->domain = domain;
 	atomic_inc(&domain->ref_cnt);
 
 	/* md.mr_fid */
-	mr->md.mr_fid.fid.fclass = FI_CLASS_MR;
-	mr->md.mr_fid.fid.context = context;
-	mr->md.mr_fid.fid.ops = &fi_gnix_mr_ops;
+	mr->mr_fid.fid.fclass = FI_CLASS_MR;
+	mr->mr_fid.fid.context = context;
+	mr->mr_fid.fid.ops = &fi_gnix_mr_ops;
 
 	/* nic */
 	mr->nic = nic;
@@ -355,10 +355,10 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	atomic_initialize(&mr->ref_cnt, 1);
 
 	/* setup internal key structure */
-	gnix_convert_mhdl_to_key(&mr->md.mem_hndl,
-			(gnix_mr_key_t *) &mr->md.mr_fid.key);
+	gnix_convert_mhdl_to_key(&mr->mem_hndl,
+			(gnix_mr_key_t *) &mr->mr_fid.key);
 
-	*mr_o = &mr->md.mr_fid;
+	*mr_o = &mr->mr_fid;
 
 	return FI_SUCCESS;
 
@@ -371,13 +371,13 @@ err:
 
 static int fi_gnix_mr_close(fid_t fid)
 {
-	gnix_mr_t *mr;
+	struct gnix_fid_mem_desc *mr;
 	gni_return_t ret;
 
 	if (fid->fclass != FI_CLASS_MR)
 		return -FI_EINVAL;
 
-	mr = container_of(fid, gnix_mr_t, md.mr_fid.fid);
+	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	/* FI_LOCAL_MR never uses the cache, so the mr refcount should be
 	 *   irrelevant
@@ -391,13 +391,13 @@ static int fi_gnix_mr_close(fid_t fid)
 
 static int fi_gnix_mr_cache_close(fid_t fid)
 {
-	gnix_mr_t *mr;
+	struct gnix_fid_mem_desc *mr;
 	gni_return_t ret = FI_SUCCESS;
 
 	if (fid->fclass != FI_CLASS_MR)
 		return -FI_EINVAL;
 
-	mr = container_of(fid, gnix_mr_t, md.mr_fid.fid);
+	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	if (!atomic_dec(&mr->ref_cnt)) {
 		ret = __gnix_mr_free(mr);

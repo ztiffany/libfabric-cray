@@ -236,6 +236,9 @@ struct gnix_fid_mem_desc {
 	struct fid_mr mr_fid;
 	struct gnix_fid_domain *domain;
 	gni_mem_handle_t mem_hndl;
+	struct gnix_nic *nic;
+	atomic_t ref_cnt;
+	struct list_node entry;
 };
 
 /*
