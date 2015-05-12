@@ -220,6 +220,12 @@ static inline gni_return_t __gnix_mr_free(gnix_mr_t *mr)
 	if (ret == GNI_RC_SUCCESS) {
 		atomic_dec(&mr->md.domain->ref_cnt);
 		atomic_dec(&mr->nic->ref_cnt);
+
+		/* Change the fid class to prevent user from calling into
+		 *   close again on a dead atomic.
+		 */
+		mr->md.mr_fid.fid.fclass = FI_CLASS_UNSPEC;
+
 		free(mr);
 	} else {
 		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
@@ -359,6 +365,9 @@ static int fi_gnix_mr_close(fid_t fid)
 	gnix_mr_t *mr;
 	gni_return_t ret;
 
+	if (fid->fclass != FI_CLASS_MR)
+		return -FI_EINVAL;
+
 	mr = container_of(fid, gnix_mr_t, md.mr_fid.fid);
 
 	/* FI_LOCAL_MR never uses the cache, so the mr refcount should be
@@ -375,6 +384,9 @@ static int fi_gnix_mr_cache_close(fid_t fid)
 {
 	gnix_mr_t *mr;
 	gni_return_t ret = FI_SUCCESS;
+
+	if (fid->fclass != FI_CLASS_MR)
+		return -FI_EINVAL;
 
 	mr = container_of(fid, gnix_mr_t, md.mr_fid.fid);
 
