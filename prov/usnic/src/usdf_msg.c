@@ -316,7 +316,7 @@ ssize_t
 usdf_msg_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
                  size_t count, fi_addr_t dest_addr, void *context)
 {
-	int i;
+	size_t i;
 	struct usdf_ep *ep;
 	struct usdf_tx *tx;
 	struct usdf_msg_qe *wqe;
@@ -370,7 +370,7 @@ usdf_msg_sendv(struct fid_ep *fep, const struct iovec *iov, void **desc,
 ssize_t
 usdf_msg_sendmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	int i;
+	size_t i;
 	struct usdf_ep *ep;
 	struct usdf_tx *tx;
 	struct usdf_msg_qe *wqe;
@@ -511,7 +511,7 @@ usdf_msg_inject(struct fid_ep *fep, const void *buf, size_t len,
 ssize_t
 usdf_msg_recvmsg(struct fid_ep *fep, const struct fi_msg *msg, uint64_t flags)
 {
-	int i;
+	size_t i;
 	struct usdf_ep *ep;
 	struct usdf_rx *rx;
 	struct usdf_msg_qe *rqe;
@@ -953,7 +953,7 @@ usdf_msg_process_ack(struct usdf_ep *ep, uint16_t seq)
 		wqe = TAILQ_FIRST(&ep->e.msg.ep_sent_wqe);
 		if (RUDP_SEQ_LE(wqe->ms_last_seq, seq)) {
 			TAILQ_REMOVE(&ep->e.msg.ep_sent_wqe, wqe, ms_link);
-			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp); // XXX DJG
+			USDF_DBG_SYS(EP_DATA, "send complete, signal_comp=%u\n", wqe->ms_signal_comp);
 			if (wqe->ms_signal_comp)
 				hcq->cqh_post(hcq, wqe->ms_context,
 						wqe->ms_length, FI_SUCCESS);
