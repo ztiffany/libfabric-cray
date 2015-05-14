@@ -44,7 +44,6 @@
 #define PAGE_SHIFT 12
 
 static int fi_gnix_mr_close(fid_t fid);
-static int fi_gnix_mr_cache_close(fid_t fid);
 
 static struct fi_ops fi_gnix_mr_ops = {
 	.size = sizeof(struct fi_ops),
@@ -54,16 +53,7 @@ static struct fi_ops fi_gnix_mr_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
-__attribute__((unused))
-static struct fi_ops fi_gnix_mr_cache_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = fi_gnix_mr_cache_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
-};
-
-static inline int64_t sign_extend(uint64_t val, int len)
+static inline int64_t __sign_extend(uint64_t val, int len)
 {
 	int64_t m = 1UL << (len - 1);
 	int64_t r = (val ^ m) - m;
@@ -71,49 +61,11 @@ static inline int64_t sign_extend(uint64_t val, int len)
 	return r;
 }
 
-static inline gni_return_t __gnix_mr_free(struct gnix_fid_mem_desc *mr)
+void gnix_convert_key_to_mhdl(
+		IN    gnix_mr_key_t *key,
+		INOUT gni_mem_handle_t *mhdl)
 {
-	gni_return_t ret;
-
-	ret = GNI_MemDeregister(mr->nic->gni_nic_hndl, &mr->mem_hndl);
-	if (ret == GNI_RC_SUCCESS) {
-		atomic_dec(&mr->domain->ref_cnt);
-		atomic_dec(&mr->nic->ref_cnt);
-
-		/* Change the fid class to prevent user from calling into
-		 *   close again on a dead atomic.
-		 */
-		mr->mr_fid.fid.fclass = FI_CLASS_UNSPEC;
-
-		free(mr);
-	} else {
-		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
-				" region, mr=%p ret=%i", mr, ret);
-	}
-
-	return ret;
-}
-
-__attribute__((unused))
-static inline void __gnix_mr_put(struct gnix_fid_mem_desc *mr)
-{
-	if (!atomic_dec(&mr->ref_cnt)) {
-		__gnix_mr_free(mr);
-	}
-}
-
-__attribute__((unused))
-static inline void __gnix_mr_get(struct gnix_fid_mem_desc *mr)
-{
-	atomic_inc(&mr->ref_cnt);
-}
-
-__attribute__((unused))
-static inline void gnix_convert_key_to_mhdl(
-		gnix_mr_key_t *key,
-		gni_mem_handle_t *mhdl)
-{
-	uint64_t pfn = (uint64_t) sign_extend(key->pfn << PAGE_SHIFT,
+	uint64_t pfn = (uint64_t) __sign_extend(key->pfn << PAGE_SHIFT,
 			GNIX_MR_PFN_BITS);
 	uint8_t flags = 0;
 
@@ -131,9 +83,9 @@ static inline void gnix_convert_key_to_mhdl(
 	GNI_MEMHNDL_SET_CRC((*mhdl));
 }
 
-static inline void gnix_convert_mhdl_to_key(
-		gni_mem_handle_t *mhdl,
-		gnix_mr_key_t *key)
+void gnix_convert_mhdl_to_key(
+		IN    gni_mem_handle_t *mhdl,
+		INOUT gnix_mr_key_t *key)
 {
 	key->pfn = GNI_MEMHNDL_GET_VA((*mhdl));
 	key->mdd = GNI_MEMHNDL_GET_MDH((*mhdl));
@@ -207,7 +159,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* md.domain */
 	mr->domain = domain;
-	atomic_inc(&domain->ref_cnt);
+	atomic_inc(&domain->ref_cnt); /* take reference on domain */
 
 	/* md.mr_fid */
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -243,28 +195,20 @@ static int fi_gnix_mr_close(fid_t fid)
 
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
-	/* FI_LOCAL_MR never uses the cache, so the mr refcount should be
-	 *   irrelevant
-	 */
-	atomic_set(&mr->ref_cnt, 0);
+	ret = GNI_MemDeregister(mr->nic->gni_nic_hndl, &mr->mem_hndl);
+	if (ret == GNI_RC_SUCCESS) {
+		atomic_dec(&mr->domain->ref_cnt);
+		atomic_dec(&mr->nic->ref_cnt);
 
-	ret = __gnix_mr_free(mr);
+		/* Change the fid class to prevent user from calling into
+		 *   close again on a dead atomic.
+		 */
+		mr->mr_fid.fid.fclass = FI_CLASS_UNSPEC;
 
-	return gnixu_to_fi_errno(ret);
-}
-
-static int fi_gnix_mr_cache_close(fid_t fid)
-{
-	struct gnix_fid_mem_desc *mr;
-	gni_return_t ret = FI_SUCCESS;
-
-	if (fid->fclass != FI_CLASS_MR)
-		return -FI_EINVAL;
-
-	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
-
-	if (!atomic_dec(&mr->ref_cnt)) {
-		ret = __gnix_mr_free(mr);
+		free(mr);
+	} else {
+		GNIX_WARN(FI_LOG_MR, "failed to deregister memory"
+				" region, mr=%p ret=%i", mr, ret);
 	}
 
 	return gnixu_to_fi_errno(ret);
