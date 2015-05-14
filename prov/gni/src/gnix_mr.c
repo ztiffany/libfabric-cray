@@ -216,10 +216,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* nic */
 	mr->nic = nic;
-	atomic_inc(&nic->ref_cnt);
-
-	/* initialize ref count */
-	atomic_initialize(&mr->ref_cnt, 1);
+	atomic_inc(&nic->ref_cnt); /* take reference on nic */
 
 	/* setup internal key structure */
 	gnix_convert_mhdl_to_key(&mr->mem_hndl,
