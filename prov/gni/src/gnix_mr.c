@@ -66,7 +66,7 @@ void gnix_convert_key_to_mhdl(
 		INOUT gni_mem_handle_t *mhdl)
 {
 	uint64_t pfn = (uint64_t) __sign_extend(key->pfn << PAGE_SHIFT,
-			GNIX_MR_PFN_BITS);
+			GNIX_MR_VA_BITS);
 	uint8_t flags = 0;
 
 	if (key->flags & GNIX_MR_FLAG_READONLY)
@@ -87,7 +87,7 @@ void gnix_convert_mhdl_to_key(
 		IN    gni_mem_handle_t *mhdl,
 		INOUT gnix_mr_key_t *key)
 {
-	key->pfn = GNI_MEMHNDL_GET_VA((*mhdl));
+	key->pfn = GNI_MEMHNDL_GET_VA((*mhdl)) >> PAGE_SHIFT;
 	key->mdd = GNI_MEMHNDL_GET_MDH((*mhdl));
 	key->format = GNI_MEMHNDL_NEW_FRMT((*mhdl));
 	key->flags = 0;
