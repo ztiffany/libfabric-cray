@@ -637,7 +637,7 @@ static inline int __gnix_ht_should_decrease_size(gnix_hashtable_t *ht)
 			(ht->ht_size - decrease)) <= desired_thresh;
 }
 
-int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
+int _gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
 {
 	int ret;
 	gnix_hashtable_attr_t *tbl_attr = &default_attr;
@@ -664,7 +664,7 @@ int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr)
 	return ht->ht_ops->init(ht);
 }
 
-int gnix_ht_destroy(gnix_hashtable_t *ht)
+int _gnix_ht_destroy(gnix_hashtable_t *ht)
 {
 	if (ht->ht_state != GNIX_HT_STATE_READY)
 		return -FI_EINVAL;
@@ -672,7 +672,7 @@ int gnix_ht_destroy(gnix_hashtable_t *ht)
 	return ht->ht_ops->destroy(ht);
 }
 
-int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *value)
+int _gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *value)
 {
 	int ret;
 	int collisions, insertions;
@@ -714,7 +714,7 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *value)
 	return ret;
 }
 
-int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
+int _gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
 {
 	int ret;
 
@@ -743,7 +743,7 @@ int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key)
 	return ret;
 }
 
-void *gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
+void *_gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
 {
 	if (ht->ht_state != GNIX_HT_STATE_READY)
 		return NULL;
@@ -751,7 +751,7 @@ void *gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
 	return ht->ht_ops->lookup(ht, key);
 }
 
-int gnix_ht_empty(gnix_hashtable_t *ht)
+int _gnix_ht_empty(gnix_hashtable_t *ht)
 {
 	return atomic_get(&ht->ht_elements) == 0;
 }

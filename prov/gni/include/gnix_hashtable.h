@@ -153,7 +153,7 @@ typedef struct gnix_hashtable {
  * @return        0 on success, -FI_EINVAL on initialization error, or
  *                -FI_ENOMEM if allocation of the bucket array fails
  */
-int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr);
+int _gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr);
 
 /**
  * Destroys the hash table
@@ -162,7 +162,7 @@ int gnix_ht_init(gnix_hashtable_t *ht, gnix_hashtable_attr_t *attr);
  * @return        0 on success, -FI_EINVAL upon passing an uninitialized
  *                or dead structure
  */
-int gnix_ht_destroy(gnix_hashtable_t *ht);
+int _gnix_ht_destroy(gnix_hashtable_t *ht);
 
 /**
  * Inserts an entry into the map with the provided key
@@ -174,7 +174,7 @@ int gnix_ht_destroy(gnix_hashtable_t *ht);
  *                exists in the hashtable, or -FI_EINVAL when called on a
  *                dead or uninitialized hash table
  */
-int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry);
+int _gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry);
 
 /**
  * Removes an entry from the map with the provided key
@@ -185,7 +185,7 @@ int gnix_ht_insert(gnix_hashtable_t *ht, gnix_ht_key_t key, void *entry);
  *                the hash table, or -FI_EINVAL when called on a dead or
  *                uninitialized hash table
  */
-int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key);
+int _gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key);
 
 /**
  * Looks up an entry in the hash table using key
@@ -195,7 +195,7 @@ int gnix_ht_remove(gnix_hashtable_t *ht, gnix_ht_key_t key);
  * @return        NULL if the key did not exist in the hash table, or the
  *                entry if the key exists in the hash table
  */
-void *gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key);
+void *_gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key);
 
 /**
  * Tests to see if the hash table is empty
@@ -203,6 +203,6 @@ void *gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key);
  * @param ht      pointer to the hash table structure
  * @return        true if the hash table is empty, false if not
  */
-int gnix_ht_empty(gnix_hashtable_t *ht);
+int _gnix_ht_empty(gnix_hashtable_t *ht);
 
 #endif /* GNIX_HASHTABLE_H_ */

@@ -110,7 +110,7 @@ void __gnix_hashtable_test_destroyed_clean(void)
 
 void __gnix_hashtable_destroy(void)
 {
-	int ret = gnix_ht_destroy(test_ht);
+	int ret = _gnix_ht_destroy(test_ht);
 	assert(ret == 0);
 	__gnix_hashtable_test_destroyed_clean();
 }
@@ -119,7 +119,7 @@ void __gnix_hashtable_initialize(void)
 {
 	int ret;
 
-	ret = gnix_ht_init(test_ht, NULL);
+	ret = _gnix_ht_init(test_ht, NULL);
 	assert(ret == 0);
 
 	__gnix_hashtable_test_initialized();
@@ -174,7 +174,7 @@ Test(gnix_hashtable_basic, initialize_locked_ht)
 
 	attr.ht_internal_locking = 1;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == 0);
 
 	__gnix_hashtable_test_initialized();
@@ -186,7 +186,7 @@ Test(gnix_hashtable_basic, err_initialize_twice)
 
 	__gnix_hashtable_initialize();
 
-	ret = gnix_ht_init(test_ht, NULL);
+	ret = _gnix_ht_init(test_ht, NULL);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_initialized();
 }
@@ -200,7 +200,7 @@ Test(gnix_hashtable_basic, err_invalid_initial_size_0)
 
 	attr.ht_initial_size = 0;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -214,7 +214,7 @@ Test(gnix_hashtable_basic, err_invalid_initial_size_gt_max)
 
 	attr.ht_initial_size = attr.ht_maximum_size * 2;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -228,7 +228,7 @@ Test(gnix_hashtable_basic, err_invalid_max_size)
 
 	attr.ht_maximum_size = 0;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -242,7 +242,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_step_all)
 
 	attr.ht_increase_step = 0;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -257,7 +257,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_step_mult)
 	attr.ht_increase_step = 1;
 	attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -271,7 +271,7 @@ Test(gnix_hashtable_basic, err_invalid_increase_type)
 
 	attr.ht_increase_type = -1;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -285,7 +285,7 @@ Test(gnix_hashtable_basic, err_invalid_collision)
 
 	attr.ht_collision_thresh = 0;
 
-	ret = gnix_ht_init(test_ht, &attr);
+	ret = _gnix_ht_init(test_ht, &attr);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_uninitialized();
 }
@@ -294,7 +294,7 @@ Test(gnix_hashtable_basic, err_destroy_uninitialized)
 {
 	int ret;
 
-	ret = gnix_ht_destroy(test_ht);
+	ret = _gnix_ht_destroy(test_ht);
 	assert(ret == -FI_EINVAL);
 
 	__gnix_hashtable_test_uninitialized();
@@ -315,7 +315,7 @@ Test(gnix_hashtable_basic, destroy_twice)
 
 	__gnix_hashtable_destroy();
 
-	ret = gnix_ht_destroy(test_ht);
+	ret = _gnix_ht_destroy(test_ht);
 	assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_destroyed_clean();
 }
@@ -324,7 +324,7 @@ Test(gnix_hashtable_advanced, insert_1)
 {
 	int ret;
 
-	ret = gnix_ht_insert(test_ht, simple_element->key, simple_element);
+	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
@@ -334,12 +334,12 @@ Test(gnix_hashtable_advanced, insert_duplicate)
 {
 	int ret;
 
-	ret = gnix_ht_insert(test_ht, simple_element->key, simple_element);
+	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 
-	ret = gnix_ht_insert(test_ht, simple_element->key, simple_element);
+	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	assert(ret == -FI_ENOSPC);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
@@ -351,12 +351,12 @@ Test(gnix_hashtable_advanced, insert_1_remove_1)
 
 	srand(time(NULL));
 
-	ret = gnix_ht_insert(test_ht, simple_element->key, simple_element);
+	ret = _gnix_ht_insert(test_ht, simple_element->key, simple_element);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 
-	ret = gnix_ht_remove(test_ht, simple_element->key);
+	ret = _gnix_ht_remove(test_ht, simple_element->key);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 0);
@@ -378,7 +378,7 @@ Test(gnix_hashtable_advanced, insert_1024)
 	}
 
 	for (i = 0; i < 1024; ++i) {
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				test_elements[i].key, &test_elements[i]);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -406,7 +406,7 @@ Test(gnix_hashtable_advanced, insert_1024_remove_1024)
 
 	for (i = 0; i < 1024; ++i) {
 		item = &test_elements[i];
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -416,7 +416,7 @@ Test(gnix_hashtable_advanced, insert_1024_remove_1024)
 		item = &test_elements[i];
 		assert(i == item->key);
 
-		ret = gnix_ht_remove(test_ht,
+		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == i);
@@ -443,7 +443,7 @@ Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
 
 	for (i = 0; i < nelem; ++i) {
 		item = &test_elements[i];
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -455,7 +455,7 @@ Test(gnix_hashtable_advanced, insert_2048_remove_all_resize_down)
 		item = &test_elements[i];
 		assert(i == item->key);
 
-		ret = gnix_ht_remove(test_ht,
+		ret = _gnix_ht_remove(test_ht,
 				item->key);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == i);
@@ -474,13 +474,13 @@ Test(gnix_hashtable_advanced, insert_1_lookup_pass)
 	int ret;
 	gnix_test_element_t *found = NULL;
 
-	ret = gnix_ht_insert(test_ht,
+	ret = _gnix_ht_insert(test_ht,
 			simple_element->key, simple_element);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 
-	found = gnix_ht_lookup(test_ht, simple_element->key);
+	found = _gnix_ht_lookup(test_ht, simple_element->key);
 	assert(found == simple_element);
 	assert(found->magic == __GNIX_MAGIC_VALUE);
 }
@@ -490,13 +490,13 @@ Test(gnix_hashtable_advanced, insert_1_lookup_fail)
 	int ret;
 	gnix_test_element_t *found = NULL;
 
-	ret = gnix_ht_insert(test_ht,
+	ret = _gnix_ht_insert(test_ht,
 			simple_element->key, simple_element);
 	assert(ret == 0);
 
 	assert(atomic_get(&test_ht->ht_elements) == 1);
 
-	found = gnix_ht_lookup(test_ht, simple_element->key - 1);
+	found = _gnix_ht_lookup(test_ht, simple_element->key - 1);
 	assert(found != simple_element);
 	assert(found == NULL);
 }
@@ -521,7 +521,7 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_all)
 	for (i = 0; i < 1024; ++i) {
 		item = &test_elements[i];
 
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -530,7 +530,7 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_all)
 	assert(atomic_get(&test_ht->ht_elements) == 1024);
 
 	for (i = 0; i < 1024; ++i) {
-		found = gnix_ht_lookup(test_ht, test_elements[i].key);
+		found = _gnix_ht_lookup(test_ht, test_elements[i].key);
 		assert(found != NULL);
 		assert(found == &test_elements[i]);
 		assert(found->magic == __GNIX_MAGIC_VALUE);
@@ -557,7 +557,7 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_random)
 	for (i = 0; i < 1024; ++i) {
 		item = &test_elements[i];
 
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -567,7 +567,7 @@ Test(gnix_hashtable_advanced, insert_1024_lookup_random)
 
 	for (i = 0; i < 1024; ++i) {
 		to_find = &test_elements[rand() % 1024];
-		found = gnix_ht_lookup(test_ht, to_find->key);
+		found = _gnix_ht_lookup(test_ht, to_find->key);
 		assert(found != NULL);
 		assert(found == to_find);
 		assert(found->magic == __GNIX_MAGIC_VALUE);
@@ -608,7 +608,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 	for (i = 0; i < test_size; ++i) {
 		item = &test_elements[i];
 
-		ret = gnix_ht_insert(test_ht,
+		ret = _gnix_ht_insert(test_ht,
 				item->key, item);
 		assert(ret == 0);
 		assert(atomic_get(&test_ht->ht_elements) == (i + 1));
@@ -618,7 +618,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 
 	for (i = 0; i < lookups; ++i) {
 		to_find = &test_elements[rand() % test_size];
-		found = gnix_ht_lookup(test_ht, to_find->key);
+		found = _gnix_ht_lookup(test_ht, to_find->key);
 		assert(found != NULL);
 		assert(found == to_find);
 		assert(found->magic == __GNIX_MAGIC_VALUE);
