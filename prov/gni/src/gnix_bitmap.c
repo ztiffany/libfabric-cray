@@ -10,7 +10,126 @@
 
 #include "gnix_bitmap.h"
 
-int find_first_zero_bit(gnix_bitmap_t *bitmap)
+#if HAVE_ATOMICS
+
+#define __gnix_init_block(block) atomic_init(block, 0)
+#define __gnix_set_block(bitmap, index, value) \
+	atomic_store(&(bitmap)->arr[(index)], (value))
+#define __gnix_load_block(bitmap, index) atomic_load(&(bitmap->arr[(index)]))
+#define __gnix_set_bit(bitmap, bit) \
+	atomic_fetch_or(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)], \
+			GNIX_BIT_VALUE(bit))
+#define __gnix_clear_bit(bitmap, bit) \
+	atomic_fetch_and(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)], \
+			~GNIX_BIT_VALUE(bit))
+#define __gnix_test_bit(bitmap, bit) \
+	((atomic_load(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)]) \
+			& GNIX_BIT_VALUE(bit)) != 0)
+#else
+
+static inline void __gnix_init_block(gnix_bitmap_block_t *block)
+{
+	fastlock_init(&block->lock);
+	block->val = 0llu;
+}
+
+static inline void __gnix_set_block(gnix_bitmap_t *bitmap, int index,
+		uint64_t value)
+{
+	gnix_bitmap_block_t *block = &bitmap->arr[index];
+
+	fastlock_acquire(&block->lock);
+	block->val = value;
+	fastlock_release(&block->lock);
+}
+
+static inline uint64_t __gnix_load_block(gnix_bitmap_t *bitmap, int index)
+{
+	gnix_bitmap_block_t *block = &bitmap->arr[index];
+	uint64_t ret;
+
+	fastlock_acquire(&block->lock);
+	ret = block->val;
+	fastlock_release(&block->lock);
+
+	return ret;
+}
+
+static inline uint64_t __gnix_set_bit(gnix_bitmap_t *bitmap, int bit)
+{
+	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
+	uint64_t ret;
+
+	fastlock_acquire(&block->lock);
+	ret = block->val;
+	block->val |= GNIX_BIT_VALUE(bit);
+	fastlock_release(&block->lock);
+
+	return ret;
+}
+
+static inline uint64_t __gnix_clear_bit(gnix_bitmap_t *bitmap, int bit)
+{
+	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
+	uint64_t ret;
+
+	fastlock_acquire(&block->lock);
+	ret = block->val;
+	block->val &= ~GNIX_BIT_VALUE(bit);
+	fastlock_release(&block->lock);
+
+	return ret;
+}
+
+static inline int __gnix_test_bit(gnix_bitmap_t *bitmap, int bit)
+{
+	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
+	int ret;
+
+	fastlock_acquire(&block->lock);
+	ret = (block->val & GNIX_BIT_VALUE(bit)) != 0;
+	fastlock_release(&block->lock);
+
+	return ret;
+}
+#endif
+
+int _gnix_test_bit(gnix_bitmap_t *bitmap, uint32_t index)
+{
+	return __gnix_test_bit(bitmap, index);
+}
+
+void _gnix_set_bit(gnix_bitmap_t *bitmap, uint32_t index)
+{
+	__gnix_set_bit(bitmap, index);
+}
+
+void _gnix_clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
+{
+	__gnix_clear_bit(bitmap, index);
+}
+
+int _gnix_test_and_set_bit(gnix_bitmap_t *bitmap, uint32_t index)
+{
+	return (__gnix_set_bit(bitmap, index) & GNIX_BIT_VALUE(index)) != 0;
+}
+
+int _gnix_test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
+{
+	return (__gnix_clear_bit(bitmap, index) & GNIX_BIT_VALUE(index)) != 0;
+}
+
+int _gnix_bitmap_full(gnix_bitmap_t *bitmap)
+{
+	return _gnix_find_first_zero_bit(bitmap) == -EAGAIN;
+}
+
+int _gnix_bitmap_empty(gnix_bitmap_t *bitmap)
+{
+	return _gnix_find_first_set_bit(bitmap) == -FI_EAGAIN;
+}
+
+int _gnix_find_first_zero_bit(gnix_bitmap_t *bitmap)
 {
 	int i, pos;
 	gnix_bitmap_value_t value;
@@ -36,7 +155,7 @@ int find_first_zero_bit(gnix_bitmap_t *bitmap)
 	return -FI_EAGAIN;
 }
 
-int find_first_set_bit(gnix_bitmap_t *bitmap)
+int _gnix_find_first_set_bit(gnix_bitmap_t *bitmap)
 {
 	int i, pos;
 	gnix_bitmap_value_t value;
@@ -60,7 +179,7 @@ int find_first_set_bit(gnix_bitmap_t *bitmap)
 	return -FI_EAGAIN;
 }
 
-void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value)
+void _gnix_fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value)
 {
 	int i;
 	gnix_bitmap_value_t fill_value = (value != 0) ? ~0 : 0;
@@ -70,7 +189,7 @@ void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value)
 	}
 }
 
-int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
+int _gnix_alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 {
 	int i;
 
@@ -95,7 +214,7 @@ int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 	return 0;
 }
 
-int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
+int _gnix_realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 {
 	gnix_bitmap_block_t *new_allocation;
 	int blocks_to_allocate = GNIX_BITMAP_BLOCKS(nbits);
@@ -131,7 +250,7 @@ int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits)
 	return 0;
 }
 
-int free_bitmap(gnix_bitmap_t *bitmap)
+int _gnix_free_bitmap(gnix_bitmap_t *bitmap)
 {
 	if (bitmap->state != GNIX_BITMAP_STATE_READY)
 		return -FI_EINVAL;

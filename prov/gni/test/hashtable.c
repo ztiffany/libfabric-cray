@@ -588,7 +588,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 	test_elements = calloc(test_size, sizeof(gnix_test_element_t));
 	assert(test_elements != NULL);
 
-	ret = alloc_bitmap(&allocated, bitmap_size);
+	ret = _gnix_alloc_bitmap(&allocated, bitmap_size);
 	assert(ret == 0);
 
 	srand(time(NULL));
@@ -596,7 +596,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 	for (i = 0; i < test_size; ++i) {
 		do {
 			index = rand() % bitmap_size;
-		} while (test_and_set_bit(&allocated, index));
+		} while (_gnix_test_and_set_bit(&allocated, index));
 
 		item = &test_elements[i];
 
@@ -624,7 +624,7 @@ Test(gnix_hashtable_advanced, insert_8K_lookup_128K_random)
 		assert(found->magic == __GNIX_MAGIC_VALUE);
 	}
 
-	ret = free_bitmap(&allocated);
+	ret = _gnix_free_bitmap(&allocated);
 	expect(ret == 0);
 
 	free(test_elements);
