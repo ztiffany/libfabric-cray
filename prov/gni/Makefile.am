@@ -27,6 +27,7 @@ _gni_files = \
 	prov/gni/src/gnix_cm_nic.c \
 	prov/gni/src/gnix_nic.c \
 	prov/gni/src/gnix_util.c \
+	prov/gni/src/gnix_freelist.c \
 	prov/gni/src/gnix_bitmap.c \
 	prov/gni/src/gnix_hashtable.c \
 	prov/gni/fasthash/fasthash.c \
@@ -42,6 +43,7 @@ gnitest_SOURCES = \
 	prov/gni/test/bitmap.c \
 	prov/gni/test/queue.c \
 	prov/gni/test/eq.c \
+	prov/gni/test/freelist.c \
 	prov/gni/test/hashtable.c \
 	prov/gni/test/allocator.c
 
