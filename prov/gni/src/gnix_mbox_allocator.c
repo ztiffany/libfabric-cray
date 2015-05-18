@@ -356,7 +356,7 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 		goto err_mmap;
 	}
 
-	ret = alloc_bitmap(slab->used, __mbox_count(handle));
+	ret = _gnix_alloc_bitmap(slab->used, __mbox_count(handle));
 	if (ret) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Error allocating bitmap.\n");
 		goto err_alloc_bitmap;
@@ -383,7 +383,7 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 	return ret;
 
 err_memregister:
-	free_bitmap(slab->used);
+	_gnix_free_bitmap(slab->used);
 	free(slab->used);
 err_alloc_bitmap:
 	munmap(slab->base, total_size);
@@ -420,7 +420,7 @@ static int __destroy_slab(struct gnix_mbox_alloc_handle *handle,
 
 	total_size = handle->page_size * __page_count(handle);
 
-	free_bitmap(slab->used);
+	_gnix_free_bitmap(slab->used);
 	free(slab->used);
 
 	GNI_MemDeregister(handle->nic_handle->gni_nic_hndl,
@@ -478,7 +478,7 @@ static int __check_bitmap(struct gnix_mbox_alloc_handle *handle,
 static int __find_free(struct gnix_mbox_alloc_handle *handle,
 		       struct gnix_slab **slab)
 {
-	return __check_bitmap(handle, slab, find_first_zero_bit);
+	return __check_bitmap(handle, slab, _gnix_find_first_zero_bit);
 }
 
 /**
@@ -494,7 +494,7 @@ static int __find_free(struct gnix_mbox_alloc_handle *handle,
 static int __find_used(struct gnix_mbox_alloc_handle *handle,
 		       struct gnix_slab **slab)
 {
-	return __check_bitmap(handle, slab, find_first_set_bit);
+	return __check_bitmap(handle, slab, _gnix_find_first_set_bit);
 }
 
 /**
@@ -543,7 +543,7 @@ static int __fill_mbox(struct gnix_mbox_alloc_handle *handle,
 		goto err_invalid;
 	}
 
-	ret = test_and_set_bit(slab->used, position);
+	ret = _gnix_test_and_set_bit(slab->used, position);
 	if (ret != 0) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Bit already set when creating mbox.\n");
@@ -716,7 +716,7 @@ int gnix_mbox_free(struct gnix_mbox *ptr)
 
 	position = ptr->offset / ptr->slab->allocator->mbox_size;
 
-	ret = test_and_clear_bit(ptr->slab->used, position);
+	ret = _gnix_test_and_clear_bit(ptr->slab->used, position);
 	if (ret != 1) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Bit already cleared while freeing mbox.\n");

@@ -13,7 +13,6 @@
 #include <fi.h>
 #include <rdma/fi_errno.h>
 
-
 #define GNIX_BITMAP_BUCKET_BITS 6
 #define GNIX_BITMAP_BUCKET_LENGTH (1ULL << GNIX_BITMAP_BUCKET_BITS)
 #define GNIX_BUCKET_INDEX(index) ((index) >> GNIX_BITMAP_BUCKET_BITS)
@@ -50,90 +49,6 @@ typedef struct gnix_bitmap {
 	gnix_bitmap_block_t *arr;
 } gnix_bitmap_t;
 
-#if HAVE_ATOMICS
-
-#define __gnix_init_block(block) atomic_init(block, 0)
-#define __gnix_set_block(bitmap, index, value) \
-	atomic_store(&(bitmap)->arr[(index)], (value))
-#define __gnix_load_block(bitmap, index) atomic_load(&(bitmap->arr[(index)]))
-#define __gnix_set_bit(bitmap, bit) \
-	atomic_fetch_or(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)], \
-			GNIX_BIT_VALUE(bit))
-#define __gnix_clear_bit(bitmap, bit) \
-	atomic_fetch_and(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)], \
-			~GNIX_BIT_VALUE(bit))
-#define __gnix_test_bit(bitmap, bit) \
-	((atomic_load(&(bitmap)->arr[GNIX_BUCKET_INDEX(bit)]) \
-			& GNIX_BIT_VALUE(bit)) != 0)
-#else
-
-static inline void __gnix_init_block(gnix_bitmap_block_t *block)
-{
-	fastlock_init(&block->lock);
-	block->val = 0llu;
-}
-
-static inline void __gnix_set_block(gnix_bitmap_t *bitmap, int index,
-		uint64_t value)
-{
-	gnix_bitmap_block_t *block = &bitmap->arr[index];
-
-	fastlock_acquire(&block->lock);
-	block->val = value;
-	fastlock_release(&block->lock);
-}
-
-static inline uint64_t __gnix_load_block(gnix_bitmap_t *bitmap, int index)
-{
-	gnix_bitmap_block_t *block = &bitmap->arr[index];
-	uint64_t ret;
-
-	fastlock_acquire(&block->lock);
-	ret = block->val;
-	fastlock_release(&block->lock);
-
-	return ret;
-}
-
-static inline uint64_t __gnix_set_bit(gnix_bitmap_t *bitmap, int bit)
-{
-	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
-	uint64_t ret;
-
-	fastlock_acquire(&block->lock);
-	ret = block->val;
-	block->val |= GNIX_BIT_VALUE(bit);
-	fastlock_release(&block->lock);
-
-	return ret;
-}
-
-static inline uint64_t __gnix_clear_bit(gnix_bitmap_t *bitmap, int bit)
-{
-	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
-	uint64_t ret;
-
-	fastlock_acquire(&block->lock);
-	ret = block->val;
-	block->val &= ~GNIX_BIT_VALUE(bit);
-	fastlock_release(&block->lock);
-
-	return ret;
-}
-
-static inline int __gnix_test_bit(gnix_bitmap_t *bitmap, int bit)
-{
-	gnix_bitmap_block_t *block = &bitmap->arr[GNIX_BUCKET_INDEX(bit)];
-	int ret;
-
-	fastlock_acquire(&block->lock);
-	ret = (block->val & GNIX_BIT_VALUE(bit)) != 0;
-	fastlock_release(&block->lock);
-
-	return ret;
-}
-#endif
-
 /**
  * Tests to see if a bit has been set in the bit.
  *
@@ -141,10 +56,7 @@ static inline int __gnix_test_bit(gnix_bitmap_t *bitmap, int bit)
  * @param   index   index of the bit in the map to test
  * @return  0 if the bit is not set, 1 if the bit is set
  */
-static inline int test_bit(gnix_bitmap_t *bitmap, uint32_t index)
-{
-	return __gnix_test_bit(bitmap, index);
-}
+int _gnix_test_bit(gnix_bitmap_t *bitmap, uint32_t index);
 
 /**
  * Sets a bit in the bitmap
@@ -152,10 +64,7 @@ static inline int test_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   index   index of the bit in the map to set
  */
-static inline void set_bit(gnix_bitmap_t *bitmap, uint32_t index)
-{
-	__gnix_set_bit(bitmap, index);
-}
+void _gnix_set_bit(gnix_bitmap_t *bitmap, uint32_t index);
 
 /**
  * Clears a bit in the bitmap
@@ -163,10 +72,7 @@ static inline void set_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   index   index of the bit in the map to clear
  */
-static inline void clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
-{
-	__gnix_clear_bit(bitmap, index);
-}
+void _gnix_clear_bit(gnix_bitmap_t *bitmap, uint32_t index);
 
 /**
  * Tests to see if a bit is set, then sets the bit in the bitmap
@@ -175,10 +81,7 @@ static inline void clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @param   index   index of the bit in the map to test and set
  * @return  0 if the bit was not set, 1 if the bit was already set
  */
-static inline int test_and_set_bit(gnix_bitmap_t *bitmap, uint32_t index)
-{
-	return (__gnix_set_bit(bitmap, index) & GNIX_BIT_VALUE(index)) != 0;
-}
+int _gnix_test_and_set_bit(gnix_bitmap_t *bitmap, uint32_t index);
 
 /**
  * Tests to see if a bit is set, the clears the bit in the bitmap
@@ -187,10 +90,7 @@ static inline int test_and_set_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @param   index   index of the bit in the map to test and set
  * @return  0 if the bit was not set, 1 if the bit was already set
  */
-static inline int test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
-{
-	return (__gnix_clear_bit(bitmap, index) & GNIX_BIT_VALUE(index)) != 0;
-}
+int _gnix_test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index);
 
 /**
  * Takes a gnix_bitmap and allocates the internal structures and performs
@@ -204,7 +104,7 @@ static inline int test_and_clear_bit(gnix_bitmap_t *bitmap, uint32_t index)
  * @return  -FI_ENOMEM if there isn't sufficient memory available to
  *          create bitmap
  */
-int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
+int _gnix_alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
 
 /**
  * Takes a gnix_bitmap and reallocates the internal structures to the requested
@@ -221,7 +121,7 @@ int alloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
  * @return  -FI_EINVAL if the bitmap hasn't been allocated yet or nbits == 0
  * @return  -FI_ENOMEM if there wasn't sufficient memory to expand the bitmap.
  */
-int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
+int _gnix_realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
 
 /**
  * Frees the internal structures of gnix_bitmap
@@ -230,7 +130,7 @@ int realloc_bitmap(gnix_bitmap_t *bitmap, uint32_t nbits);
  * @return  0       on success
  * @return  -FI_EINVAL if the internal resources are uninitialized or already free
  */
-int free_bitmap(gnix_bitmap_t *bitmap);
+int _gnix_free_bitmap(gnix_bitmap_t *bitmap);
 
 /**
  * Sets every bit in the bitmap with (value != 0)
@@ -238,7 +138,7 @@ int free_bitmap(gnix_bitmap_t *bitmap);
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @param   value   an integer value to be compared with 0 to set bits to
  */
-void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value);
+void _gnix_fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value);
 
 /**
  * Finds the bit index of the first zero bit in the bitmap
@@ -248,7 +148,7 @@ void fill_bitmap(gnix_bitmap_t *bitmap, uint64_t value);
  *                    0 <= index < bitmap->length
  * @return  -FI_EAGAIN on failure to find a zero bit
  */
-int find_first_zero_bit(gnix_bitmap_t *bitmap);
+int _gnix_find_first_zero_bit(gnix_bitmap_t *bitmap);
 
 /**
  * Finds the bit index of the first set bit in the bitmap
@@ -258,7 +158,7 @@ int find_first_zero_bit(gnix_bitmap_t *bitmap);
  *                    0 <= index < bitmap->length
  * @return  -FI_EAGAIN on failure to find a set bit
  */
-int find_first_set_bit(gnix_bitmap_t *bitmap);
+int _gnix_find_first_set_bit(gnix_bitmap_t *bitmap);
 
 /**
  * Tests to verify that the bitmap is full
@@ -266,10 +166,7 @@ int find_first_set_bit(gnix_bitmap_t *bitmap);
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @return  0 if the bitmap has cleared bits, 1 if the bitmap is fully set
  */
-static inline int bitmap_full(gnix_bitmap_t *bitmap)
-{
-	return find_first_zero_bit(bitmap) == -EAGAIN;
-}
+int _gnix_bitmap_full(gnix_bitmap_t *bitmap);
 
 /**
  * Tests to verify that the bitmap is empty
@@ -277,9 +174,6 @@ static inline int bitmap_full(gnix_bitmap_t *bitmap)
  * @param   bitmap  a gnix_bitmap pointer to the bitmap struct
  * @return  0 if the bitmap has set bits, 1 if the bitmap is fully cleared
  */
-static inline int bitmap_empty(gnix_bitmap_t *bitmap)
-{
-	return find_first_set_bit(bitmap) == -FI_EAGAIN;
-}
+int _gnix_bitmap_empty(gnix_bitmap_t *bitmap);
 
 #endif /* BITMAP_H_ */
