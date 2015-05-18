@@ -48,8 +48,9 @@
  * - Refill size increases by growth_factor each time growth is needed
  *   (limited by max_refill_size)
  * - Refills are allocated as chunks, which are managed by chunks slist
- * - Allocate an extral elemtn at the beginning of each chunk for the
+ * - Allocate an extra element at the beginning of each chunk for the
  *   chunk slist
+ * - Individual elements are *not* zeroed before being returned
  *
  * Your structure doesn't really need to have an slist_entry pointer,
  * it just has to be at least as big as an slist_entry.
@@ -159,9 +160,6 @@ int _gnix_sfe_alloc(struct slist_entry **e, struct gnix_s_freelist *fl)
 			goto err;
 		}
 	}
-
-	/* zero the actual element */
-	memset(((unsigned char *) se)-fl->offset, 0, fl->elem_size);
 
 	*e = se;
 	return ret;
