@@ -61,7 +61,7 @@ static inline int64_t __sign_extend(uint64_t val, int len)
 	return r;
 }
 
-void gnix_convert_key_to_mhdl(
+void _gnix_convert_key_to_mhdl(
 		IN    gnix_mr_key_t *key,
 		INOUT gni_mem_handle_t *mhdl)
 {
@@ -83,7 +83,7 @@ void gnix_convert_key_to_mhdl(
 	GNI_MEMHNDL_SET_CRC((*mhdl));
 }
 
-void gnix_convert_mhdl_to_key(
+void _gnix_convert_mhdl_to_key(
 		IN    gni_mem_handle_t *mhdl,
 		INOUT gnix_mr_key_t *key)
 {
@@ -171,7 +171,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	atomic_inc(&nic->ref_cnt); /* take reference on nic */
 
 	/* setup internal key structure */
-	gnix_convert_mhdl_to_key(&mr->mem_hndl,
+	_gnix_convert_mhdl_to_key(&mr->mem_hndl,
 			(gnix_mr_key_t *) &mr->mr_fid.key);
 
 	*mr_o = &mr->mr_fid;

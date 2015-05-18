@@ -75,11 +75,11 @@ typedef struct gnix_mr_key {
 	};
 } gnix_mr_key_t;
 
-void gnix_convert_key_to_mhdl(
+void _gnix_convert_key_to_mhdl(
 		IN    gnix_mr_key_t *key,
 		INOUT gni_mem_handle_t *mhdl);
 
-void gnix_convert_mhdl_to_key(
+void _gnix_convert_mhdl_to_key(
 		IN    gni_mem_handle_t *mhdl,
 		INOUT gnix_mr_key_t *key);
 
