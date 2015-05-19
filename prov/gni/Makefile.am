@@ -45,7 +45,8 @@ gnitest_SOURCES = \
 	prov/gni/test/eq.c \
 	prov/gni/test/freelist.c \
 	prov/gni/test/hashtable.c \
-	prov/gni/test/allocator.c
+	prov/gni/test/allocator.c \
+	prov/gni/test/mr.c
 
 gnitest_LDFLAGS = -static
 gnitest_CPPFLAGS = $(AM_CPPFLAGS)
