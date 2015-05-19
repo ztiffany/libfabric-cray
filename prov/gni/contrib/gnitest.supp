@@ -1,0 +1,306 @@
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:GNII_DlaInit
+   fun:GNI_CdmAttach
+   fun:_gnix_cm_nic_alloc
+   fun:gnix_ep_open
+   fun:dg_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:dg_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:dg_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_EpPostDataWId
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_EpPostDataWId
+   fun:_gnix_dgram_wc_post
+   fun:dg_allocation_dgram_wc_post_exchg_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_EpPostDataWId
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_EpPostDataWId
+   fun:_gnix_dgram_bnd_post
+   fun:dg_allocation_dgram_wc_post_exchg_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   GNI_EpPostDataTestById__gnix_dgram_poll
+   Memcheck:Addr4
+   fun:GNI_EpPostDataTestById
+   fun:_gnix_dgram_poll
+   fun:_gnix_dgram_prog_thread_fn
+   fun:start_thread
+}
+{
+   ioctl_GNI_EpPostDataWId
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_EpPostDataWId
+   fun:_gnix_dgram_wc_post
+   fun:dg_allocation_dgram_wc_post_exchg_manual_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_EpPostDataWId
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_EpPostDataWId
+   fun:_gnix_dgram_bnd_post
+   fun:dg_allocation_dgram_wc_post_exchg_manual_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   GNI_PostDataProbeById__gnix_dgram_poll
+   Memcheck:Addr4
+   fun:GNI_PostDataProbeById
+   fun:_gnix_dgram_poll
+   fun:_gnix_cm_nic_progress
+   fun:dg_allocation_dgram_wc_post_exchg_manual_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   GNI_EpPostDataTestById__gnix_dgram_poll
+   Memcheck:Addr4
+   fun:GNI_EpPostDataTestById
+   fun:_gnix_dgram_poll
+   fun:_gnix_cm_nic_progress
+   fun:dg_allocation_dgram_wc_post_exchg_manual_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:GNII_DlaInit
+   fun:GNI_CdmAttach
+   fun:_gnix_cm_nic_alloc
+   fun:gnix_ep_open
+   fun:allocator_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:allocator_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:allocator_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:GNII_DlaInit
+   fun:GNI_CdmAttach
+   fun:_gnix_cm_nic_alloc
+   fun:gnix_ep_open
+   fun:mr_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_cq_create
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:mr_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:cq_create
+   fun:GNI_CqCreate
+   fun:gnix_nic_alloc
+   fun:gnix_ep_open
+   fun:mr_setup
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_bare_basic_init_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_cache_basic_init_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_cache_cyclic_register_128_distinct_regions_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_cache_duplicate_registration_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_cache_register_1024_distinct_regions_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
+{
+   ioctl_GNI_MemRegister
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:GNI_MemRegister
+   fun:gnix_mr_reg
+   fun:memory_registration_cache_register_1024_non_unique_regions_impl
+   fun:run_test_child
+   fun:spawn_test_worker
+   fun:criterion_run_all_tests
+   fun:main
+}
