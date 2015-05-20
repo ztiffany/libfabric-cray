@@ -236,10 +236,12 @@ int _gnix_dgram_rewind_buf(struct gnix_datagram *d, enum gnix_dgram_buf buf)
 int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 			struct gnix_datagram **d_ptr)
 {
-	int ret = -FI_ENOMEM;
+	int ret = -FI_EAGAIN;
 	struct gnix_datagram *d = NULL;
 	struct list_head *the_free_list;
 	struct list_head *the_active_list;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (type == GNIX_DGRAM_WC) {
 		the_free_list = &hndl->wc_dgram_free_list;
@@ -272,8 +274,10 @@ int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 
 int _gnix_dgram_free(struct gnix_datagram *d)
 {
-	int ret = 0;
+	int ret = FI_SUCCESS;
 	gni_return_t status;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (d->type == GNIX_DGRAM_BND) {
 		status = GNI_EpUnbind(d->gni_ep);
@@ -288,7 +292,7 @@ int _gnix_dgram_free(struct gnix_datagram *d)
 	return ret;
 }
 
-int _gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
+int _gnix_dgram_wc_post(struct gnix_datagram *d)
 {
 	int ret = FI_SUCCESS;
 	gni_return_t status;
@@ -313,10 +317,11 @@ int _gnix_dgram_wc_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 	return ret;
 }
 
-int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
+int _gnix_dgram_bnd_post(struct gnix_datagram *d)
 {
-	gni_return_t status;
+	gni_return_t status = GNI_RC_SUCCESS;
 	int ret = FI_SUCCESS;
+	int post = 1;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -334,41 +339,52 @@ int _gnix_dgram_bnd_post(struct gnix_datagram *d, gni_return_t *status_ptr)
 		goto err;
 	}
 
-	/*
-	 * if we get GNI_RC_ERROR_RESOURCE status return from
-	 * GNI_EpPostDataWId  that means that a previously posted wildcard
-	 * datagram has matched up with an incoming connect
-	 * request from the rank we are trying to send a connect
-	 * request to.  Don't treat this case as an error.
-	 */
-
 	fastlock_acquire(&d->nic->lock);
-	status = GNI_EpPostDataWId(d->gni_ep,
-				   d->dgram_in_buf,
-				   GNI_DATAGRAM_MAXSIZE,
-				   d->dgram_out_buf,
-				   GNI_DATAGRAM_MAXSIZE,
-				   (uint64_t)d);
-	fastlock_release(&d->nic->lock);
-	if ((status != GNI_RC_SUCCESS) &&
-		(status != GNI_RC_ERROR_RESOURCE)) {
+	if (d->pre_post_clbk_fn != NULL)
+		ret = d->pre_post_clbk_fn(d, &post);
+		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			    "GNI_EpBind returned %s\n",
-			     gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
+				"pre_post_callback_fn: %d\n",
+				ret);
+
+	if (post) {
+		/*
+		 * if we get GNI_RC_ERROR_RESOURCE status return from
+		 * GNI_EpPostDataWId  that means that a previously posted
+		 * wildcard datagram has matched up with an incoming
+		 * connect request from the rank we are trying to send
+		 * a connect request to.  Don't treat this case as an
+		 * error.
+		 */
+		status = GNI_EpPostDataWId(d->gni_ep,
+					   d->dgram_in_buf,
+					   GNI_DATAGRAM_MAXSIZE,
+					   d->dgram_out_buf,
+					   GNI_DATAGRAM_MAXSIZE,
+					   (uint64_t)d);
+		if (d->post_post_clbk_fn != NULL)
+			ret = d->post_post_clbk_fn(d, status);
+			if (ret != FI_SUCCESS)
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				"post_post_callback_fn: %d\n",
+				ret);
 	}
+	fastlock_release(&d->nic->lock);
+	if (post) {
+		if ((status != GNI_RC_SUCCESS) &&
+			(status != GNI_RC_ERROR_RESOURCE)) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				    "GNI_EpPostDataWId returned %s\n",
+				     gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+		}
 
-	if (status_ptr != NULL)
-		*status_ptr = status;
-
-	/*
-	 * datagram is active now, connecting
-	 */
-	if (status == GNI_RC_SUCCESS)
+		/*
+		 * datagram is active now, connecting
+		 */
 		d->state = GNIX_DGRAM_STATE_CONNECTING;
-	else if (status == GNI_RC_ERROR_RESOURCE)
-		d->state = GNIX_DGRAM_STATE_ALREADY_CONNECTING;
+	}
 
 err:
 	return ret;
@@ -421,23 +437,52 @@ int  _gnix_dgram_poll(struct gnix_dgram_hndl *hndl,
 		 * do need to take lock here
 		 */
 		fastlock_acquire(&cm_nic->lock);
+
+		if (dg_ptr->pre_test_clbk_fn != NULL) {
+			ret = dg_ptr->pre_test_clbk_fn(dg_ptr);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"pre_test_clbk returned %d\n",
+					ret);
+			}
+		}
+
 		status = GNI_EpPostDataTestById(dg_ptr->gni_ep,
 						datagram_id,
 						&post_state,
 						&responding_remote_addr,
 						&responding_remote_id);
-		fastlock_release(&cm_nic->lock);
 		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				"GNI_EpPostDataTestById:  %s\n",
+					gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
+			fastlock_release(&cm_nic->lock);
 			goto err;
 		}
+
+		if (dg_ptr->post_test_clbk_fn != NULL) {
+			responding_addr.device_addr =
+				responding_remote_addr;
+			responding_addr.cdm_id =
+				responding_remote_id;
+			ret = dg_ptr->post_test_clbk_fn(dg_ptr,
+						responding_addr,
+						post_state);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"post_test_clbk returned %d\n",
+					ret);
+			}
+		}
+		fastlock_release(&cm_nic->lock);
 
 		/*
 		 * pass COMPLETED and error post state cases to
 		 * callback function if present.  If a callback funciton
 		 * is not present, the error states set ret to -FI_EIO.
 		 *
-		 * TODO should we also pass pending/remote_data states to
+		 * TODO should we also pass pending,remote_data states to
 		 * the callback?  maybe useful for debugging weird
 		 * datagram problems?
 		 */

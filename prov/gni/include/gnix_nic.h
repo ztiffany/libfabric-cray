@@ -43,6 +43,8 @@ extern "C" {
 #endif /* HAVE_CONFIG_H */
 
 #include "gnix.h"
+#include "gnix_bitmap.h"
+#include "gnix_mbox_allocator.h"
 #include <assert.h>
 
 /*
@@ -86,12 +88,20 @@ struct gnix_nic {
 	struct list_head tx_desc_free_list;
 	struct gnix_tx_descriptor *tx_desc_base;
 	atomic_t outstanding_fab_reqs_nic;
+	fastlock_t wq_lock;
 	struct list_head nic_wq;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t device_id;
 	uint32_t device_addr;
 	int max_tx_desc_id;
+	fastlock_t vc_id_lock;
+	struct gnix_vc **vc_id_table;
+	int vc_id_table_capacity;
+	int vc_id_table_count;
+	gnix_bitmap_t vc_id_bitmap;
+	uint32_t mem_per_mbox;
+	struct gnix_mbox_alloc_handle *mbox_hndl;
 	atomic_t ref_cnt;
 };
 
@@ -144,6 +154,7 @@ int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs);
 int _gnix_nic_free(struct gnix_nic *nic);
 int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			struct gnix_nic **nic_ptr);
+int _gnix_nic_progress(struct gnix_nic *nic);
 
 /*
  * inline functions

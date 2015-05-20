@@ -45,6 +45,8 @@
 #include "gnix_ep.h"
 #include "gnix_ep_rdm.h"
 #include "gnix_ep_msg.h"
+#include "gnix_hashtable.h"
+#include "gnix_vc.h"
 
 /*******************************************************************************
  * Forward declaration for ops structures.
@@ -423,15 +425,69 @@ ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
  * Base EP API function implementations.
  ******************************************************************************/
 
+
+static int gnix_ep_control(fid_t fid, int command, void *arg)
+{
+	int i, ret = FI_SUCCESS;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_domain *dom;
+	struct gnix_vc *vc;
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid);
+
+	switch (command) {
+	/*
+	 * for FI_EP_RDM, post wc datagrams now
+	 */
+	case FI_ENABLE:
+		if (ep->type == FI_EP_RDM) {
+			dom = ep->domain;
+			for (i = 0; i < dom->fabric->n_wc_dgrams; i++) {
+				ret = _gnix_vc_alloc(ep, FI_ADDR_UNSPEC, &vc);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+				     "_gnix_vc_alloc call returned %d\n", ret);
+					goto err;
+				}
+				ret = _gnix_vc_accept(vc);
+				if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						"_gnix_vc_accept returned %d\n",
+						ret);
+					_gnix_vc_destroy(vc);
+					goto err;
+				} else {
+					dlist_insert_tail(&vc->entry,
+						       &ep->wc_vc_list);
+				}
+			}
+		}
+		break;
+
+	case FI_GETFIDFLAG:
+	case FI_SETFIDFLAG:
+	case FI_ALIAS:
+	default:
+		return -FI_ENOSYS;
+	}
+
+err:
+	return ret;
+}
+
 static int gnix_ep_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
+	struct gnix_vc *vc;
+	struct gnix_fid_av *av;
 	struct gnix_cm_nic *cm_nic;
+	struct dlist_entry *p, *head;
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "%s\n", __func__);
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
@@ -447,10 +503,43 @@ static int gnix_ep_close(fid_t fid)
 	nic = ep->nic;
 	assert(nic != NULL);
 
+	av = ep->av;
+	if (av != NULL)
+		atomic_dec(&av->ref_cnt);
+
 	/*
-	 * TODO: check for error return?
+	 * destroy any wildcard vc's
 	 */
+
+	head = &ep->wc_vc_list;
+	for (p = head->next; p != head; p = p->next) {
+		vc = container_of(p, struct gnix_vc, entry);
+		dlist_remove(&vc->entry);
+		ret = _gnix_vc_destroy(vc);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+			    "_gnix_vc_destroy call returned %d\n",
+			     ret);
+	}
+
+	/*
+	 * clean up any vc hash table or vector
+	 */
+
+	if (ep->type == FI_EP_RDM) {
+		if (ep->vc_ht != NULL) {
+			gnix_ht_destroy(ep->vc_ht);
+			free(ep->vc_ht);
+			ep->vc_ht = NULL;
+		}
+	}
+
 	ret = _gnix_nic_free(nic);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+		    "_gnix_vc_destroy call returned %d\n",
+		     ret);
+
 	ep->nic = NULL;
 
 	free(ep);
@@ -464,6 +553,8 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_cq  *cq;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 
@@ -518,6 +609,9 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	int ret = FI_SUCCESS;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
+	gnix_hashtable_attr_t gnix_ht_attr;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if ((domain == NULL) || (info == NULL) || (ep == NULL))
 		return -FI_EINVAL;
@@ -538,6 +632,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
+	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
 
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
@@ -551,30 +646,58 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 * TODO, initialize vc hash table
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
-		ep_priv->vc_hash_hndl = NULL;
 		ret = _gnix_cm_nic_alloc(domain_priv,
 					 &ep_priv->cm_nic);
 		if (ret != FI_SUCCESS)
 			goto err;
+
+		gnix_ht_attr.ht_initial_size = 64;     /* TODO: get from domain */
+		gnix_ht_attr.ht_maximum_size = 16384;  /* TODO: from domain */
+		gnix_ht_attr.ht_increase_step = 2;
+		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
+		gnix_ht_attr.ht_collision_thresh = 500;
+		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
+		gnix_ht_attr.ht_internal_locking = 1;
+
+		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
+		if (ret != FI_SUCCESS)
+			goto err;
+		ret = gnix_ht_init(ep_priv->vc_ht,&gnix_ht_attr);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				    "gnix_ht_init call returned %d\n",
+				     ret);
+			goto err;
+		}
+
 	} else {
+		ep_priv->cm_nic = NULL;
 		ep_priv->vc = NULL;
 	}
-
-	/*
-	 * TODO: hookup the progress functions
-	 */
 
 	ep_priv->progress_fn = NULL;
 	ep_priv->rx_progress_fn = NULL;
 
 	ret = gnix_nic_alloc(domain_priv, &ep_priv->nic);
-	if (ret != FI_SUCCESS)
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			    "_gnix_nic_alloc call returned %d\n",
+			     ret);
 		goto err;
+	}
 
 	atomic_inc(&domain_priv->ref_cnt);
 	*ep = &ep_priv->ep_fid;
 	return ret;
 err:
+	if (ep_priv->vc_ht != NULL) {
+		gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
+						     okay */
+		free(ep_priv->vc_ht);
+		ep_priv->vc_ht = NULL;
+	}
+	if (ep_priv->cm_nic != NULL)
+		ret = _gnix_cm_nic_free(ep_priv->cm_nic);
 	free(ep_priv);
 	return ret;
 
@@ -588,7 +711,7 @@ static struct fi_ops gnix_ep_fi_ops = {
 	.size = sizeof(struct fi_ops),
 	.close = gnix_ep_close,
 	.bind = gnix_ep_bind,
-	.control = fi_no_control
+	.control = gnix_ep_control,
 };
 
 static struct fi_ops_ep gnix_ep_ops = {

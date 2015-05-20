@@ -26,6 +26,7 @@ _gni_files = \
 	prov/gni/src/gnix_datagram.c \
 	prov/gni/src/gnix_cm_nic.c \
 	prov/gni/src/gnix_nic.c \
+	prov/gni/src/gnix_vc.c \
 	prov/gni/src/gnix_util.c \
 	prov/gni/src/gnix_freelist.c \
 	prov/gni/src/gnix_bitmap.c \
@@ -46,7 +47,8 @@ gnitest_SOURCES = \
 	prov/gni/test/freelist.c \
 	prov/gni/test/hashtable.c \
 	prov/gni/test/allocator.c \
-	prov/gni/test/mr.c
+	prov/gni/test/mr.c \
+	prov/gni/test/vc.c
 
 gnitest_LDFLAGS = -static
 gnitest_CPPFLAGS = $(AM_CPPFLAGS)
