@@ -48,6 +48,56 @@
 #include "gnix_hashtable.h"
 #include "gnix_vc.h"
 
+
+/*******************************************************************************
+ * gnix_fab_req freelist functions
+ *
+ * These are wrappers around the gnix_s_freelist
+ *
+ ******************************************************************************/
+
+#define GNIX_FAB_REQ_FL_MIN_SIZE 100
+#define GNIX_FAB_REQ_FL_REFILL_SIZE 10
+
+static int __fr_freelist_init(struct gnix_fid_ep *ep)
+{
+	assert(ep);
+	return _gnix_sfl_init(sizeof(struct gnix_fab_req),
+			      offsetof(struct gnix_fab_req, slist),
+			      GNIX_FAB_REQ_FL_MIN_SIZE,
+			      GNIX_FAB_REQ_FL_REFILL_SIZE,
+			      0, 0, &ep->fr_freelist);
+}
+
+static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
+{
+	assert(ep);
+	_gnix_sfl_destroy(&ep->fr_freelist);
+}
+
+static struct gnix_fab_req *__fr_alloc(struct gnix_fid_ep *ep)
+{
+	struct slist_entry *se;
+	struct gnix_fab_req *fr = NULL;
+	int ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+
+	while (ret == -FI_EAGAIN)
+		ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+
+	if (ret == FI_SUCCESS) {
+		fr = container_of(se, struct gnix_fab_req, slist);
+		fr->gnix_ep = ep;
+	}
+
+	return fr;
+}
+
+static void __fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
+{
+	assert(fr->gnix_ep == ep);
+	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
+}
+
 /*******************************************************************************
  * Forward declaration for ops structures.
  ******************************************************************************/
@@ -542,6 +592,16 @@ static int gnix_ep_close(fid_t fid)
 
 	ep->nic = NULL;
 
+	/*
+	 * Free fab_reqs
+	 */
+	if (atomic_get(&ep->active_fab_reqs) != 0) {
+		/* Should we just assert here? */
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Active requests while closing an endpoint.");
+	}
+	__fr_freelist_destroy(ep);
+
 	free(ep);
 
 	return ret;
@@ -634,6 +694,13 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->type = info->ep_attr->type;
 	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
+	ret = __fr_freelist_init(ep_priv);
+	if (ret != FI_SUCCESS) {
+		GNIX_ERR(FI_LOG_EP_CTRL,
+			 "Error allocating gnix_fab_req freelist (%s)",
+			 fi_strerror(-ret));
+		goto err;
+	}
 
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
@@ -689,6 +756,11 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	atomic_inc(&domain_priv->ref_cnt);
 	*ep = &ep_priv->ep_fid;
 	return ret;
+
+err2:
+	_gnix_cm_nic_free(ep_priv->cm_nic);
+err1:
+	__fr_freelist_destroy(ep_priv);
 err:
 	if (ep_priv->vc_ht != NULL) {
 		_gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
