@@ -64,6 +64,7 @@ extern "C" {
 #include "gni_pub.h"
 #include "ccan/list.h"
 #include "gnix_util.h"
+#include "gnix_freelist.h"
 
 #include "gnix_cq.h"
 
@@ -274,8 +275,9 @@ struct gnix_fid_ep {
 	int (*rx_progress_fn)(struct gnix_fid_ep *, gni_return_t *rc);
 	int enabled;
 	int no_want_cqes;
-	/* num. active fab_reqs associated with this ep */
+	/* num. active read and write fab_reqs associated with this ep */
 	atomic_t active_fab_reqs;
+	struct gnix_s_freelist fr_freelist;
 	atomic_t ref_cnt;
 };
 
