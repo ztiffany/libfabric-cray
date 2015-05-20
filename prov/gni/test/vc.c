@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -162,7 +163,8 @@ void vc_teardown(void)
  * Test vc functions.
  ******************************************************************************/
 
-TestSuite(vc_management, .init = vc_setup, .fini = vc_teardown);
+TestSuite(vc_management, .init = vc_setup, .fini = vc_teardown,
+	  .disabled = true);
 
 Test(vc_management, vc_alloc_simple)
 {
@@ -278,7 +280,7 @@ Test(vc_management, vc_conn_accept)
 	memcpy(&key, &gni_addr[1],
 		sizeof(gnix_ht_key_t));
 
-	ret = gnix_ht_insert(ep_priv[0]->vc_ht, key, vc_conn);
+	ret = _gnix_ht_insert(ep_priv[0]->vc_ht, key, vc_conn);
 	assert_eq(ret, FI_SUCCESS);
 	vc_conn->modes |= GNIX_VC_MODE_IN_HT;
 

@@ -528,7 +528,7 @@ static int gnix_ep_close(fid_t fid)
 
 	if (ep->type == FI_EP_RDM) {
 		if (ep->vc_ht != NULL) {
-			gnix_ht_destroy(ep->vc_ht);
+			_gnix_ht_destroy(ep->vc_ht);
 			free(ep->vc_ht);
 			ep->vc_ht = NULL;
 		}
@@ -662,7 +662,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
 		if (ret != FI_SUCCESS)
 			goto err;
-		ret = gnix_ht_init(ep_priv->vc_ht,&gnix_ht_attr);
+		ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				    "gnix_ht_init call returned %d\n",
@@ -691,7 +691,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	return ret;
 err:
 	if (ep_priv->vc_ht != NULL) {
-		gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
+		_gnix_ht_destroy(ep_priv->vc_ht); /* may not be initialized but
 						     okay */
 		free(ep_priv->vc_ht);
 		ep_priv->vc_ht = NULL;
