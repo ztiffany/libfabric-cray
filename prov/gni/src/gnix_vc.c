@@ -296,7 +296,7 @@ static int __gnix_vc_hndl_con_match_con(struct gnix_datagram *dgram,
 	/*
 	 * at this point vc should be in connecting state
 	 */
-	assert(vc->conn_state == GNI_VC_CONNECTING);
+	assert(vc->conn_state == GNIX_VC_CONNECTING);
 
 	ep = vc->ep;
 	assert(ep);
