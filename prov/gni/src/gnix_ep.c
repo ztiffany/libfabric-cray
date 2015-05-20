@@ -699,7 +699,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		GNIX_ERR(FI_LOG_EP_CTRL,
 			 "Error allocating gnix_fab_req freelist (%s)",
 			 fi_strerror(-ret));
-		goto err;
+		goto err1;
 	}
 
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
@@ -727,7 +727,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		gnix_ht_attr.ht_internal_locking = 1;
 
 		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
-		if (ret != FI_SUCCESS)
+		if (ep_priv->vc_ht == NULL)
 			goto err;
 		ret = _gnix_ht_init(ep_priv->vc_ht, &gnix_ht_attr);
 		if (ret != FI_SUCCESS) {
@@ -757,8 +757,6 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	*ep = &ep_priv->ep_fid;
 	return ret;
 
-err2:
-	_gnix_cm_nic_free(ep_priv->cm_nic);
 err1:
 	__fr_freelist_destroy(ep_priv);
 err:
