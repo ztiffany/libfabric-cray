@@ -373,7 +373,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 		atomic_initialize(&nic->ref_cnt, 1);
 		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
-		ret = alloc_bitmap(&nic->vc_id_bitmap, 1000);
+		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap, 1000);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "alloc_bitmap returned %d\n", ret);

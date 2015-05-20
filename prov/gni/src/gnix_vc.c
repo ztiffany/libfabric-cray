@@ -64,7 +64,7 @@ static int __gnix_vc_free_id(struct gnix_vc *vc)
 	if (nic == NULL)
 		return -FI_EINVAL;
 
-	__gnix_clear_bit(&nic->vc_id_bitmap, vc->vc_id);
+	_gnix_clear_bit(&nic->vc_id_bitmap, vc->vc_id);
 
 	return FI_SUCCESS;
 }
@@ -116,7 +116,7 @@ static int _gnix_vc_get_id(struct gnix_vc *vc)
 	 * set bit in the bitmap
 	 */
 
-	__gnix_set_bit(&nic->vc_id_bitmap, nic->vc_id_table_count);
+	_gnix_set_bit(&nic->vc_id_bitmap, nic->vc_id_table_count);
 
 	++(nic->vc_id_table_count);
 err:
@@ -243,7 +243,7 @@ static int __gnix_vc_post_test_clbk(struct gnix_datagram *dgram,
 			vc->peer_addr = peer_addr;
 			memcpy(&key, &peer_addr,
 				sizeof(gnix_ht_key_t));
-			ret = gnix_ht_insert(ep->vc_ht, key,
+			ret = _gnix_ht_insert(ep->vc_ht, key,
 						vc);
 			if (ret == FI_SUCCESS) {
 				vc->modes |= GNIX_VC_MODE_IN_HT;
@@ -468,9 +468,9 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 	if (!(wc_vc->modes & GNIX_VC_MODE_IN_HT)) {
 		memcpy(&key, &peer_address,
 			sizeof(gnix_ht_key_t));
-		vc = gnix_ht_lookup(ep->vc_ht, key);
+		vc = _gnix_ht_lookup(ep->vc_ht, key);
 		assert(vc != NULL);
-		ret = gnix_ht_remove(ep->vc_ht, key);
+		ret = _gnix_ht_remove(ep->vc_ht, key);
 		assert(ret == FI_SUCCESS);
 		if (!slist_empty(&vc->send_queue))
 			slist_insert_head(vc->send_queue.head,
@@ -478,7 +478,7 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 		ret = _gnix_vc_destroy(vc);
 		assert(ret == FI_SUCCESS);
 		vc = wc_vc;
-		ret = gnix_ht_insert(ep->vc_ht, key, vc);
+		ret = _gnix_ht_insert(ep->vc_ht, key, vc);
 		assert(ret == FI_SUCCESS);
 	} else
 		vc = wc_vc;
