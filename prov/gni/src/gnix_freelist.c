@@ -97,7 +97,7 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 	assert(init_size >= 0);
 	assert(refill_size >= 0);
 	assert(growth_factor >= 0);
-	assert(max_refil_size >= 0);
+	assert(max_refill_size >= 0);
 
 	int fill_size = init_size != 0 ? init_size : GNIX_SFL_INIT_SIZE;
 
