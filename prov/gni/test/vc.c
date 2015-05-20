@@ -164,7 +164,7 @@ void vc_teardown(void)
  ******************************************************************************/
 
 TestSuite(vc_management, .init = vc_setup, .fini = vc_teardown,
-	  .disabled = true);
+	  .disabled = false);
 
 Test(vc_management, vc_alloc_simple)
 {
