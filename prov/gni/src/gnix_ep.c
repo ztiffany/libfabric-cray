@@ -694,6 +694,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->type = info->ep_attr->type;
 	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
+	atomic_initialize(&ep_priv->ref_cnt, 0);
 	ret = __fr_freelist_init(ep_priv);
 	if (ret != FI_SUCCESS) {
 		GNIX_ERR(FI_LOG_EP_CTRL,

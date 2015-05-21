@@ -83,6 +83,8 @@ static int _gnix_vc_get_id(struct gnix_vc *vc)
 	struct gnix_nic *nic;
 	struct gnix_vc **table_base;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	ep = vc->ep;
 	if (ep == NULL)
 		return -FI_EINVAL;
