@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,10 +32,6 @@
  */
 
 #include "gnix_queue.h"
-
-#ifdef assert
-#undef assert
-#endif
 
 #include <criterion/criterion.h>
 
@@ -71,7 +68,7 @@ void setup_count_eight(void)
 
 	ret = _gnix_queue_create(&queue, alloc_int_entry, free_int_entry,
 				 0, 8);
-	assert_eq(ret, FI_SUCCESS, "failed to create queue.");
+	cr_assert_eq(ret, FI_SUCCESS, "failed to create queue.");
 }
 
 void setup_count_zero(void)
@@ -80,7 +77,7 @@ void setup_count_zero(void)
 
 	ret = _gnix_queue_create(&queue, alloc_int_entry, free_int_entry,
 				 0, 0);
-	assert_eq(ret, FI_SUCCESS, "failed to create queue.");
+	cr_assert_eq(ret, FI_SUCCESS, "failed to create queue.");
 }
 
 void teardown_queue(void)
@@ -95,13 +92,13 @@ Test(empty, null_read)
 	struct slist_entry *list_entry;
 
 	list_entry = _gnix_queue_dequeue(queue);
-	expect(!list_entry, "non null read on empty queue.");
+	cr_expect(!list_entry, "non null read on empty queue.");
 
 	list_entry = _gnix_queue_dequeue_free(queue);
-	expect(!list_entry, "non null read on free list of empty queue.");
+	cr_expect(!list_entry, "non null read on free list of empty queue.");
 
 	list_entry = _gnix_queue_peek(queue);
-	expect(!list_entry, "non null peek on empty queue.");
+	cr_expect(!list_entry, "non null peek on empty queue.");
 }
 
 Test(empty, single_write)
@@ -113,7 +110,7 @@ Test(empty, single_write)
 	 * Write single entry with value 4 to queue.
 	 */
 	list_entry = _gnix_queue_get_free(queue);
-	expect(list_entry, "null entry from queue get free function.");
+	cr_expect(list_entry, "null entry from queue get free function.");
 
 	entry = container_of(list_entry, struct int_entry, item);
 
@@ -125,11 +122,11 @@ Test(empty, single_write)
 	 * Read back entry with value 4.
 	 */
 	list_entry = _gnix_queue_dequeue(queue);
-	expect(list_entry, "null entry from queue after enqueue.");
+	cr_expect(list_entry, "null entry from queue after enqueue.");
 
 	entry = container_of(list_entry, struct int_entry, item);
 
-	expect_eq(4, entry->x, "entry does not contain assigned value.");
+	cr_expect_eq(4, entry->x, "entry does not contain assigned value.");
 
 	/*
 	 * Add to free list.
@@ -140,17 +137,18 @@ Test(empty, single_write)
 	 * Read from now empty queue.
 	 */
 	list_entry = _gnix_queue_dequeue(queue);
-	expect(!list_entry, "entry read from empty queue is non-null.");
+	cr_expect(!list_entry, "entry read from empty queue is non-null.");
 
 	/*
 	 * Read from free and make sure it's the same.
 	 */
 	list_entry = _gnix_queue_get_free(queue);
-	expect(list_entry, "null entry from free queue after adding to free.");
+	cr_expect(list_entry,
+		  "null entry from free queue after adding to free.");
 
 	entry = container_of(list_entry, struct int_entry, item);
 
-	expect_eq(4, entry->x, "entry does not contain assigned value.");
+	cr_expect_eq(4, entry->x, "entry does not contain assigned value.");
 
 	/*
 	 * Completely empty list. Shouldn't seg fault on teardown.
@@ -170,7 +168,8 @@ Test(eight, read_nine)
 	 */
 	for (size_t i = 0; i < 8; i++) {
 		list_entry = _gnix_queue_get_free(queue);
-		expect(list_entry, "null entry from queue get free function.");
+		cr_expect(list_entry,
+			  "null entry from queue get free function.");
 
 		entry = container_of(list_entry, struct int_entry, item);
 
@@ -183,32 +182,32 @@ Test(eight, read_nine)
 	 * Peek and make sure the top of queue is 0.
 	 */
 	list_entry = _gnix_queue_peek(queue);
-	expect(list_entry, "null entry from peek.");
+	cr_expect(list_entry, "null entry from peek.");
 
 	entry = container_of(list_entry, struct int_entry, item);
 
-	expect_eq(0, entry->x, "value of peek isn't first added to queue.");
+	cr_expect_eq(0, entry->x, "value of peek isn't first added to queue.");
 
 	/*
 	 * Peek again and make sure it's still 0.
 	 */
 	list_entry = _gnix_queue_peek(queue);
-	expect(list_entry, "null entry from peek.");
+	cr_expect(list_entry, "null entry from peek.");
 
 	entry = container_of(list_entry, struct int_entry, item);
 
-	expect_eq(0, entry->x, "value of peek isn't first added to queue.");
+	cr_expect_eq(0, entry->x, "value of peek isn't first added to queue.");
 
 	/*
 	 * Read it back.
 	 */
 	for (size_t i = 0; i < 8; i++) {
 		list_entry = _gnix_queue_dequeue(queue);
-		expect(list_entry, "null entry from queue dequeue.");
+		cr_expect(list_entry, "null entry from queue dequeue.");
 
 		entry = container_of(list_entry, struct int_entry, item);
 
-		expect_eq(i, entry->x, "value not same as assigned.");
+		cr_expect_eq(i, entry->x, "value not same as assigned.");
 
 		_gnix_queue_enqueue_free(queue, &entry->item);
 	}
@@ -217,5 +216,5 @@ Test(eight, read_nine)
 	 * Read an extra item. Should return null.
 	 */
 	list_entry = _gnix_queue_dequeue(queue);
-	expect(!list_entry, "entry from empty queue not null.");
+	cr_expect(!list_entry, "entry from empty queue not null.");
 }

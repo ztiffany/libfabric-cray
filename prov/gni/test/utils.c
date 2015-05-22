@@ -60,20 +60,20 @@ Test(utils, proc)
 	int rc;
 
 	rc = _gnix_task_is_not_app();
-	expect(rc == 0);
+	cr_expect(rc == 0);
 
 	/* *_unassigned_cpus flags don't work on tiger */
 	rc = _gnix_job_enable_unassigned_cpus();
-	expect(rc != 0);
+	cr_expect(rc != 0);
 
 	rc = _gnix_job_disable_unassigned_cpus();
-	expect(rc != 0);
+	cr_expect(rc != 0);
 
 	rc = _gnix_job_enable_affinity_apply();
-	expect(rc == 0);
+	cr_expect(rc == 0);
 
 	rc = _gnix_job_disable_affinity_apply();
-	expect(rc == 0);
+	cr_expect(rc == 0);
 
 }
 
@@ -87,18 +87,18 @@ Test(utils, alps)
 	_gnix_alps_cleanup();
 
 	rc = gnixu_get_rdma_credentials(addr, &ptag, &cookie);
-	expect(!rc);
+	cr_expect(!rc);
 
 	rc = _gnix_job_fma_limit(0, ptag, &fmas);
-	expect(!rc);
+	cr_expect(!rc);
 
 	rc = _gnix_pes_on_node(&npes);
-	expect(!rc);
+	cr_expect(!rc);
 
 	rc = _gnix_nics_per_rank(&npr);
-	expect(!rc);
+	cr_expect(!rc);
 
-	expect((fmas / npes) == npr);
+	cr_expect((fmas / npes) == npr);
 
 	_gnix_alps_cleanup();
 }

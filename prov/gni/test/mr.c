@@ -27,10 +27,6 @@
 #include "gnix_cq.h"
 #include "gnix.h"
 
-#ifdef assert
-#undef assert
-#endif
-
 #include <criterion/criterion.h>
 
 static struct fid_fabric *fab;
@@ -57,7 +53,7 @@ static void mr_setup(void)
 	int ret = 0;
 
 	hints = fi_allocinfo();
-	assert(hints, "fi_allocinfo");
+	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
@@ -65,21 +61,21 @@ static void mr_setup(void)
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	assert(!ret, "fi_getinfo");
+	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
-	assert(!ret, "fi_fabric");
+	cr_assert(!ret, "fi_fabric");
 
 	ret = fi_domain(fab, fi, &dom, NULL);
-	assert(!ret, "fi_domain");
+	cr_assert(!ret, "fi_domain");
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
-	assert(!ret, "fi_endpoint");
+	cr_assert(!ret, "fi_endpoint");
 
 	cq_attr.wait_obj = FI_WAIT_NONE;
 
 	buf = calloc(__BUF_LEN, sizeof(unsigned char));
-	assert(buf, "buffer allocation");
+	cr_assert(buf, "buffer allocation");
 }
 
 static void mr_teardown(void)
@@ -87,11 +83,11 @@ static void mr_teardown(void)
 	int ret = 0;
 
 	ret = fi_close(&ep->fid);
-	assert(!ret, "failure in closing ep.");
+	cr_assert(!ret, "failure in closing ep.");
 	ret = fi_close(&dom->fid);
-	assert(!ret, "failure in closing domain.");
+	cr_assert(!ret, "failure in closing domain.");
 	ret = fi_close(&fab->fid);
-	assert(!ret, "failure in closing fabric.");
+	cr_assert(!ret, "failure in closing fabric.");
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 
@@ -107,10 +103,10 @@ Test(memory_registration_bare, basic_init)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
-	assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_close(&mr->fid);
-	assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS);
 }
 
 Test(memory_registration_bare, invalid_flags)
@@ -120,7 +116,7 @@ Test(memory_registration_bare, invalid_flags)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			~0, &mr, NULL);
-	assert(ret == -FI_EBADFLAGS);
+	cr_assert(ret == -FI_EBADFLAGS);
 }
 
 Test(memory_registration_bare, invalid_access)
@@ -130,7 +126,7 @@ Test(memory_registration_bare, invalid_access)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, 0,
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
-	assert(ret == -FI_EINVAL);
+	cr_assert(ret == -FI_EINVAL);
 }
 
 Test(memory_registration_bare, invalid_offset)
@@ -140,7 +136,7 @@ Test(memory_registration_bare, invalid_offset)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			~0, default_req_key, default_flags,
 			&mr, NULL);
-	assert(ret == -FI_EINVAL);
+	cr_assert(ret == -FI_EINVAL);
 }
 
 Test(memory_registration_bare, invalid_requested_key)
@@ -150,7 +146,7 @@ Test(memory_registration_bare, invalid_requested_key)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, ~0, default_flags,
 			&mr, NULL);
-	assert(ret == -FI_EKEYREJECTED);
+	cr_assert(ret == -FI_EKEYREJECTED);
 }
 
 Test(memory_registration_bare, invalid_buf)
@@ -160,7 +156,7 @@ Test(memory_registration_bare, invalid_buf)
 	ret = fi_mr_reg(dom, NULL, buf_len, default_access,
 			default_offset, default_req_key, default_flags,
 			&mr, NULL);
-	assert(ret == -FI_EINVAL);
+	cr_assert(ret == -FI_EINVAL);
 }
 
 Test(memory_registration_bare, invalid_mr_ptr)
@@ -170,7 +166,7 @@ Test(memory_registration_bare, invalid_mr_ptr)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key, default_flags,
 			NULL, NULL);
-	assert(ret == -FI_EINVAL);
+	cr_assert(ret == -FI_EINVAL);
 }
 
 Test(memory_registration_bare, invalid_fid_class)
@@ -183,7 +179,7 @@ Test(memory_registration_bare, invalid_fid_class)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key, default_flags,
 			&mr, NULL);
-	assert(ret == -FI_EINVAL);
+	cr_assert(ret == -FI_EINVAL);
 
 	/* restore old fclass for teardown */
 	dom->fid.fclass = old_class;

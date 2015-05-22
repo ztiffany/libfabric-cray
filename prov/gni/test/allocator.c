@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -36,10 +37,6 @@
 #include "gnix.h"
 #include "gnix_mbox_allocator.h"
 
-#ifdef assert
-#undef assert
-#endif
-
 #include <criterion/criterion.h>
 
 static struct fid_fabric *fab;
@@ -55,7 +52,7 @@ void allocator_setup(void)
 	int ret = 0;
 
 	hints = fi_allocinfo();
-	assert(hints, "fi_allocinfo");
+	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
@@ -63,16 +60,16 @@ void allocator_setup(void)
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	assert_eq(ret, FI_SUCCESS, "fi_getinfo");
+	cr_assert_eq(ret, FI_SUCCESS, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
-	assert_eq(ret, FI_SUCCESS, "fi_fabric");
+	cr_assert_eq(ret, FI_SUCCESS, "fi_fabric");
 
 	ret = fi_domain(fab, fi, &dom, NULL);
-	assert_eq(ret, FI_SUCCESS, "fi_domain");
+	cr_assert_eq(ret, FI_SUCCESS, "fi_domain");
 
 	ret = fi_endpoint(dom, fi, &ep, NULL);
-	assert_eq(ret, FI_SUCCESS, "fi_endpoint");
+	cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint");
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 }
@@ -82,11 +79,11 @@ void allocator_teardown(void)
 	int ret = 0;
 
 	ret = fi_close(&ep->fid);
-	assert_eq(ret, FI_SUCCESS, "failure in closing ep.");
+	cr_assert_eq(ret, FI_SUCCESS, "failure in closing ep.");
 	ret = fi_close(&dom->fid);
-	assert_eq(ret, FI_SUCCESS, "failure in closing domain.");
+	cr_assert_eq(ret, FI_SUCCESS, "failure in closing domain.");
 	ret = fi_close(&fab->fid);
-	assert_eq(ret, FI_SUCCESS, "failure in closing fabric.");
+	cr_assert_eq(ret, FI_SUCCESS, "failure in closing fabric.");
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 }
@@ -161,14 +158,14 @@ static void open_close_allocator(enum gnix_page_size page_size,
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, page_size,
 					 mbox_size, mpmmap, &allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
-	expect_eq(verify_hugepages(), 2,
-		  "memory not found in /proc/self/maps.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
+	cr_expect_eq(verify_hugepages(), 2,
+		     "memory not found in /proc/self/maps.");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
-	expect_eq(verify_hugepages(), 1,
-		  "memory not released in /proc/self/maps.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "memory not released in /proc/self/maps.");
 }
 
 
@@ -210,57 +207,57 @@ Test(mbox_creation, alloc_mbox)
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 1000, 12000, &allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
 
 	/*
 	 *value is 2 because the provider has internally already opened
 	 * an mbox allocator at this point.
 	 */
-	expect_eq(verify_hugepages(), 2,
+	cr_expect_eq(verify_hugepages(), 2,
 		  "memory not found in /proc/self/maps.");
 
 	ret = gnix_mbox_alloc(allocator, &mail_box);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
 
-	expect(mail_box);
+	cr_expect(mail_box);
 
 	entry = allocator->slab_list.head;
-	assert(entry);
+	cr_assert(entry);
 
 	slab = container_of(entry, struct gnix_slab, list_entry);
 
-	expect_eq(mail_box->slab, slab,
+	cr_expect_eq(mail_box->slab, slab,
 		  "slab list head and mail box slab pointer are not equal.");
-	expect_eq(mail_box->memory_handle, &mail_box->slab->memory_handle,
+	cr_expect_eq(mail_box->memory_handle, &mail_box->slab->memory_handle,
 		 "mail_box memory handle not equal to slab memory handle.");
-	expect_eq(mail_box->offset, 0, "offset is not 0.");
-	expect_eq(mail_box->base, mail_box->slab->base,
-		  "mail_box base not equal to slab base.");
+	cr_expect_eq(mail_box->offset, 0, "offset is not 0.");
+	cr_expect_eq(mail_box->base, mail_box->slab->base,
+		     "mail_box base not equal to slab base.");
 
 	/*
 	 * Write our test strings and make sure they're equal.
 	 */
 	memcpy(mail_box->base, test_string, sizeof(test_string));
-	expect_strings_eq((char *) mail_box->base, test_string);
+	cr_expect_strings_eq((char *) mail_box->base, test_string);
 
 	/*
 	 * Mailboxes haven't been returned so destroy will return -FI_EBUSY.
 	 */
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, -FI_EBUSY,
+	cr_assert_eq(ret, -FI_EBUSY,
 		  "gnix_mbox_allocator_destroy should have returned -FI_EBUSY.");
 
 	/*
 	 * Free allocated mailboxes so we can destroy cleanly.
 	 */
 	ret = gnix_mbox_free(mail_box);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
 
-	expect_eq(verify_hugepages(), 1,
-		  "memory not released in /proc/self/maps.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "memory not released in /proc/self/maps.");
 }
 
 /*
@@ -273,19 +270,19 @@ Test(mbox_creation, page_size_fail)
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, 2200,
 					 1000, 12000, &allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "Creating allocator with bogus page size succeeded.");
-	assert_eq(allocator, NULL);
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "Creating allocator with bogus page size succeeded.");
+	cr_assert_eq(allocator, NULL);
 	/*
 	 *value is 1 because the provider has internally already opened
 	 * an mbox allocator at this point.
 	 */
-	expect_eq(verify_hugepages(), 1,
-		  "Huge page open, but shouldn't be");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "Huge page open, but shouldn't be");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "gnix_mbox_allocator_destroy succeeded on NULL handle.");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
 Test(mbox_creation, mbox_size_fail)
@@ -297,16 +294,16 @@ Test(mbox_creation, mbox_size_fail)
 	 */
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 0, 12000, &allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "Creating allocator with zero mbox size succeeded.");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "Creating allocator with zero mbox size succeeded.");
 
-	assert_eq(allocator, NULL);
-	expect_eq(verify_hugepages(), 1,
-		  "Huge page open, but shouldn't be");
+	cr_assert_eq(allocator, NULL);
+	cr_expect_eq(verify_hugepages(), 1,
+		     "Huge page open, but shouldn't be");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "gnix_mbox_allocator_destroy succeeded on NULL handle.");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
 Test(mbox_creation, mpmmap_size_fail)
@@ -318,15 +315,15 @@ Test(mbox_creation, mpmmap_size_fail)
 	 */
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 1000, 0, &allocator);
-	assert_eq(ret, -FI_EINVAL,
+	cr_assert_eq(ret, -FI_EINVAL,
 		  "Creating allocator with zero mailboxes per mmap succeeded.");
-	assert_eq(allocator, NULL);
-	expect_eq(verify_hugepages(), 1,
-		  "Huge page open, but shouldn't be");
+	cr_assert_eq(allocator, NULL);
+	cr_expect_eq(verify_hugepages(), 1,
+		     "Huge page open, but shouldn't be");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "gnix_mbox_allocator_destroy succeeded on NULL handle.");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
 Test(mbox_creation, null_allocator_fail)
@@ -338,14 +335,14 @@ Test(mbox_creation, null_allocator_fail)
 	 */
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 1000, 100, NULL);
-	assert_eq(ret, -FI_EINVAL,
-		  "Creating allocator with null allocator succeeded.");
-	expect_eq(verify_hugepages(), 1,
-		  "Huge page open, but shouldn't be");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "Creating allocator with null allocator succeeded.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "Huge page open, but shouldn't be");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, -FI_EINVAL,
-		  "gnix_mbox_allocator_destroy succeeded on NULL handle.");
+	cr_assert_eq(ret, -FI_EINVAL,
+		     "gnix_mbox_allocator_destroy succeeded on NULL handle.");
 }
 
 Test(mbox_creation, multi_allocation)
@@ -362,17 +359,17 @@ Test(mbox_creation, multi_allocation)
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 mbox_size, array_size, &allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
-	expect_eq(verify_hugepages(), 2,
-		  "memory not found in /proc/self/maps.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
+	cr_expect_eq(verify_hugepages(), 2,
+		     "memory not found in /proc/self/maps.");
 
 	/*
 	 * Create an array of mailboxes of size array_size.
 	 */
 	for (int i = 0; i < array_size; i++) {
 		ret = gnix_mbox_alloc(allocator, &(mbox_arr[i]));
-		expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
-		expect(mbox_arr[i]);
+		cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
+		cr_expect(mbox_arr[i]);
 	}
 
 	/*
@@ -390,21 +387,21 @@ Test(mbox_creation, multi_allocation)
 					   mbox_arr[j]->offset);
 			expected = abs_value(i - j) * mbox_size;
 
-			expect_eq(actual, expected,
-				  "Expected offsets and actual base offsets are not equal.");
+			cr_expect_eq(actual, expected,
+				     "Expected offsets and actual base offsets are not equal.");
 		}
 	}
 
 	for (int i = 0; i < array_size; i++) {
 		ret = gnix_mbox_free(mbox_arr[i]);
-		expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
+		cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
 	}
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
 
-	expect_eq(verify_hugepages(), 1,
-		  "memory not released in /proc/self/maps.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "memory not released in /proc/self/maps.");
 }
 
 Test(mbox_creation, double_free)
@@ -415,31 +412,31 @@ Test(mbox_creation, double_free)
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 1000, 12000, &allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
-	expect_eq(verify_hugepages(), 2,
-		  "memory not found in /proc/self/maps.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
+	cr_expect_eq(verify_hugepages(), 2,
+		     "memory not found in /proc/self/maps.");
 
 	ret = gnix_mbox_alloc(allocator, &mail_box);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
 
-	expect(mail_box);
+	cr_expect(mail_box);
 	/*
 	 * Free allocated mailboxes so we can destroy cleanly.
 	 */
 	ret = gnix_mbox_free(mail_box);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
 
 	/*
 	 * Ensure double free fails.
 	 */
 	ret = gnix_mbox_free(mail_box);
-	expect_eq(ret, -FI_EINVAL, "double free succeeded.");
+	cr_expect_eq(ret, -FI_EINVAL, "double free succeeded.");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
 
-	expect_eq(verify_hugepages(), 1,
-		  "memory not released in /proc/self/maps.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "memory not released in /proc/self/maps.");
 }
 
 /*
@@ -460,42 +457,42 @@ Test(mbox_creation, two_slabs)
 
 	ret = gnix_mbox_allocator_create(ep_priv->nic, NULL, GNIX_PAGE_4MB,
 					 mbox_size, mpmmap, &allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
-	expect_eq(verify_hugepages(), 2,
-		  "memory not found in /proc/self/maps.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_create failed.");
+	cr_expect_eq(verify_hugepages(), 2,
+		     "memory not found in /proc/self/maps.");
 
 	/*
 	 * Should use previously allocated slab
 	 */
 	ret = gnix_mbox_alloc(allocator, &(mbox_arr[0]));
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
 
 	/*
 	 * Will need another slab. Allocation will occur.
 	 */
 	ret = gnix_mbox_alloc(allocator, &(mbox_arr[1]));
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_alloc failed.");
 
 	/*
 	 * The bases should be different. The base is a per slab concept.
 	 */
-	expect_neq(mbox_arr[0]->base, mbox_arr[1]->base,
-		   "Bases are the same.");
+	cr_expect_neq(mbox_arr[0]->base, mbox_arr[1]->base,
+		      "Bases are the same.");
 
 	/*
 	 * The linked list should contain two slabs.
 	 */
-	expect_eq(2, count_slabs(allocator));
+	cr_expect_eq(2, count_slabs(allocator));
 
 	ret = gnix_mbox_free(mbox_arr[0]);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
 
 	ret = gnix_mbox_free(mbox_arr[1]);
-	expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
+	cr_expect_eq(ret, FI_SUCCESS, "gnix_mbox_free failed.");
 
 	ret = gnix_mbox_allocator_destroy(allocator);
-	assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
+	cr_assert_eq(ret, FI_SUCCESS, "gnix_mbox_allocator_destroy failed.");
 
-	expect_eq(verify_hugepages(), 1,
-		  "memory not released in /proc/self/maps.");
+	cr_expect_eq(verify_hugepages(), 1,
+		     "memory not released in /proc/self/maps.");
 }
