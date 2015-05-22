@@ -54,10 +54,6 @@
 #include "gnix_cm_nic.h"
 #include "gnix_hashtable.h"
 
-#ifdef assert
-#undef assert
-#endif
-
 #include <criterion/criterion.h>
 
 static struct fid_fabric *fab;
@@ -76,7 +72,7 @@ void vc_setup(void)
 	size_t addrlen = 0;
 
 	hints = fi_allocinfo();
-	assert(hints, "fi_allocinfo");
+	cr_assert(hints, "fi_allocinfo");
 
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
@@ -84,54 +80,54 @@ void vc_setup(void)
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	assert(!ret, "fi_getinfo");
+	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
-	assert(!ret, "fi_fabric");
+	cr_assert(!ret, "fi_fabric");
 
 	ret = fi_domain(fab, fi, &dom, NULL);
-	assert(!ret, "fi_domain");
+	cr_assert(!ret, "fi_domain");
 
 	attr.type = FI_AV_MAP;
 	attr.count = 16;
 
 	ret = fi_av_open(dom, &attr, &av, NULL);
-	assert(!ret, "fi_av_open");
+	cr_assert(!ret, "fi_av_open");
 
 	ret = fi_endpoint(dom, fi, &ep[0], NULL);
-	assert(!ret, "fi_endpoint");
+	cr_assert(!ret, "fi_endpoint");
 
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
-	assert(addrlen > 0);
+	cr_assert(addrlen > 0);
 
 	ep_name[0] = malloc(addrlen);
-	assert(ep_name[0] != NULL);
+	cr_assert(ep_name[0] != NULL);
 
 	ep_name[1] = malloc(addrlen);
-	assert(ep_name[1] != NULL);
+	cr_assert(ep_name[1] != NULL);
 
 	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
-	assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_endpoint(dom, fi, &ep[1], NULL);
-	assert(!ret, "fi_endpoint");
+	cr_assert(!ret, "fi_endpoint");
 
 	ret = fi_getname(&ep[1]->fid, ep_name[1], &addrlen);
-	assert(ret == FI_SUCCESS);
+	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_av_insert(av, ep_name[0], 1, &gni_addr[0], 0,
 				NULL);
-	assert(ret == 1);
+	cr_assert(ret == 1);
 
 	ret = fi_av_insert(av, ep_name[1], 1, &gni_addr[1], 0,
 				NULL);
-	assert(ret == 1);
+	cr_assert(ret == 1);
 
 	ret = fi_ep_bind(ep[0], &av->fid, 0);
-	assert(!ret, "fi_ep_bind");
+	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_ep_bind(ep[1], &av->fid, 0);
-	assert(!ret, "fi_ep_bind");
+	cr_assert(!ret, "fi_ep_bind");
 }
 
 void vc_teardown(void)
@@ -139,19 +135,19 @@ void vc_teardown(void)
 	int ret = 0;
 
 	ret = fi_close(&ep[0]->fid);
-	assert(!ret, "failure in closing ep.");
+	cr_assert(!ret, "failure in closing ep.");
 
 	ret = fi_close(&ep[1]->fid);
-	assert(!ret, "failure in closing ep.");
+	cr_assert(!ret, "failure in closing ep.");
 
 	ret = fi_close(&av->fid);
-	assert(!ret, "failure in closing av.");
+	cr_assert(!ret, "failure in closing av.");
 
 	ret = fi_close(&dom->fid);
-	assert(!ret, "failure in closing domain.");
+	cr_assert(!ret, "failure in closing domain.");
 
 	ret = fi_close(&fab->fid);
-	assert(!ret, "failure in closing fabric.");
+	cr_assert(!ret, "failure in closing fabric.");
 
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
@@ -175,22 +171,22 @@ Test(vc_management, vc_alloc_simple)
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 
 	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_alloc(ep_priv, gni_addr[1], &vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	/*
 	 * vc_id's have to be different since the
 	 * vc's were allocated using the same ep.
 	 */
-	assert_neq(vc[0]->vc_id, vc[1]->vc_id);
+	cr_assert_neq(vc[0]->vc_id, vc[1]->vc_id);
 
 	ret = _gnix_vc_destroy(vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 }
 
 Test(vc_management, vc_lookup_by_id)
@@ -202,22 +198,22 @@ Test(vc_management, vc_lookup_by_id)
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 
 	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_alloc(ep_priv, gni_addr[1], &vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	vc_chk = _gnix_vc_get_by_id(ep_priv->nic, vc[0]->vc_id);
-	assert_eq(vc_chk, vc[0]);
+	cr_assert_eq(vc_chk, vc[0]);
 
 	vc_chk = _gnix_vc_get_by_id(ep_priv->nic, vc[1]->vc_id);
-	assert_eq(vc_chk, vc[1]);
+	cr_assert_eq(vc_chk, vc[1]);
 
 	ret = _gnix_vc_destroy(vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 }
 
@@ -230,10 +226,10 @@ Test(vc_management, vc_accept)
 	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
 
 	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_alloc(ep_priv, FI_ADDR_UNSPEC, &vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	/*
 	 * this should fail because the vc was allocated with
@@ -241,7 +237,7 @@ Test(vc_management, vc_accept)
 	 */
 
 	ret = _gnix_vc_accept(vc[0]);
-	assert_eq(ret, -FI_EINVAL);
+	cr_assert_eq(ret, -FI_EINVAL);
 
 	/*
 	 * this should succeed because the vc was allocated with
@@ -249,13 +245,13 @@ Test(vc_management, vc_accept)
 	 */
 
 	ret = _gnix_vc_accept(vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc[0]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc[1]);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 }
 
@@ -275,20 +271,20 @@ Test(vc_management, vc_conn_accept)
 	cm_nic[1] = ep_priv[1]->cm_nic;
 
 	ret = _gnix_vc_alloc(ep_priv[0], gni_addr[1], &vc_conn);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	memcpy(&key, &gni_addr[1],
 		sizeof(gnix_ht_key_t));
 
 	ret = _gnix_ht_insert(ep_priv[0]->vc_ht, key, vc_conn);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 	vc_conn->modes |= GNIX_VC_MODE_IN_HT;
 
 	ret = _gnix_vc_alloc(ep_priv[1], FI_ADDR_UNSPEC, &vc_listen);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_accept(vc_listen);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	/*
 	 * this is the moral equivalent of fi_enable(ep[0]),
@@ -298,7 +294,7 @@ Test(vc_management, vc_conn_accept)
 	dlist_insert_tail(&vc_listen->entry, &ep_priv[1]->wc_vc_list);
 
 	ret = _gnix_vc_connect(vc_conn);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	/*
 	 * progress the cm_nic
@@ -307,7 +303,7 @@ Test(vc_management, vc_conn_accept)
 	state = GNIX_VC_CONN_NONE;
 	while (state != GNIX_VC_CONNECTED) {
 		ret = _gnix_cm_nic_progress(cm_nic[0]);
-		assert_eq(ret, FI_SUCCESS);
+		cr_assert_eq(ret, FI_SUCCESS);
 		pthread_yield();
 		state = _gnix_vc_state(vc_conn);
 	}
@@ -315,20 +311,20 @@ Test(vc_management, vc_conn_accept)
 	state = GNIX_VC_CONN_NONE;
 	while (state != GNIX_VC_CONNECTED) {
 		ret = _gnix_cm_nic_progress(cm_nic[1]);
-		assert_eq(ret, FI_SUCCESS);
+		cr_assert_eq(ret, FI_SUCCESS);
 		pthread_yield();
 		state = _gnix_vc_state(vc_listen);
 	}
 
 	ret = _gnix_vc_disconnect(vc_conn);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc_conn);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_disconnect(vc_listen);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc_listen);
-	assert_eq(ret, FI_SUCCESS);
+	cr_assert_eq(ret, FI_SUCCESS);
 }

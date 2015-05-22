@@ -37,10 +37,6 @@
 
 #include "gnix_freelist.h"
 
-#ifdef assert
-#undef assert
-#endif
-
 #include <criterion/criterion.h>
 
 static void setup(void)
@@ -76,7 +72,7 @@ Test(gnix_freelist, freelist_init_destroy)
 	for (i = 0; i < n; i++) {
 		ret = _gnix_sfl_init(sizeof(struct slist_entry), 0,
 				     2*n, n, n, 3*n, &fls[i]);
-		assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
+		cr_assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
 	}
 
 	for (i = n-1; i >= 0; i--)
@@ -94,23 +90,23 @@ Test(gnix_freelist, freelist_refill_test)
 
 	ret = _gnix_sfl_init(sizeof(struct slist_entry), 0,
 			     num_elems, refill_size, 0, 0, &fl);
-	assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
+	cr_assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
 
 	for (i = 0; i < num_elems; i++) {
 		ret = _gnix_sfe_alloc(&elems[i], &fl);
-		assert_eq(ret, FI_SUCCESS, "Failed to obtain slist_entry");
+		cr_assert_eq(ret, FI_SUCCESS, "Failed to obtain slist_entry");
 	}
-	assert(_gnix_sfl_empty(&fl), "Freelist not empty");
+	cr_assert(_gnix_sfl_empty(&fl), "Freelist not empty");
 
 	for (i = 0; i < refill_size; i++) {
 		ret = _gnix_sfe_alloc(&refill_elems[i], &fl);
-		assert_eq(ret, FI_SUCCESS, "Failed to obtain slist_entry");
+		cr_assert_eq(ret, FI_SUCCESS, "Failed to obtain slist_entry");
 		if (i != refill_size-1) {
 			/* Not the last one, so must not be empty */
-			assert(!_gnix_sfl_empty(&fl), "Freelist empty");
+			cr_assert(!_gnix_sfl_empty(&fl), "Freelist empty");
 		}
 	}
-	assert(_gnix_sfl_empty(&fl), "Freelist not empty");
+	cr_assert(_gnix_sfl_empty(&fl), "Freelist not empty");
 
 	for (i = num_elems-1; i >= 0 ; i--)
 		_gnix_sfe_free(elems[i], &fl);
@@ -144,12 +140,12 @@ Test(gnix_freelist, freelist_random_alloc_free)
 	ret = _gnix_sfl_init(sizeof(struct slist_ts),
 			     offsetof(struct slist_ts, e),
 			     0, 0, 0, 0, &fl);
-	assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
+	cr_assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
 
 	for (i = 0; i < n; i++) {
 		ret = _gnix_sfe_alloc(&se, &fl);
-		assert_eq(ret, FI_SUCCESS,
-			  "Failed to obtain valid slist_entry");
+		cr_assert_eq(ret, FI_SUCCESS,
+			     "Failed to obtain valid slist_entry");
 		ts[i] = container_of(se, struct slist_ts, e);
 		ts[i]->n = perm[i];
 	}
@@ -157,7 +153,7 @@ Test(gnix_freelist, freelist_random_alloc_free)
 	for (i = 0; i < n; i++) {
 		int j = perm[i];
 
-		assert(ts[j]->n == perm[j], "Incorrect value");
+		cr_assert(ts[j]->n == perm[j], "Incorrect value");
 		_gnix_sfe_free(&ts[j]->e, &fl);
 		ts[j] = NULL;
 	}

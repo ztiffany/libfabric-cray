@@ -45,10 +45,6 @@
 
 #include "gnix.h"
 
-#ifdef assert
-#undef assert
-#endif
-
 #include <criterion/criterion.h>
 
 static struct fi_info *hints;
@@ -61,18 +57,18 @@ static void setup(void)
 	int ret;
 
 	hints = fi_allocinfo();
-	assert(hints, "fi_allocinfo");
+	cr_assert(hints, "fi_allocinfo");
 
 	hints->fabric_attr->name = strdup("gni");
 
 	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	assert(!ret, "fi_getinfo");
+	cr_assert(!ret, "fi_getinfo");
 
 	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
-	assert(!ret, "fi_fabric");
+	cr_assert(!ret, "fi_fabric");
 
 	ret = fi_domain(fab, fi, &dom, NULL);
-	assert(!ret, "fi_domain");
+	cr_assert(!ret, "fi_domain");
 
 }
 
@@ -81,10 +77,10 @@ static void teardown(void)
 	int ret;
 
 	ret = fi_close(&dom->fid);
-	assert(!ret, "fi_close domain");
+	cr_assert(!ret, "fi_close domain");
 
 	ret = fi_close(&fab->fid);
-	assert(!ret, "fi_close fabric");
+	cr_assert(!ret, "fi_close fabric");
 
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
@@ -102,23 +98,23 @@ Test(endpoint, open_close)
 
 	for (i = 0; i < num_eps; i++) {
 		ret = fi_endpoint(dom, fi, &eps[i], NULL);
-		assert(!ret, "fi_endpoint");
+		cr_assert(!ret, "fi_endpoint");
 		struct gnix_fid_ep *ep = container_of(eps[i],
 						      struct gnix_fid_ep,
 						      ep_fid);
-		assert(ep, "endpoint not allcoated");
+		cr_assert(ep, "endpoint not allcoated");
 
 		/* Check fields (fill in as implemented) */
-		assert(ep->nic, "NIC not allocated");
-		assert_eq(atomic_get(&ep->active_fab_reqs), 0,
-			  "active_fab_reqs not initialized");
-		assert(!_gnix_sfl_empty(&ep->fr_freelist),
-		       "gnix_fab_req freelist empty");
+		cr_assert(ep->nic, "NIC not allocated");
+		cr_assert_eq(atomic_get(&ep->active_fab_reqs), 0,
+			     "active_fab_reqs not initialized");
+		cr_assert(!_gnix_sfl_empty(&ep->fr_freelist),
+			  "gnix_fab_req freelist empty");
 	}
 
 	for (i = num_eps-1; i >= 0; i--) {
 		ret = fi_close(&eps[i]->fid);
-		assert(!ret, "fi_close endpoint");
+		cr_assert(!ret, "fi_close endpoint");
 	}
 
 }
