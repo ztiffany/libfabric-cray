@@ -150,7 +150,6 @@ extern uint32_t gnix_def_max_nics_per_ptag;
  * prototypes
  */
 
-int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs);
 int _gnix_nic_free(struct gnix_nic *nic);
 int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			struct gnix_nic **nic_ptr);
