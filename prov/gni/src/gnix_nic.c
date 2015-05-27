@@ -170,10 +170,10 @@ int _gnix_nic_free(struct gnix_nic *nic)
 			goto err;
 		}
 
-		ret = gnix_mbox_allocator_destroy(nic->mbox_hndl);
+		ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_mbox_allocator_destroy returned %d\n",
+				  "_gnix_mbox_allocator_destroy returned %d\n",
 				  ret);
 
 		/*
@@ -410,15 +410,15 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 		}
 
-		ret = gnix_mbox_allocator_create(nic,
-						 nic->rx_cq,
-						 GNIX_PAGE_2MB,
-						 (size_t)nic->mem_per_mbox,
-						 2048,
-						 &nic->mbox_hndl);
+		ret = _gnix_mbox_allocator_create(nic,
+						  nic->rx_cq,
+						  GNIX_PAGE_2MB,
+						  (size_t)nic->mem_per_mbox,
+						  2048,
+						  &nic->mbox_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %d\n", ret);
 			goto err1;
 		}
 

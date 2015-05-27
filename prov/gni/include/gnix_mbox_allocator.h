@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -137,10 +138,12 @@ struct gnix_mbox_alloc_handle {
  * @return [Unspec]	If failure in GNI_MemRegister. Converts gni_return_t
  * status code to FI_ERRNO value.
  */
-int gnix_mbox_allocator_create(struct gnix_nic *nic, gni_cq_handle_t cq_handle,
-			       enum gnix_page_size page_size, size_t mbox_size,
-			       size_t mpmmap,
-			       struct gnix_mbox_alloc_handle **alloc_handle);
+int _gnix_mbox_allocator_create(struct gnix_nic *nic,
+				gni_cq_handle_t cq_handle,
+				enum gnix_page_size page_size,
+				size_t mbox_size,
+				size_t mpmmap,
+				struct gnix_mbox_alloc_handle **alloc_handle);
 
 /**
  * Releases all resources associated with an allocator handle.
@@ -152,7 +155,7 @@ int gnix_mbox_allocator_create(struct gnix_nic *nic, gni_cq_handle_t cq_handle,
  * @return -FI_EBUSY	Upon finding that there are still mailboxes allocated
  * that haven't been freed using gnix_mbox_free.
  */
-int gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle);
+int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle);
 
 /**
  * Allocate a new mailbox.
@@ -170,8 +173,8 @@ int gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle);
  * @return [Unspec]	Upon failure in GNI_MemRegister. Converts gni_return_t
  * to FI_ERRNO value.
  */
-int gnix_mbox_alloc(struct gnix_mbox_alloc_handle *alloc_handle,
-		    struct gnix_mbox **ptr);
+int _gnix_mbox_alloc(struct gnix_mbox_alloc_handle *alloc_handle,
+		     struct gnix_mbox **ptr);
 
 /**
  * Mark mailbox as free.
@@ -182,7 +185,7 @@ int gnix_mbox_alloc(struct gnix_mbox_alloc_handle *alloc_handle,
  * @return -FI_EINVAL	Upon an invalid parameter, or finding that the bitmap
  * is in a corrupted state.
  */
-int gnix_mbox_free(struct gnix_mbox *ptr);
+int _gnix_mbox_free(struct gnix_mbox *ptr);
 
 /*
  * Initialized in gnix_init.c, used for updating filename when creating
