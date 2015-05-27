@@ -64,7 +64,7 @@ int _gnix_nic_progress(struct gnix_nic *nic)
  * allocate a free list of tx descs for a gnix_nic struct.
  */
 
-int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
+static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 {
 	int i, ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *desc_base, *desc_ptr;
@@ -97,6 +97,14 @@ int _gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 err:
 	return ret;
 
+}
+
+/*
+ * clean up the tx descs free list
+ */
+static void __gnix_nic_tx_freelist_destroy(struct gnix_nic *nic)
+{
+	free(nic->tx_desc_base);
 }
 
 /*
@@ -181,6 +189,8 @@ err:
 		gnix_list_del_init(&nic->list);
 
 		pthread_mutex_unlock(&gnix_nic_list_lock);
+
+		__gnix_nic_tx_freelist_destroy(nic);
 		free(nic);
 	}
 
@@ -364,7 +374,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		nic->cookie = domain->cookie;
 		fastlock_init(&nic->lock);
 
-		ret = _gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);
+		ret = __gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);
 		if (ret != FI_SUCCESS)
 			goto err1;
 
