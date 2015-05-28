@@ -87,10 +87,10 @@ extern "C" {
  */
 struct gnix_dgram_hndl {
 	struct gnix_cm_nic *cm_nic;
-	struct list_head bnd_dgram_free_list;
-	struct list_head bnd_dgram_active_list;
-	struct list_head wc_dgram_free_list;
-	struct list_head wc_dgram_active_list;
+	struct dlist_entry bnd_dgram_free_list;
+	struct dlist_entry bnd_dgram_active_list;
+	struct dlist_entry wc_dgram_free_list;
+	struct dlist_entry wc_dgram_active_list;
 	struct gnix_datagram *dgram_base;
 	pthread_t progress_thread;
 	int n_dgrams;
@@ -176,8 +176,8 @@ enum gnix_dgram_poll_type {
  *                           posted to the GNI.
  */
 struct gnix_datagram {
-	struct list_node        list;
-	struct list_head        *free_list_head;
+	struct dlist_entry      list;
+	struct dlist_entry       *free_list_head;
 	gni_ep_handle_t         gni_ep;
 	struct gnix_cm_nic      *nic;
 	struct gnix_address     target_addr;
