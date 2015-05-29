@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -561,10 +562,12 @@ err_mbox_calloc:
 	return ret;
 }
 
-int gnix_mbox_allocator_create(struct gnix_nic *nic, gni_cq_handle_t cq_handle,
-			       enum gnix_page_size page_size, size_t mbox_size,
-			       size_t mpmmap,
-			       struct gnix_mbox_alloc_handle **alloc_handle)
+int _gnix_mbox_allocator_create(struct gnix_nic *nic,
+				gni_cq_handle_t cq_handle,
+				enum gnix_page_size page_size,
+				size_t mbox_size,
+				size_t mpmmap,
+				struct gnix_mbox_alloc_handle **alloc_handle)
 {
 	struct gnix_mbox_alloc_handle *handle;
 	char error_buf[256];
@@ -619,7 +622,7 @@ err_huge_page:
 	return ret;
 }
 
-int gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
+int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 {
 	struct slist_entry *entry;
 	struct gnix_slab *temp;
@@ -667,8 +670,8 @@ int gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 	return FI_SUCCESS;
 }
 
-int gnix_mbox_alloc(struct gnix_mbox_alloc_handle *alloc_handle,
-		    struct gnix_mbox **ptr)
+int _gnix_mbox_alloc(struct gnix_mbox_alloc_handle *alloc_handle,
+		     struct gnix_mbox **ptr)
 {
 	struct gnix_slab *slab;
 	int position;
@@ -704,7 +707,7 @@ err:
 	return ret;
 }
 
-int gnix_mbox_free(struct gnix_mbox *ptr)
+int _gnix_mbox_free(struct gnix_mbox *ptr)
 {
 	size_t position;
 	int ret;

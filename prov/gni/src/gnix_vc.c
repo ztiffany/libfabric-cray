@@ -399,7 +399,7 @@ static int __gnix_vc_hndl_con_match_con(struct gnix_datagram *dgram,
 	ret = _gnix_dgram_free(dgram);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "gnix_mbox_free returned %d\n", ret);
+			  "_gnix_dgram_free returned %d\n", ret);
 	vc->dgram = NULL;
 
 	ret = _gnix_vc_add_to_wq(vc);
@@ -582,7 +582,7 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 	ret = _gnix_dgram_free(dgram);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "gnix_mbox_free returned %d\n",
+			  "_gnix_dgram_free returned %d\n",
 			  ret);
 	vc->dgram = NULL;
 
@@ -751,8 +751,8 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 	 */
 
 	if (vc->smsg_mbox == NULL) {
-		ret = gnix_mbox_alloc(vc->ep->nic->mbox_hndl,
-				 &mbox);
+		ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl,
+				       &mbox);
 		if (ret == FI_SUCCESS)
 			vc->smsg_mbox = mbox;
 		else
@@ -833,17 +833,17 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 
 	if (!(vc->modes & GNIX_VC_MODE_DG_POSTED) &&
 		(vc->conn_state != GNIX_VC_CONNECTED)) {
-		ret = gnix_mbox_free(vc->smsg_mbox);
+		ret = _gnix_mbox_free(vc->smsg_mbox);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_mbox_free returned %d\n",
+				  "_gnix_mbox_free returned %d\n",
 				  ret);
 		vc->smsg_mbox = NULL;
 
 		ret = _gnix_dgram_free(dgram);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_dgram_free returned %d\n",
+				  "_gnix_dgram_free returned %d\n",
 				  ret);
 	}
 
@@ -967,10 +967,10 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	}
 
 	if (vc->smsg_mbox != NULL) {
-		ret = gnix_mbox_free(vc->smsg_mbox);
+		ret = _gnix_mbox_free(vc->smsg_mbox);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			      "gnix_mbox_free returned %d\n", ret);
+			      "_gnix_mbox_free returned %d\n", ret);
 		vc->smsg_mbox = NULL;
 	}
 
@@ -978,7 +978,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		ret = _gnix_dgram_free(vc->dgram);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			      "gnix_dgram_free returned %d\n", ret);
+			      "_gnix_dgram_free returned %d\n", ret);
 		vc->dgram = NULL;
 	}
 
@@ -1099,8 +1099,8 @@ int _gnix_vc_accept(struct gnix_vc *vc)
 	/*
 	 * try to allocate a mailbox
 	 */
-	ret = gnix_mbox_alloc(nic->mbox_hndl,
-			      &mbox);
+	ret = _gnix_mbox_alloc(nic->mbox_hndl,
+			       &mbox);
 	if (ret == FI_SUCCESS)
 		vc->smsg_mbox = mbox;
 	else {
@@ -1168,7 +1168,7 @@ int _gnix_vc_accept(struct gnix_vc *vc)
 	return ret;
 
 err1:
-	ret = gnix_mbox_free(mbox);
+	ret = _gnix_mbox_free(mbox);
 err:
 	return ret;
 }
