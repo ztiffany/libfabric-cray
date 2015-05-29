@@ -238,8 +238,8 @@ int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 {
 	int ret = -FI_EAGAIN;
 	struct gnix_datagram *d = NULL;
-	struct list_head *the_free_list;
-	struct list_head *the_active_list;
+	struct dlist_entry *the_free_list;
+	struct dlist_entry *the_active_list;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -251,14 +251,16 @@ int _gnix_dgram_alloc(struct gnix_dgram_hndl *hndl, enum gnix_dgram_type type,
 		the_active_list = &hndl->bnd_dgram_active_list;
 	}
 
-	if (!list_empty(the_free_list)) {
-		d = list_top(the_free_list, struct gnix_datagram, list);
+	if (!dlist_empty(the_free_list)) {
+		d = dlist_first_entry(the_free_list, struct gnix_datagram,
+				      list);
 		if (d != NULL) {
-			gnix_list_del_init(&d->list);
-			list_add(the_active_list, &d->list);
+			dlist_remove_init(&d->list);
+			dlist_insert_head(&d->list, the_active_list);
 			d->type = type;
 			ret = FI_SUCCESS;
 		}
+
 	}
 
 	if (d != NULL) {
@@ -286,9 +288,9 @@ int _gnix_dgram_free(struct gnix_datagram *d)
 			/* TODO: have to handle this */
 	}
 
-	gnix_list_del_init(&d->list);
+	dlist_remove_init(&d->list);
 	d->state = GNIX_DGRAM_STATE_FREE;
-	list_add(d->free_list_head, &d->list);
+	dlist_insert_head(&d->list, d->free_list_head);
 	return ret;
 }
 
@@ -536,11 +538,11 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 
 	the_hndl->cm_nic = cm_nic;
 
-	list_head_init(&the_hndl->bnd_dgram_free_list);
-	list_head_init(&the_hndl->bnd_dgram_active_list);
+	dlist_init(&the_hndl->bnd_dgram_free_list);
+	dlist_init(&the_hndl->bnd_dgram_active_list);
 
-	list_head_init(&the_hndl->wc_dgram_free_list);
-	list_head_init(&the_hndl->wc_dgram_active_list);
+	dlist_init(&the_hndl->wc_dgram_free_list);
+	dlist_init(&the_hndl->wc_dgram_active_list);
 
 	/*
 	 * inherit some stuff from the fabric object being
@@ -579,8 +581,9 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
-		gnix_list_node_init(&dg_ptr->list);
-		list_add(&the_hndl->bnd_dgram_free_list, &dg_ptr->list);
+		dlist_node_init(&dg_ptr->list);
+		dlist_insert_head(&dg_ptr->list,
+				  &the_hndl->bnd_dgram_free_list);
 		dg_ptr->free_list_head = &the_hndl->bnd_dgram_free_list;
 	}
 
@@ -598,8 +601,8 @@ int _gnix_dgram_hndl_alloc(const struct gnix_fid_fabric *fabric,
 			ret = gnixu_to_fi_errno(status);
 			goto err;
 		}
-		gnix_list_node_init(&dg_ptr->list);
-		list_add(&the_hndl->wc_dgram_free_list, &dg_ptr->list);
+		dlist_init(&dg_ptr->list);
+		dlist_insert_head(&dg_ptr->list, &the_hndl->wc_dgram_free_list);
 		dg_ptr->free_list_head = &the_hndl->wc_dgram_free_list;
 	}
 
@@ -674,8 +677,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 	/*
 	 * cancel any active datagrams - GNI_RC_NO_MATCH is okay.
 	 */
-
-	list_for_each_safe(&the_hndl->bnd_dgram_active_list, p, next, list) {
+	dlist_for_each_safe(&the_hndl->bnd_dgram_active_list, p, next, list) {
 		dg_ptr = p;
 		if (dg_ptr->state != GNIX_DGRAM_STATE_FREE) {
 			status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
@@ -685,11 +687,10 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 				goto err;
 			}
 		}
-		gnix_list_del_init(&dg_ptr->list);
+		dlist_remove_init(&dg_ptr->list);
 	}
 
-	list_for_each_safe(&the_hndl->wc_dgram_active_list,
-				p, next, list) {
+	dlist_for_each_safe(&the_hndl->wc_dgram_active_list, p, next, list) {
 		dg_ptr = p;
 		if (dg_ptr->state == GNIX_DGRAM_STATE_FREE) {
 			status = GNI_EpPostDataCancel(dg_ptr->gni_ep);
@@ -699,7 +700,7 @@ int _gnix_dgram_hndl_free(struct gnix_dgram_hndl *the_hndl)
 				goto err;
 			}
 		}
-		gnix_list_del_init(&dg_ptr->list);
+		dlist_remove_init(&dg_ptr->list);
 	}
 
 	/*

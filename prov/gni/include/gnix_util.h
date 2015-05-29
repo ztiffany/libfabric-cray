@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -52,6 +53,32 @@ extern struct fi_provider gnix_prov;
 	FI_DBG(&gnix_prov, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
 	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
+
+/* dlist utilities */
+#include "fi_list.h"
+
+static inline void dlist_node_init(struct dlist_entry *e)
+{
+	e->prev = e->next = NULL;
+}
+
+static inline void dlist_remove_init(struct dlist_entry *e)
+{
+	dlist_remove(e);
+	e->prev = e->next = e;
+}
+
+#define dlist_entry(e, type, member) container_of(e, type, member)
+
+#define dlist_first_entry(h, type, member)				\
+	(dlist_empty(h) ? NULL : dlist_entry(h->next, type, member))
+
+#define dlist_for_each_safe(h, e, n, member)				\
+	for (e = dlist_entry(h, typeof(*e), member),			\
+		     n = dlist_entry((&e->member)->next,		\
+				     typeof(*e), member);		\
+	     &e->member != h;						\
+	     e = n, n = dlist_entry((&e->member)->next, typeof(*e), member))
 
 /*
  * prototypes
