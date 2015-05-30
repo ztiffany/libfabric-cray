@@ -1,8 +1,33 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
- *  Created on: May 11, 2015
- *      Author: jswaro
+ * This software is available to you under a choice of one of two
+ * licenses.  You may choose to be licensed under the terms of the GNU
+ * General Public License (GPL) Version 2, available from the file
+ * COPYING in the main directory of this source tree, or the
+ * BSD license below:
+ *
+ *     Redistribution and use in source and binary forms, with or
+ *     without modification, are permitted provided that the following
+ *     conditions are met:
+ *
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
+ *
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
+ *
+ * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
+ * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
+ * MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE AND
+ * NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS
+ * BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER LIABILITY, WHETHER IN AN
+ * ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM, OUT OF OR IN
+ * CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+ * SOFTWARE.
  */
 
 
@@ -40,6 +65,9 @@ static struct fi_cq_attr cq_attr;
 #define __BUF_LEN 4096
 static unsigned char *buf;
 static int buf_len = __BUF_LEN * sizeof(unsigned char);
+static struct gnix_fid_domain *domain;
+static gnix_mr_cache_t *cache;
+static int regions;
 
 uint64_t default_access = (FI_REMOTE_READ | FI_REMOTE_WRITE
 		| FI_READ | FI_WRITE);
@@ -76,6 +104,10 @@ static void mr_setup(void)
 
 	buf = calloc(__BUF_LEN, sizeof(unsigned char));
 	cr_assert(buf, "buffer allocation");
+
+	domain = container_of(dom, struct gnix_fid_domain, domain_fid.fid);
+	cache = &domain->mr_cache;
+	regions = 1024;
 }
 
 static void mr_teardown(void)
@@ -91,11 +123,17 @@ static void mr_teardown(void)
 	fi_freeinfo(fi);
 	fi_freeinfo(hints);
 
+	domain = NULL;
+	cache = NULL;
+
 	free(buf);
 }
 
 TestSuite(memory_registration_bare, .init = mr_setup, .fini = mr_teardown);
 
+TestSuite(memory_registration_cache, .init = mr_setup, .fini = mr_teardown);
+
+/* Test simple init, register and deregister */
 Test(memory_registration_bare, basic_init)
 {
 	int ret;
@@ -109,6 +147,7 @@ Test(memory_registration_bare, basic_init)
 	cr_assert(ret == FI_SUCCESS);
 }
 
+/* Test invalid flags to fi_mr_reg */
 Test(memory_registration_bare, invalid_flags)
 {
 	int ret;
@@ -119,6 +158,7 @@ Test(memory_registration_bare, invalid_flags)
 	cr_assert(ret == -FI_EBADFLAGS);
 }
 
+/* Test invalid access param to fi_mr_reg */
 Test(memory_registration_bare, invalid_access)
 {
 	int ret;
@@ -129,6 +169,7 @@ Test(memory_registration_bare, invalid_access)
 	cr_assert(ret == -FI_EINVAL);
 }
 
+/* Test invalid offset param to fi_mr_reg */
 Test(memory_registration_bare, invalid_offset)
 {
 	int ret;
@@ -139,6 +180,7 @@ Test(memory_registration_bare, invalid_offset)
 	cr_assert(ret == -FI_EINVAL);
 }
 
+/* Test invalid requested key param to fi_mr_reg */
 Test(memory_registration_bare, invalid_requested_key)
 {
 	int ret;
@@ -149,6 +191,7 @@ Test(memory_registration_bare, invalid_requested_key)
 	cr_assert(ret == -FI_EKEYREJECTED);
 }
 
+/* Test invalid buf param to fi_mr_reg */
 Test(memory_registration_bare, invalid_buf)
 {
 	int ret;
@@ -159,6 +202,7 @@ Test(memory_registration_bare, invalid_buf)
 	cr_assert(ret == -FI_EINVAL);
 }
 
+/* Test invalid mr_o param to fi_mr_reg */
 Test(memory_registration_bare, invalid_mr_ptr)
 {
 	int ret;
@@ -169,6 +213,7 @@ Test(memory_registration_bare, invalid_mr_ptr)
 	cr_assert(ret == -FI_EINVAL);
 }
 
+/* Test invalid fid param to fi_mr_reg */
 Test(memory_registration_bare, invalid_fid_class)
 {
 	int ret;
@@ -185,4 +230,252 @@ Test(memory_registration_bare, invalid_fid_class)
 	dom->fid.fclass = old_class;
 }
 
+/* Test simple cache initialization */
+Test(memory_registration_cache, basic_init)
+{
+	int ret;
 
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 1);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) == 1);
+}
+
+/* Test duplicate registration. Since this is a valid operation, we
+ *   provide a unique fid_mr but internally, a second reference to the same
+ *   entry is provided to prevent expensive calls to GNI_MemRegister
+ */
+Test(memory_registration_cache, duplicate_registration)
+{
+	int ret;
+	struct fid_mr *f_mr;
+
+
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 1);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
+			default_offset, default_req_key,
+			default_flags, &f_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 1);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	ret = fi_close(&mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	ret = fi_close(&f_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) == 1);
+}
+
+/* Test registration of 1024 elements, all distinct. Cache element counts
+ *   should meet expected values
+ */
+Test(memory_registration_cache, register_1024_distinct_regions)
+{
+	int ret;
+	uint64_t **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(uint64_t *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = calloc(__BUF_LEN, sizeof(uint64_t));
+		cr_assert(buffers[i]);
+	}
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], __BUF_LEN,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	cr_assert(atomic_get(&cache->inuse_elements) == regions);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 0; i < regions; ++i) {
+		free(buffers[i]);
+		buffers[i] = NULL;
+	}
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) >= 0);
+}
+
+/* Test registration of 1024 registrations backed by the same initial
+ *   registration. There should only be a single registration in the cache
+ */
+Test(memory_registration_cache, register_1024_non_unique_regions)
+{
+	int ret;
+	char *hugepage;
+	struct fid_mr *hugepage_mr;
+	char **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(uint64_t *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	hugepage = calloc(regions * regions, sizeof(char));
+	cr_assert(hugepage);
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = &hugepage[i * regions];
+		cr_assert(buffers[i]);
+	}
+
+	ret = fi_mr_reg(dom, (void *) hugepage,
+			regions * regions * sizeof(char),
+			default_access, default_offset, default_req_key,
+			default_flags, &hugepage_mr, NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], regions,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 1);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	ret = fi_close(&hugepage_mr->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	free(hugepage);
+	hugepage = NULL;
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) > 0);
+}
+
+/* Test registration of 128 regions that will be cycled in and out of the
+ *   inuse and stale trees. inuse + stale should never exceed 128
+ */
+Test(memory_registration_cache, cyclic_register_128_distinct_regions)
+{
+	int ret;
+	char **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+	int buf_size = __BUF_LEN * sizeof(char);
+
+	regions = 128;
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(char *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = calloc(__BUF_LEN, sizeof(char));
+		cr_assert(buffers[i]);
+	}
+
+	/* create the initial memory registrations */
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'in-use' */
+	cr_assert(atomic_get(&cache->inuse_elements) == regions);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'stale' */
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) >= 0);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should have been moved from 'stale' to 'in-use' */
+	cr_assert(atomic_get(&cache->inuse_elements) == regions);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	for (i = 0; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'stale' */
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) >= 0);
+
+	for (i = 0; i < regions; ++i) {
+		free(buffers[i]);
+		buffers[i] = NULL;
+	}
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+}
