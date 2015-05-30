@@ -73,6 +73,13 @@ static inline void dlist_remove_init(struct dlist_entry *e)
 #define dlist_first_entry(h, type, member)				\
 	(dlist_empty(h) ? NULL : dlist_entry((h)->next, type, member))
 
+/* Iterate over the entries in the list */
+#define dlist_for_each(h, e, member)					\
+	for (e = dlist_first_entry(h, typeof(*e), member);		\
+	     e && (&e->member != h);					\
+	     e = dlist_entry((&e->member)->next, typeof(*e), member))
+
+/* Iterate over the entries in the list, possibly deleting elements */
 #define dlist_for_each_safe(h, e, n, member)				\
 	for (e = dlist_first_entry(h, typeof(*e), member),		\
 		     n = e ? dlist_entry((&e->member)->next,		\
