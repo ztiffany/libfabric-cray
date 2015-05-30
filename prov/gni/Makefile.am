@@ -35,8 +35,9 @@ _gni_files = \
 	prov/gni/src/gnix_mbox_allocator.c
 
 if HAVE_CRITERION
-bin_PROGRAMS = gnitest
-gnitest_SOURCES = \
+bin_PROGRAMS = prov/gni/test/gnitest
+dist_bin_SCRIPTS = prov/gni/test/run_gnitest
+prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/cq.c \
 	prov/gni/test/ep.c \
 	prov/gni/test/nic.c \
@@ -53,9 +54,9 @@ gnitest_SOURCES = \
 	prov/gni/test/mr.c \
 	prov/gni/test/vc.c
 
-gnitest_LDFLAGS = -static
-gnitest_CPPFLAGS = $(AM_CPPFLAGS)
-gnitest_LDADD = -lcriterion \
+prov_gni_test_gnitest_LDFLAGS = -static
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS)
+prov_gni_test_gnitest_LDADD = -lcriterion \
 		$(linkback)
 endif
 
