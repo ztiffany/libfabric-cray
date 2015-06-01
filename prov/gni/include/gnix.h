@@ -165,8 +165,14 @@ struct gnix_address {
  * macro for testing whether a gnix_address value is FI_ADDR_UNSPEC
  */
 
-#define GNIX_ADDR_UNSPEC(var) (((var).device_addr == -1) ? \
-				(((var).cdm_id == -1) ? 1 : 0) : 0)
+#define GNIX_ADDR_UNSPEC(var) (((var).device_addr == -1) && \
+				((var).cdm_id == -1))
+/*
+ * macro testing for gnix_address equality
+ */
+
+#define GNIX_ADDR_EQUAL(a, b) (((a).device_addr == (b).device_addr) && \
+				((a).cdm_id == (b).cdm_id))
 
 
 /*
@@ -248,7 +254,7 @@ struct gnix_fid_domain {
 /*
  *   gnix endpoint structure
  *
- * A gnix_cm_nic is associated with an EP if it is of type  FID_EP_RDM.
+ * A gnix_cm_nic is associated with an EP if it is of type  FI_EP_RDM.
  * The gnix_cm_nic is used for building internal connections between the
  * endpoints at different addresses.
  */
@@ -264,14 +270,18 @@ struct gnix_fid_ep {
 	struct gnix_nic *nic;
 	union {
 		struct gnix_hashtable *vc_ht;
-		void *vc_table;      /* used for FI_AV_TABLE */
-		void *vc;
+		struct gnix_vc **vc_table;      /* used for FI_AV_TABLE */
+		struct gnix_vc *vc;
 	};
+	fastlock_t vc_list_lock;
 	struct dlist_entry wc_vc_list;
 	/* used for unexpected receives */
 	struct slist unexp_recv_queue;
 	/* used for posted receives */
 	struct slist posted_recv_queue;
+	/* lock for unexp and posted recv queue */
+	fastlock_t recv_queue_lock;
+	struct slist pending_recv_comp_queue;
 	/* pointer to tag matching engine */
 	void *tag_matcher;
 	int (*progress_fn)(struct gnix_fid_ep *, enum gnix_progress_type);
@@ -316,7 +326,8 @@ struct gnix_fid_av {
 #define GNIX_FAB_RQ_M_REPLAYABLE              0x00000002
 #define GNIX_FAB_RQ_M_UNEXPECTED              0x00000004
 #define GNIX_FAB_RQ_M_MATCHED                 0x00000008
-#define GNIX_FAB_RQ_M_INJECT_DATA             0x00000010
+#define GNIX_FAB_RQ_M_COMPLETE                0x00000010
+#define GNIX_FAB_RQ_M_INJECT_DATA             0x00000020
 
 enum gnix_fab_req_type {
 	GNIX_FAB_RQ_SEND,
@@ -337,6 +348,9 @@ enum gnix_fab_req_type {
 struct gnix_fab_req {
 	struct list_node          list;
 	struct slist_entry        slist;
+	uint64_t tag;
+	uint64_t mask_bits;
+	struct gnix_address addr;
 	enum gnix_fab_req_type    type;
 	struct gnix_fid_ep        *gnix_ep;
 	void                      *user_context;
@@ -348,20 +362,23 @@ struct gnix_fab_req {
 	uint64_t imm;
 	struct gnix_vc *vc;
 	void *completer_data;
-	int (*completer_func)(void *);
+	int (*completer_fn)(void *);
+	uint64_t cq_flags;
 	int modes;
 	int retries;
 	uint32_t id;
 
 	/* RMA stuff */
-	uint64_t loc_addr;
+	union {
+		uint64_t loc_addr;
+		void *buf;
+	};
 	void *loc_md;
 	uint64_t rem_addr;
 	uint64_t rem_mr_key;
 	size_t len;
 	uint64_t flags;
 	uint64_t data;
-	uint64_t tag;
 };
 
 /*
@@ -374,11 +391,11 @@ struct gnix_work_req {
 	   first element is pointer to data needec by the func, second
 	   is a pointer to an int which will be set to 1 if progress
 	   function is complete */
-	int (*progress_func)(void *,int *);
+	int (*progress_fn)(void *, int *);
 	/* data to be passed to the progress function */
 	void *data;
 	/* function to be invoked if this work element has completed */
-	int (*completer_func)(void *);
+	int (*completer_fn)(void *);
 	/* data for completer function */
 	void *completer_data;
 };

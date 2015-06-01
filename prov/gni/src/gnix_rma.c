@@ -65,7 +65,7 @@ static int __gnix_rma_fab_req_complete(void *arg)
 		}
 	}
 
-	_fr_free(ep, req);
+	_gnix_fr_free(ep, req);
 
 	return FI_SUCCESS;
 }
@@ -75,8 +75,8 @@ static int __gnix_rma_txd_complete(void *arg)
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 
 	/* Progress fabric operation in the fab_req completer.  Can we call
-	 * fab_req->completer_func directly from __gnix_tx_progress? */
-	return txd->desc.req->completer_func(txd->desc.req->completer_data);
+	 * fab_req->completer_fn directly from __gnix_tx_progress? */
+	return txd->desc.req->completer_fn(txd->desc.req->completer_data);
 }
 
 static gni_post_type_t __gnix_fr_post_type(int fr_type)
@@ -114,7 +114,7 @@ static int __gnix_post_req(struct gnix_fab_req *fab_req)
 		return -FI_ENOSPC;
 	}
 
-	txd->desc.completer_func = __gnix_rma_txd_complete;
+	txd->desc.completer_fn = __gnix_rma_txd_complete;
 	txd->desc.req = fab_req;
 
 	_gnix_convert_key_to_mhdl((gnix_mr_key_t *)&fab_req->rem_mr_key, &mdh);
@@ -170,7 +170,7 @@ ssize_t _gnix_rma(struct gnix_vc *vc, enum gnix_fab_req_type fr_type,
 	}
 
 	/* setup fabric request */
-	req = _fr_alloc(ep);
+	req = _gnix_fr_alloc(ep);
 	if (!req) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_fr_alloc() failed\n");
 		return -FI_ENOSPC;
@@ -179,7 +179,7 @@ ssize_t _gnix_rma(struct gnix_vc *vc, enum gnix_fab_req_type fr_type,
 	req->type = fr_type;
 	req->gnix_ep = ep;
 	req->vc = vc;
-	req->completer_func = __gnix_rma_fab_req_complete;
+	req->completer_fn = __gnix_rma_fab_req_complete;
 	req->completer_data = req;
 	req->user_context = context;
 

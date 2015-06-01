@@ -38,6 +38,7 @@
 #include "gnix.h"
 #include "gnix_nic.h"
 #include "gnix_cm_nic.h"
+#include "gnix_vc.h"
 #include "gnix_mbox_allocator.h"
 
 static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
@@ -49,6 +50,166 @@ static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
  */
 
 uint32_t gnix_max_nics_per_ptag = GNIX_DEF_MAX_NICS_PER_PTAG;
+
+/*******************************************************************************
+ * Helper functions.
+ ******************************************************************************/
+
+static inline struct gnix_tx_descriptor *
+		__desc_lkup_by_id(struct gnix_nic *nic,
+				     int desc_id)
+{
+	struct gnix_tx_descriptor *tx_desc;
+
+	assert((desc_id >= 0) && (desc_id < nic->max_tx_desc_id));
+	tx_desc = &nic->tx_desc_base[desc_id];
+	return tx_desc;
+}
+
+/*
+ * function to process GNI CQ RX CQES to progress a gnix_nic
+ * -note that the callback functions for the vc's are suppose to
+ * include the following call sequence to release the SMSG message
+ * and unlock the nic lock:
+ *
+	status = GNI_SmsgRelease(vc->ep);
+	fastlock_release(&nic->lock);
+ *
+ * The idea here is that is possible that the callback function
+ * may need to have some kind of post-nic-lock work to do.
+ * Want to avoid using recursive locks.
+ */
+
+static int __nic_rx_progress(struct gnix_nic *nic)
+{
+	int i, ret = FI_SUCCESS;
+	int vc_id = 0, have_lock = 1;
+	int max_id;
+	gni_return_t  status = GNI_RC_NOT_DONE;
+	gni_cq_entry_t cqe;
+	struct gnix_vc *vc;
+	uint8_t tag = GNI_SMSG_ANY_TAG;
+	void *msg_ptr;
+
+	/*
+	 * first see if there are any CQE's on the
+	 * tx cq. Calling GNI_CqTestEvent does not require
+	 * getting the nic lock
+	 */
+
+	status = GNI_CqTestEvent(nic->rx_cq);
+	if (status == GNI_RC_NOT_DONE)
+		return FI_SUCCESS;
+
+try_again:
+	fastlock_acquire(&nic->lock);
+	status = GNI_CqGetEvent(nic->rx_cq, &cqe);
+	if (status  == GNI_RC_NOT_DONE) {
+		fastlock_release(&nic->lock);
+		return FI_SUCCESS;
+	}
+
+	/*
+	 * no CQ overrun
+	 */
+	if (status == GNI_RC_SUCCESS) {
+		vc_id =  GNI_CQ_GET_INST_ID(cqe);
+		vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
+		if (vc->conn_state != GNIX_VC_CONNECTED) {
+			vc->modes |= GNIX_VC_MODE_PENDING_MSGS;
+			ret = _gnix_vc_add_to_wq(vc);
+			goto out;
+		}
+
+		/*
+		 * what's going on here? The rule
+		 * is that there is not a one-to-one
+		 * relationship between CQEs and messages
+		 * in the mailbox, so need to poll on
+		 * the mailbox till there are no
+		 * more messages.
+		 */
+try_again2:
+		status = GNI_SmsgGetNextWTag(vc->gni_ep,
+					     &msg_ptr,
+					     &tag);
+		if (status == GNI_RC_SUCCESS) {
+			ret = nic->smsg_callbacks[tag](vc, msg_ptr);
+			assert(ret == FI_SUCCESS);
+			goto try_again2;
+		} else if (status == GNI_RC_NOT_DONE) {
+			ret = FI_SUCCESS;
+			goto out;
+		} else {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				"GNI_SmsgGetNextWTag returned %s\n",
+				gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+
+	} else if (status == GNI_RC_ERROR_RESOURCE) {
+		assert(GNI_CQ_OVERRUN(cqe));
+		/*
+		 * okay, CQ is overrun, have to check
+		 * all vc's - this is considered a kind of
+		 * recovery mode
+		 */
+		fastlock_acquire(&nic->vc_id_lock);
+		max_id = nic->vc_id_table_count;
+		fastlock_release(&nic->vc_id_lock);
+		/*
+		 * TODO: optimization would
+		 * be to keep track of last time
+		 * this happened and where smsg msgs.
+		 * were found.
+		 */
+		for (i = 0; i < max_id; i++) {
+			ret = _gnix_test_bit(&nic->vc_id_bitmap, i);
+			if (ret) {
+				vc = __gnix_nic_elem_by_rem_id(nic, i);
+try_again3:
+				status = GNI_SmsgGetNextWTag(vc->gni_ep,
+							     &msg_ptr,
+							     &tag);
+				if (status == GNI_RC_SUCCESS) {
+					ret = nic->smsg_callbacks[tag](vc,
+								    msg_ptr);
+					assert(ret == FI_SUCCESS);
+					fastlock_acquire(&nic->lock);
+					have_lock = 1;
+					goto try_again3;
+				} else if (status == GNI_RC_NOT_DONE) {
+					ret = FI_SUCCESS;
+					goto out;
+				} else {
+					GNIX_WARN(FI_LOG_EP_DATA,
+						"GNI_SmsgGetNextWTag returned %s\n",
+						gni_err_str[status]);
+					ret = gnixu_to_fi_errno(status);
+					goto err;
+				}
+			}
+		}
+	} else {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			"GNI_SmsgGetNextWTag returned %s\n",
+			gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+err:
+out:
+	if (have_lock)
+		fastlock_release(&nic->lock);
+	if (ret == FI_SUCCESS) {
+		have_lock = 0;
+		goto try_again;  /* let's try again to see
+					if we have a new CQE */
+	}
+	return ret;
+}
+
 
 /*
  * function to process GNI CQ TX CQES to progress a gnix_nic
@@ -102,7 +263,7 @@ try_again:
 		}  else if (GNI_CQ_GET_TYPE(cqe)
 			    == GNI_CQ_EVENT_TYPE_SMSG) {
 			msg_id = GNI_CQ_GET_MSG_ID(cqe);
-			gnix_tdesc = gnix_desc_lkup_by_id(nic,msg_id);
+			gnix_tdesc = __desc_lkup_by_id(nic, msg_id);
 			if (gnix_tdesc == NULL)
 				ret = -FI_ENOENT;
 		} else {
@@ -111,9 +272,9 @@ try_again:
 
 		fastlock_release(&nic->lock);
 		if (ret == FI_SUCCESS) {
-			if (gnix_tdesc->desc.completer_func) {
+			if (gnix_tdesc->desc.completer_fn) {
 				ret =
-				   gnix_tdesc->desc.completer_func(gnix_tdesc);
+				   gnix_tdesc->desc.completer_fn(gnix_tdesc);
 				if (ret)
 					goto err;
                         }
@@ -175,14 +336,6 @@ err:
 
 }
 
-/*
- * process an RX CQEs for this nic
- */
-static int __nic_rx_progress(struct gnix_nic *nic)
-{
-	return -FI_ENOSYS;
-}
-
 int _gnix_nic_progress(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS;
@@ -215,9 +368,9 @@ check_again:
 	gnix_list_del_init(&p->list);
 	fastlock_release(&nic->wq_lock);
 
-	assert(p->progress_func);
+	assert(p->progress_fn);
 
-	ret = p->progress_func(p->data, &complete);
+	ret = p->progress_fn(p->data, &complete);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "progress_func returned with erro - %d\n",
@@ -226,8 +379,8 @@ check_again:
 	}
 
 	if (complete == 1) {
-		if (p->completer_func) {
-			ret = p->completer_func(p->completer_data);
+		if (p->completer_fn) {
+			ret = p->completer_fn(p->completer_data);
 			free(p);
 			if (ret != FI_SUCCESS)
 				goto err;
@@ -240,6 +393,65 @@ check_again:
 	}
 
 err:
+	return ret;
+}
+
+int _gnix_nic_free_rem_id(struct gnix_nic *nic, int remote_id)
+{
+	assert(nic);
+
+	if ((remote_id < 0) || (remote_id > nic->vc_id_table_count))
+		return -FI_EINVAL;
+
+	_gnix_clear_bit(&nic->vc_id_bitmap, remote_id);
+
+	return FI_SUCCESS;
+}
+
+/*
+ * this function is needed to allow for quick lookup of a vc based on
+ * the contents of the GNI CQE coming off of the GNI RX CQ associated
+ * with GNI nic being used by this VC.  Using a bitmap to expedite
+ * scanning vc's in the case of a GNI CQ overrun.
+ */
+
+int _gnix_nic_get_rem_id(struct gnix_nic *nic, int *remote_id, void *entry)
+{
+	int ret = FI_SUCCESS;
+	void **table_base;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	/*
+	 * TODO:  really need to search bitmap for clear
+	 * bit before resizing the table
+	 */
+
+	fastlock_acquire(&nic->vc_id_lock);
+	if (nic->vc_id_table_capacity == nic->vc_id_table_count) {
+		table_base = realloc(nic->vc_id_table,
+				     2 * nic->vc_id_table_capacity *
+				     sizeof(void *));
+		if (table_base == NULL) {
+			ret =  -FI_ENOMEM;
+			goto err;
+		}
+		nic->vc_id_table_capacity *= 2;
+		nic->vc_id_table = table_base;
+	}
+
+	nic->vc_id_table[nic->vc_id_table_count] = entry;
+	*remote_id = nic->vc_id_table_count;
+
+	/*
+	 * set bit in the bitmap
+	 */
+
+	_gnix_set_bit(&nic->vc_id_bitmap, nic->vc_id_table_count);
+
+	++(nic->vc_id_table_count);
+err:
+	fastlock_release(&nic->vc_id_lock);
 	return ret;
 }
 
@@ -261,7 +473,7 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic,
 	dlist_insert_head(entry, &nic->tx_desc_active_list);
 	*desc = dlist_entry(entry, struct gnix_tx_descriptor, desc.list);
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 /*
@@ -275,7 +487,7 @@ int _gnix_nic_tx_free(struct gnix_nic *nic,
 	dlist_remove_init(&desc->desc.list);
 	dlist_insert_head(&desc->desc.list, &nic->tx_desc_free_list);
 
-	return 0;
+	return FI_SUCCESS;
 }
 
 /*
@@ -453,9 +665,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	if (gnix_nics_per_ptag[domain->ptag] >= gnix_max_nics_per_ptag) {
 		assert(!dlist_empty(&domain->nic_list));
 
-		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic, list);
+		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic,
+					list);
 		dlist_remove(&nic->list);
 		dlist_insert_tail(&nic->list, &domain->nic_list);
+		atomic_inc(&nic->ref_cnt);
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
 	}
@@ -578,6 +792,22 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		nic->device_addr = device_addr;
 		nic->ptag = domain->ptag;
 		nic->cookie = domain->cookie;
+
+		/*
+		 * TODO: initial vc_id_table capacity should be
+		 * adjustable via a fabric ops_open method
+		 */
+
+		nic->vc_id_table_capacity = 128;
+		nic->vc_id_table = malloc(sizeof(void *) *
+					       nic->vc_id_table_capacity);
+		if (nic->vc_id_table == NULL) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "malloc of vc_id_table failed\n");
+			ret = -FI_ENOMEM;
+			goto err1;
+		}
+
 		fastlock_init(&nic->lock);
 
 		ret = __gnix_nic_tx_freelist_init(nic, domain->gni_tx_cq_size);

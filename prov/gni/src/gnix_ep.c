@@ -75,36 +75,214 @@ static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 	_gnix_sfl_destroy(&ep->fr_freelist);
 }
 
-struct gnix_fab_req *_fr_alloc(struct gnix_fid_ep *ep)
+/*******************************************************************************
+ * GNI SMSG callbacks invoked upon receipt of an SMSG message.
+ * These callback functions are invoked with the lock for the nic
+ * associated with the vc already held.
+ ******************************************************************************/
+
+static int __smsg_eager_msg_w_data(void *data, void *msg)
 {
-	struct slist_entry *se;
-	struct gnix_fab_req *fr = NULL;
-	int ret;
+	int ret = FI_SUCCESS;
+	gni_return_t status;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_hdr *hdr = (struct gnix_smsg_hdr *)msg;
+	struct gnix_fid_ep *ep;
 
-	fastlock_acquire(&ep->lock);
+	ep = vc->ep;
+	assert(ep);
 
-	do {
-		ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
-	} while (ret == -FI_EAGAIN);
+	/*
+	 * the msg data must be consumed either by matching
+	 * a message or allocating a buffer and putting
+	 * on unexpected queue.
+	 */
 
-	if (ret == FI_SUCCESS) {
-		fr = container_of(se, struct gnix_fab_req, slist);
-		fr->gnix_ep = ep;
+	ret = _gnix_ep_eager_msg_w_data_match(ep,
+					(void *)((char *)msg + sizeof(*hdr)),
+					vc->peer_addr,
+					hdr->len,
+					hdr->imm,
+					hdr->flags);
+
+	/*
+	 * we keep on going even if we got an error back because
+	 * we need to release the pending message in the SMSG buffer
+	 * and unlock the nic lock
+	 */
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"_gnix_ep_eager_msg_rcv returned %d\n",
+				ret);
+
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"GNI_SmsgRelease returned %s\n",
+				gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+		goto err;
 	}
 
-	fastlock_release(&ep->lock);
-
-	return fr;
+err:
+	return ret;
 }
 
-void _fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
+/*
+ * this function will probably not be used unless we need
+ * some kind of explicit flow control to handle unexpected
+ * receives
+ */
+
+static int __smsg_eager_msg_w_data_ack(void *data, void *msg)
 {
-	assert(fr->gnix_ep == ep);
-
-	fastlock_acquire(&ep->lock);
-	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
-	fastlock_release(&ep->lock);
+	return -FI_ENOSYS;
 }
+
+static int __smsg_eager_msg_data_at_src(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int  __smsg_eager_msg_data_at_src_ack(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_rts(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_rtr(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_cookie(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_send_done(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_recv_done(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
+	[GNIX_SMSG_T_EGR_W_DATA] = __smsg_eager_msg_w_data,
+	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __smsg_eager_msg_w_data_ack,
+	[GNIX_SMSG_T_EGR_GET] = __smsg_eager_msg_data_at_src,
+	[GNIX_SMSG_T_EGR_GET_ACK] = __smsg_eager_msg_data_at_src_ack,
+	[GNIX_SMSG_T_RNDZV_RTS] = __smsg_rndzv_msg_rts,
+	[GNIX_SMSG_T_RNDZV_RTR] = __smsg_rndzv_msg_rtr,
+	[GNIX_SMSG_T_RNDZV_COOKIE] = __smsg_rndzv_msg_cookie,
+	[GNIX_SMSG_T_RNDZV_SDONE] = __smsg_rndzv_msg_send_done,
+	[GNIX_SMSG_T_RNDZV_RDONE] = __smsg_rndzv_msg_recv_done
+};
+
+/*******************************************************************************
+ * GNI SMSG callbacks invoked upon completion of an SMSG message at the sender.
+ ******************************************************************************/
+
+static int __comp_eager_msg_w_data(void *data)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_tx_descriptor *tdesc;
+	struct gnix_fid_ep *ep;
+	struct gnix_fid_cq *cq;
+	struct fi_context *user_context;
+	ssize_t cq_len;
+
+	tdesc = (struct gnix_tx_descriptor *)data;
+
+	ep = tdesc->desc.ep;
+	assert(ep != NULL);
+
+	cq = ep->send_cq;
+	assert(cq != NULL);
+
+	if (tdesc->desc.req != NULL)
+		user_context = tdesc->desc.req->user_context;
+	else
+		user_context = tdesc->desc.context;
+
+	cq_len = _gnix_cq_add_event(cq,
+				    user_context,
+				    FI_SEND | FI_MSG,
+				    0,
+				    0,
+				    0,
+				    0);
+	if (cq_len != FI_SUCCESS)  {
+		GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+			  "_gnix_cq_add_event returned %d\n",
+			   cq_len);
+		ret = (int)cq_len; /* ugh */
+	}
+
+	ret = _gnix_nic_tx_free(ep->nic, tdesc);
+
+	return ret;
+
+}
+
+static int __comp_eager_msg_w_data_ack(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_eager_msg_data_at_src(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_eager_msg_data_at_src_ack(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_rndzv_msg_rts(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_rndzv_msg_rtr(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_rndzv_msg_cookie(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_rndzv_msg_send_done(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+static int __comp_rndzv_msg_recv_done(void *data)
+{
+	return -FI_ENOSYS;
+}
+
+smsg_completer_fn_t gnix_ep_smsg_completers[] = {
+	[GNIX_SMSG_T_EGR_W_DATA] = __comp_eager_msg_w_data,
+	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __comp_eager_msg_w_data_ack,
+	[GNIX_SMSG_T_EGR_GET] = __comp_eager_msg_data_at_src,
+	[GNIX_SMSG_T_EGR_GET_ACK] = __comp_eager_msg_data_at_src_ack,
+	[GNIX_SMSG_T_RNDZV_RTS] = __comp_rndzv_msg_rts,
+	[GNIX_SMSG_T_RNDZV_RTR] = __comp_rndzv_msg_rtr,
+	[GNIX_SMSG_T_RNDZV_COOKIE] = __comp_rndzv_msg_cookie,
+	[GNIX_SMSG_T_RNDZV_SDONE] = __comp_rndzv_msg_send_done,
+	[GNIX_SMSG_T_RNDZV_RDONE] = __comp_rndzv_msg_recv_done
+};
 
 /*******************************************************************************
  * Forward declaration for ops structures.
@@ -120,25 +298,144 @@ struct fi_ops_tagged gnix_ep_tagged_ops;
  * EP messaging API function implementations.
  ******************************************************************************/
 
-static const recv_func_t const recv_method[] = {
-					[FI_EP_MSG] = gnix_ep_recv_msg,
-					[FI_EP_RDM] = gnix_ep_recv_rdm,
-					};
-
 static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 			    void *desc, fi_addr_t src_addr, void *context)
 {
+	int ret = FI_SUCCESS;
+	int sched_req = 0;
 	struct gnix_fid_ep *ep_priv;
+	struct gnix_fid_cq *cq;
+	struct gnix_fid_av *av;
+	struct slist_entry *item, *prev;
+	struct slist *list;
+	struct gnix_fab_req *req;
+	int matched = 0;
+	ssize_t cq_len;
+	struct gnix_address *addr_ptr;
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
+	if (unlikely((ep_priv->type != FI_EP_RDM) &&
+				(ep_priv->type != FI_EP_MSG)))
+		return -FI_EINVAL;
 
-	return recv_method[ep_priv->type](ep,
-					  buf,
-					  len,
-					  desc,
-					  src_addr,
-					  context);
+	if (ep_priv->type == FI_EP_RDM) {
+		av = ep_priv->av;
+		assert(av != NULL);
+		if (av->type == FI_AV_TABLE) {
+			/*
+			 * TODO: look up gni address
+			 */
+		} else
+			addr_ptr = (struct gnix_address *)&src_addr;
+	} else {
+		addr_ptr = (struct gnix_address *)&src_addr;
+	}
+
+	/*
+	 * if type FI_EP_RDM, search unexpected on this ep to see if we
+	 * already have a match. For FI_EP_MSG, just take first element
+	 * of the unexpected list.
+	 */
+
+	list = &ep_priv->unexp_recv_queue;
+	fastlock_acquire(&ep_priv->recv_queue_lock);
+
+	if (ep_priv->type == FI_EP_RDM) {
+
+		for (prev = NULL, item = list->head;
+				item; prev = item, item = item->next) {
+			req = (struct gnix_fab_req *)container_of(item,
+							  struct gnix_fab_req,
+							  slist);
+			if ((GNIX_ADDR_UNSPEC(*addr_ptr)) ||
+				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr))) {
+				if (prev)
+					prev->next = item->next;
+				else
+					list->head = item->next;
+				if (!item->next)
+					list->tail = prev;
+				matched = 1;
+				req->modes |= GNIX_FAB_RQ_M_MATCHED;
+				break;
+			}
+		}
+	} else if (ep_priv->type == FI_EP_MSG) {
+
+		item = slist_remove_head(list);
+		if (item) {
+			req = (struct gnix_fab_req *)container_of(item,
+							  struct gnix_fab_req,
+							  slist);
+			req->modes |= GNIX_FAB_RQ_M_MATCHED;
+			matched = 1;
+		}
+	}
+
+	if (matched) {
+
+		if (req->modes & GNIX_FAB_RQ_M_COMPLETE) {
+			memcpy(buf, req->buf, MIN(req->len, len));
+			free(req->buf);
+			req->buf = NULL;
+		}
+
+		cq = ep_priv->recv_cq;
+		assert(cq != NULL);
+
+		if (slist_empty(&ep_priv->pending_recv_comp_queue) &&
+			(req->modes & GNIX_FAB_RQ_M_COMPLETE)) {
+
+			/*
+			 * TODO: eventually need to deal with
+			 * FI_SELECTIVE_COMPLETION
+			 */
+			cq_len = _gnix_cq_add_event(cq,
+						    context,
+						    req->cq_flags |
+							FI_RECV | FI_MSG,
+						    MIN(req->len, len),
+						    buf,
+						    req->imm,
+						    0);
+			if (cq_len != FI_SUCCESS)  {
+				GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+					  "_gnix_cq_add_event returned %d\n",
+					   cq_len);
+				ret = (int)cq_len; /* ugh */
+			}
+
+			_gnix_fr_free(ep_priv, req);
+		} else {
+			slist_insert_tail(&req->slist,
+					&ep_priv->pending_recv_comp_queue);
+			sched_req = 1;
+		}
+
+	} else {
+
+		req = _gnix_fr_alloc(ep_priv);
+		if (req == NULL)
+			return -FI_EAGAIN;  /* odd, maybe we can
+						allocate later */
+
+		req->addr = *addr_ptr;
+		req->len = len;
+		req->buf = buf;
+		req->type = GNIX_FAB_RQ_RECV;
+		req->user_context = context;
+		slist_insert_tail(&req->slist,
+				  &ep_priv->posted_recv_queue);
+	}
+
+	fastlock_release(&ep_priv->recv_queue_lock);
+	if (sched_req) {
+		/*
+		 * TODO: schedule completion of req if not completed
+		 */
+	}
+
+	return ret;
 }
 
 static const recvv_func_t const recvv_method[] = {
@@ -182,25 +479,108 @@ static ssize_t gnix_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 
 }
 
-static const send_func_t const send_method[] = {
-					[FI_EP_MSG] =  gnix_ep_send_msg,
-					[FI_EP_RDM] =  gnix_ep_send_rdm,
-					};
-
 static ssize_t gnix_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 			    void *desc, fi_addr_t dest_addr, void *context)
 {
-	struct gnix_fid_ep *ep_priv;
+	int ret = FI_SUCCESS;
+	struct gnix_vc *vc = NULL;
+	struct gnix_nic *nic = NULL;
+	struct gnix_fid_ep *ep_priv = NULL;
+	struct gnix_fab_req *req;
+	struct gnix_address *addr_ptr;
+	struct gnix_tx_descriptor *tdesc;
+	gni_return_t status;
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
 
-	return send_method[ep_priv->type](ep,
-					  buf,
-					  len,
-					  desc,
-					  dest_addr,
-					  context);
+	nic = ep_priv->nic;
+	if (nic == NULL)
+		return -FI_EINVAL;
+
+	if (ep_priv->type == FI_EP_RDM) {
+		ret = _gnix_ep_get_vc(ep_priv, dest_addr, &vc);
+		if (unlikely(ret != FI_SUCCESS)) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_ep_get_vc returned %d\n",
+				   ret);
+			goto err;
+		}
+	} else
+		vc = ep_priv->vc; /* FI_EP_MSG easy */
+
+	if (likely(vc->conn_state == GNIX_VC_CONNECTED) &&
+			slist_empty(&vc->send_queue)) {
+		if (len < (16384 - sizeof(struct gnix_smsg_hdr))) {
+			/*
+			 * pure smsg path
+			 */
+			ret = _gnix_nic_tx_alloc(ep_priv->nic,
+						 &tdesc);
+			if (unlikely(ret != FI_SUCCESS))
+				goto out;
+
+			tdesc->desc.smsg_desc.hdr.len = len;
+			tdesc->desc.smsg_desc.hdr.flags = 0;
+			tdesc->desc.smsg_desc.buf = buf;
+			tdesc->desc.context = context;
+			tdesc->desc.req = NULL;
+			tdesc->desc.ep = ep_priv;
+			tdesc->desc.completer_fn =
+				gnix_ep_smsg_completers[GNIX_SMSG_T_EGR_W_DATA];
+			fastlock_acquire(&nic->lock);
+			status = GNI_SmsgSendWTag(vc->gni_ep,
+						&tdesc->desc.smsg_desc.hdr,
+						sizeof(struct gnix_smsg_hdr),
+						(void *)buf,
+						len,
+						tdesc->desc.id,
+						GNIX_SMSG_T_EGR_W_DATA);
+			fastlock_release(&nic->lock);
+			if (status == GNI_RC_SUCCESS)
+				goto out;
+			else if (status == GNI_RC_NOT_DONE) {
+				ret = _gnix_nic_tx_free(nic, tdesc);
+				assert(ret == FI_SUCCESS);
+				goto slow;
+			} else {
+				GNIX_WARN(FI_LOG_EP_DATA,
+					 "GNI_SmsgSendWTag returned %s\n",
+					  gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err;
+			}
+		} else {
+			return -FI_ENOSYS;  /* only smsg path for now */
+		}
+
+	}
+
+slow:
+	req = _gnix_fr_alloc(ep_priv);
+	if (req == NULL)
+		return -FI_EAGAIN;
+
+	addr_ptr = (struct gnix_address *)&dest_addr;
+	req->addr = *addr_ptr;
+	req->buf = (void *)buf;
+	req->modes = 0;
+	req->gnix_ep = ep_priv;
+	if (desc != NULL)
+		req->loc_md = desc;
+	req->len = len;
+	req->user_context = context;
+
+	slist_insert_tail(&req->slist, &vc->send_queue);
+
+	/*
+	 * put vc in the nic's work queue
+	 * progress the nic
+	 */
+
+err:
+out:
+	return ret;
+
 }
 
 static const sendv_func_t const sendv_method[] = {
@@ -501,6 +881,7 @@ static int gnix_ep_control(fid_t fid, int command, void *arg)
 		if (ep->type == FI_EP_RDM) {
 			dom = ep->domain;
 			for (i = 0; i < dom->fabric->n_wc_dgrams; i++) {
+				assert(ep->recv_cq != NULL);
 				ret = _gnix_vc_alloc(ep, FI_ADDR_UNSPEC, &vc);
 				if (ret != FI_SUCCESS) {
 					GNIX_WARN(FI_LOG_EP_CTRL,
@@ -515,8 +896,10 @@ static int gnix_ep_control(fid_t fid, int command, void *arg)
 					_gnix_vc_destroy(vc);
 					goto err;
 				} else {
+					fastlock_acquire(&ep->vc_list_lock);
 					dlist_insert_tail(&vc->entry,
 						       &ep->wc_vc_list);
+					fastlock_release(&ep->vc_list_lock);
 				}
 			}
 		}
@@ -576,18 +959,29 @@ static int gnix_ep_close(fid_t fid)
 		atomic_dec(&av->ref_cnt);
 
 	/*
-	 * destroy any wildcard vc's
+	 * destroy any vc's being used by this EP.
 	 */
 
 	head = &ep->wc_vc_list;
 	for (p = head->next; p != head; p = p->next) {
 		vc = container_of(p, struct gnix_vc, entry);
 		dlist_remove(&vc->entry);
+		if (vc->conn_state == GNIX_VC_CONNECTED) {
+			ret = _gnix_vc_disconnect(vc);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				    "_gnix_vc_disconnect returned %d\n",
+				     ret);
+				goto err;
+			}
+		}
 		ret = _gnix_vc_destroy(vc);
-		if (ret != FI_SUCCESS)
+		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			    "_gnix_vc_destroy call returned %d\n",
+			    "_gnix_vc_destroy returned %d\n",
 			     ret);
+			goto err;
+		}
 	}
 
 	/*
@@ -603,10 +997,12 @@ static int gnix_ep_close(fid_t fid)
 	}
 
 	ret = _gnix_nic_free(nic);
-	if (ret != FI_SUCCESS)
+	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 		    "_gnix_vc_destroy call returned %d\n",
 		     ret);
+		goto err;
+	}
 
 	ep->nic = NULL;
 
@@ -622,6 +1018,7 @@ static int gnix_ep_close(fid_t fid)
 
 	free(ep);
 
+err:
 	return ret;
 }
 
@@ -730,9 +1127,17 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.ops = &gnix_ep_ops;
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
+
+	fastlock_init(&ep_priv->vc_list_lock);
 	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
 	atomic_initialize(&ep_priv->ref_cnt, 0);
+
+	fastlock_init(&ep_priv->recv_queue_lock);
+	slist_init(&ep_priv->unexp_recv_queue);
+	slist_init(&ep_priv->posted_recv_queue);
+	slist_init(&ep_priv->pending_recv_comp_queue);
+
 	ret = __fr_freelist_init(ep_priv);
 	if (ret != FI_SUCCESS) {
 		GNIX_ERR(FI_LOG_EP_CTRL,
@@ -792,6 +1197,13 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			     ret);
 		goto err;
 	}
+
+	/*
+	 * if smsg callbacks not present hook them up now
+	 */
+
+	if (ep_priv->nic->smsg_callbacks == NULL)
+		ep_priv->nic->smsg_callbacks = gnix_ep_smsg_callbacks;
 
 	atomic_inc(&domain_priv->ref_cnt);
 	*ep = &ep_priv->ep_fid;

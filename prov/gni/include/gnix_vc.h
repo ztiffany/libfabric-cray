@@ -43,7 +43,6 @@ extern "C" {
 #endif /* HAVE_CONFIG_H */
 
 #include "gnix.h"
-#include "gnix_nic.h"
 
 /*
  * mode bits
@@ -51,6 +50,7 @@ extern "C" {
 #define GNIX_VC_MODE_IN_WQ		(1U)
 #define GNIX_VC_MODE_IN_HT		(1U << 1)
 #define GNIX_VC_MODE_DG_POSTED		(1U << 2)
+#define GNIX_VC_MODE_PENDING_MSGS	(1U << 3)
 
 /*
  * defines for connection state for gnix VC
@@ -195,22 +195,6 @@ static inline enum gnix_vc_conn_state _gnix_vc_state(struct gnix_vc *vc)
 {
 	assert(vc);
 	return vc->conn_state;
-}
-
-/**
- * @brief Look up vc by id
- *
- * @param[in] nic    pointer to gni nic with which the vc is associated
- * @param[in] vc_d   id of the vc being looked up
- *
- * @return           pointer to vc with the given vc_id
- */
-static inline struct gnix_vc *_gnix_vc_get_by_id(struct gnix_nic *nic,
-						int vc_id)
-{
-	assert(nic);
-	assert(vc_id <= nic->vc_id_table_count);
-	return nic->vc_id_table[vc_id];
 }
 
 #endif /* _GNIX_VC_H_ */

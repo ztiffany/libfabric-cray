@@ -105,9 +105,9 @@ check_again:
 	gnix_list_del_init(&p->list);
 	fastlock_release(&cm_nic->wq_lock);
 
-	assert(p->progress_func);
+	assert(p->progress_fn);
 
-	ret = p->progress_func(p->data, &complete);
+	ret = p->progress_fn(p->data, &complete);
 	if (ret != FI_SUCCESS) {
 		/*
 		 * TODO: fix this
@@ -115,8 +115,8 @@ check_again:
 	}
 
 	if (complete == 1) {
-		if (p->completer_func) {
-			ret = p->completer_func(p->completer_data);
+		if (p->completer_fn) {
+			ret = p->completer_fn(p->completer_data);
 			free(p);
 			if (ret != FI_SUCCESS)
 				goto err;
