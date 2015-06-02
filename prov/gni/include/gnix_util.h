@@ -87,6 +87,14 @@ static inline void dlist_remove_init(struct dlist_entry *e)
 	     e && (&e->member != h);					\
 	     e = n, n = dlist_entry((&e->member)->next, typeof(*e), member))
 
+
+#define rwlock_t pthread_rwlock_t
+#define rwlock_init(lock) pthread_rwlock_init(lock, NULL)
+#define rwlock_destroy(lock) pthread_rwlock_destroy(lock)
+#define rwlock_wrlock(lock) pthread_rwlock_wrlock(lock)
+#define rwlock_rdlock(lock) pthread_rwlock_rdlock(lock)
+#define rwlock_unlock(lock) pthread_rwlock_unlock(lock)
+
 /*
  * prototypes
  */

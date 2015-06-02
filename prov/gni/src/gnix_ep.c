@@ -75,27 +75,35 @@ static void __fr_freelist_destroy(struct gnix_fid_ep *ep)
 	_gnix_sfl_destroy(&ep->fr_freelist);
 }
 
-static struct gnix_fab_req *__fr_alloc(struct gnix_fid_ep *ep)
+struct gnix_fab_req *_fr_alloc(struct gnix_fid_ep *ep)
 {
 	struct slist_entry *se;
 	struct gnix_fab_req *fr = NULL;
-	int ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+	int ret;
 
-	while (ret == -FI_EAGAIN)
+	fastlock_acquire(&ep->lock);
+
+	do {
 		ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+	} while (ret == -FI_EAGAIN);
 
 	if (ret == FI_SUCCESS) {
 		fr = container_of(se, struct gnix_fab_req, slist);
 		fr->gnix_ep = ep;
 	}
 
+	fastlock_release(&ep->lock);
+
 	return fr;
 }
 
-static void __fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
+void _fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
+
+	fastlock_acquire(&ep->lock);
 	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
+	fastlock_release(&ep->lock);
 }
 
 /*******************************************************************************
@@ -542,6 +550,16 @@ static int gnix_ep_close(fid_t fid)
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 	/* TODO: lots more stuff to do here */
 
+	if (ep->send_cq) {
+		_gnix_cq_poll_nic_rem(ep->send_cq, ep->nic);
+		atomic_dec(&ep->send_cq->ref_cnt);
+	}
+
+	if (ep->recv_cq) {
+		_gnix_cq_poll_nic_rem(ep->recv_cq, ep->nic);
+		atomic_dec(&ep->recv_cq->ref_cnt);
+	}
+
 	domain = ep->domain;
 	assert(domain != NULL);
 	atomic_dec(&domain->ref_cnt);
@@ -633,15 +651,35 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			break;
 		}
 		if (flags & FI_SEND) {
+			/* don't allow rebinding */
+			if (ep->send_cq) {
+				ret = -FI_EINVAL;
+				break;
+			}
+
 			ep->send_cq = cq;
+			if (flags & FI_SELECTIVE_COMPLETION) {
+				ep->send_selective_completion = 1;
+			}
+
+			_gnix_cq_poll_nic_add(cq, ep->nic);
+			atomic_inc(&cq->ref_cnt);
 		}
 		if (flags & FI_RECV) {
+			/* don't allow rebinding */
+			if (ep->recv_cq) {
+				ret = -FI_EINVAL;
+				break;
+			}
+
 			ep->recv_cq = cq;
+			if (flags & FI_SELECTIVE_COMPLETION) {
+				ep->recv_selective_completion = 1;
+			}
+
+			_gnix_cq_poll_nic_add(cq, ep->nic);
+			atomic_inc(&cq->ref_cnt);
 		}
-		if (flags & FI_COMPLETION) {
-			ep->no_want_cqes = 1;
-		}
-		atomic_inc(&cq->ref_cnt);
 		break;
 	case FI_CLASS_AV:
 		av = container_of(bfid, struct gnix_fid_av, av_fid.fid);
@@ -707,6 +745,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
 	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
 	ep_priv->ep_fid.atomic = NULL;
+	fastlock_init(&ep_priv->lock);
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
 
