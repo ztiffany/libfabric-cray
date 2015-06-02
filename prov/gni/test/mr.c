@@ -479,3 +479,154 @@ Test(memory_registration_cache, cyclic_register_128_distinct_regions)
 	free(mr_arr);
 	mr_arr = NULL;
 }
+
+/* Test registration of 128 regions that will be cycled in and out of the
+ *   inuse and stale trees. inuse + stale should never exceed 128
+ */
+Test(memory_registration_cache, lru_evict_first_entry)
+{
+	int ret;
+	char **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+	int buf_size = __BUF_LEN * sizeof(char);
+
+	regions = cache->attr.hard_stale_limit << 1;
+	cr_assert(regions > 0);
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(char *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = calloc(__BUF_LEN, sizeof(char));
+		cr_assert(buffers[i]);
+	}
+
+	/* create the initial memory registrations */
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'in-use' */
+	cr_assert(atomic_get(&cache->inuse_elements) == regions);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	/* deregister cache->stale_reg_limit + 1 to test if the first region was
+	 *   deregistered
+	 */
+	for (i = 0; i < (regions >> 1) + 1; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	for (i = 1; i < (regions >> 1) + 1; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'stale' */
+	cr_assert(atomic_get(&cache->inuse_elements) == regions - 1);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	for (i = 1; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'stale' */
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) >= 0);
+
+	for (i = 0; i < regions; ++i) {
+		free(buffers[i]);
+		buffers[i] = NULL;
+	}
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+}
+
+Test(memory_registration_cache, lru_evict_middle_entry)
+{
+	int ret;
+	char **buffers;
+	struct fid_mr **mr_arr;
+	int i;
+	int buf_size = __BUF_LEN * sizeof(char);
+
+	regions = cache->attr.hard_stale_limit << 1;
+	cr_assert(regions > 0);
+	mr_arr = calloc(regions, sizeof(struct fid_mr *));
+	cr_assert(mr_arr);
+
+	buffers = calloc(regions, sizeof(char *));
+	cr_assert(buffers, "failed to allocate array of buffers");
+
+	for (i = 0; i < regions; ++i) {
+		buffers[i] = calloc(__BUF_LEN, sizeof(char));
+		cr_assert(buffers[i]);
+	}
+
+	/* create the initial memory registrations */
+	for (i = 0; i < regions; ++i) {
+		ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+				default_access,	default_offset, default_req_key,
+				default_flags, &mr_arr[i], NULL);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* all registrations should now be 'in-use' */
+	cr_assert(atomic_get(&cache->inuse_elements) == regions);
+	cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+	/* deregister cache->stale_reg_limit + 1 to test if the first region was
+	 *   deregistered
+	 */
+	for (i = 0; i < (regions >> 1); ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	/* re-register this region in the middle to test removal */
+	i = (regions >> 2);
+	ret = fi_mr_reg(dom, (void *) buffers[i], buf_size,
+			default_access,	default_offset, default_req_key,
+			default_flags, &mr_arr[i], NULL);
+	cr_assert(ret == FI_SUCCESS);
+
+
+	for (i = regions >> 1; i < regions; ++i) {
+		ret = fi_close(&mr_arr[i]->fid);
+		cr_assert(ret == FI_SUCCESS);
+	}
+
+	i = (regions >> 2);
+	ret = fi_close(&mr_arr[i]->fid);
+	cr_assert(ret == FI_SUCCESS);
+
+	/* all registrations should now be 'stale' */
+	cr_assert(atomic_get(&cache->inuse_elements) == 0);
+	cr_assert(atomic_get(&cache->stale_elements) >= 0);
+
+	for (i = 0; i < regions; ++i) {
+		free(buffers[i]);
+		buffers[i] = NULL;
+	}
+
+	free(buffers);
+	buffers = NULL;
+
+	free(mr_arr);
+	mr_arr = NULL;
+}
+

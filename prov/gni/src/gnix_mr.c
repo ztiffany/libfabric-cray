@@ -42,6 +42,7 @@
 #include "gnix_mr.h"
 #include "gnix_priv.h"
 #include "common/atomics.h"
+#include "ccan/list.h"
 
 /* forward declarations */
 static int __mr_cache_register(
@@ -77,6 +78,7 @@ typedef struct gnix_mr_cache_entry {
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	atomic_t ref_cnt;
+	struct list_node lru_entry;
 } gnix_mr_cache_entry_t;
 
 static struct fi_ops fi_gnix_mr_ops = {
@@ -146,6 +148,52 @@ static inline int __mr_cache_key_comp(
 }
 
 /**
+ * Pushes an entry into the LRU cache. No limits are maintained here as
+ *   the hard_stale_limit attr value will directly limit the lru size
+ *
+ * @param[in] cache  a memory registration cache object
+ * @param[in] entry  a memory registration cache entry
+ *
+ * @return           FI_SUCCESS, always
+ */
+static inline int __mr_cache_lru_enqueue(
+		gnix_mr_cache_t       *cache,
+		gnix_mr_cache_entry_t *entry)
+{
+	list_add_tail(&cache->lru_head, &entry->lru_entry);
+
+	return FI_SUCCESS;
+}
+
+/**
+ * Pops an registration cache entry from the lru cache.
+ *
+ * @param[in] cache  a memory registration cache
+ * @param[in] entry  a memory registration cache entry
+ *
+ * @return           FI_SUCCESS, on success
+ * @return           -FI_ENOENT, on empty LRU
+ */
+static inline int __mr_cache_lru_dequeue(
+		gnix_mr_cache_t       *cache,
+		gnix_mr_cache_entry_t **entry)
+{
+	gnix_mr_cache_entry_t *ret;
+
+	ret = list_top(&cache->lru_head, gnix_mr_cache_entry_t, lru_entry);
+	if (unlikely(!ret)) { /* we check list_empty before calling */
+		*entry = NULL;
+		return -FI_ENOENT;
+	}
+
+	/* remove entry from the list */
+	*entry = ret;
+	list_del(&ret->lru_entry);
+
+	return FI_SUCCESS;
+}
+
+/**
  * Destroys the memory registration cache entry and deregisters the memory
  *   region with uGNI
  *
@@ -209,15 +257,19 @@ static inline int __mr_cache_entry_put(
 		atomic_dec(&cache->inuse_elements);
 
 		if (cache->attr.lazy_deregistration) {
-			GNIX_INFO(FI_LOG_MR, "moving key %i:%i to stale\n",
+			GNIX_INFO(FI_LOG_MR, "moving key %llu:%llu to stale\n",
 					entry->key.address, entry->key.length);
 			rc = rbtInsert(cache->stale, &entry->key, entry);
-			if (rc != RBT_STATUS_OK) {
+			if (likely(FI_SUCCESS ==
+					__mr_cache_lru_enqueue(cache, entry) &&
+					rc == RBT_STATUS_OK)) {
+				atomic_inc(&cache->stale_elements);
+			} else if (unlikely(rc != RBT_STATUS_OK)) {
 				grc = __mr_cache_entry_destroy(entry);
 			} else {
-				atomic_inc(&cache->stale_elements);
+				GNIX_WARN(FI_LOG_MR,
+						"failed to insert entry into lru");
 			}
-
 		} else {
 			grc = __mr_cache_entry_destroy(entry);
 		}
@@ -277,7 +329,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	int rc;
 
 	/* Flags are reserved for future use and must be 0. */
-	if (flags)
+	if (unlikely(flags))
 		return -FI_EBADFLAGS;
 
 	/* The offset parameter is reserved for future use and must be 0.
@@ -293,7 +345,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		return -FI_EINVAL;
 
 	/* requested key is not permitted at this point */
-	if (requested_key)
+	if (unlikely(requested_key))
 		return -FI_EKEYREJECTED;
 
 	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
@@ -309,7 +361,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		fi_gnix_access |= GNI_MEM_READ_ONLY;
 
 	/* If the nic list is empty, create a nic */
-	if (list_empty(&domain->nic_list)) {
+	if (unlikely(list_empty(&domain->nic_list))) {
 		rc = gnix_nic_alloc(domain, &nic);
 		if (rc) {
 			GNIX_WARN(FI_LOG_MR, "could not allocate nic to do mr_reg,"
@@ -322,7 +374,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	/* call cache register op to retrieve the right entry */
 	rc = __mr_cache_register(&domain->mr_cache, mr, domain, (uint64_t) buf,
 			len, NULL, fi_gnix_access, -1, &mr->mem_hndl);
-	if (rc != FI_SUCCESS)
+	if (unlikely(rc != FI_SUCCESS))
 		goto err;
 
 	/* md.domain */
@@ -366,14 +418,14 @@ static int fi_gnix_mr_close(fid_t fid)
 	struct gnix_fid_mem_desc *mr;
 	gni_return_t ret;
 
-	if (fid->fclass != FI_CLASS_MR)
+	if (unlikely(fid->fclass != FI_CLASS_MR))
 		return -FI_EINVAL;
 
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	/* call cache deregister op */
 	ret = __mr_cache_deregister(&mr->domain->mr_cache, mr);
-	if (ret == FI_SUCCESS) {
+	if (likely(ret == FI_SUCCESS)) {
 		/* release references to the domain and nic */
 		atomic_dec(&mr->domain->ref_cnt);
 		atomic_dec(&mr->nic->ref_cnt);
@@ -427,6 +479,11 @@ int _gnix_mr_cache_init(
 	/* save the attribute values */
 	memcpy(&cache->attr, cache_attr, sizeof(*cache_attr));
 
+	/* list is used because entries can be removed from the stale list if
+	 *   a user might call register on a stale entry's memory region
+	 */
+	list_head_init(&cache->lru_head);
+
 	/* set up inuse tree */
 	cache->inuse = rbtNew(__mr_cache_key_comp);
 	if (!cache->inuse)
@@ -436,6 +493,7 @@ int _gnix_mr_cache_init(
 	if (cache->attr.lazy_deregistration) {
 		cache->stale = rbtNew(__mr_cache_key_comp);
 		if (!cache->stale) {
+			/* destroy inuse cache */
 			rbtDelete(cache->inuse);
 			cache->inuse = NULL;
 
@@ -491,8 +549,8 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 }
 
 int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
-	RbtIterator iter, next;
-	gnix_mr_cache_key_t *key;
+	int rc;
+	RbtIterator iter;
 	gnix_mr_cache_entry_t *entry;
 	int destroyed = 0;
 
@@ -502,18 +560,34 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 	if (!cache->attr.lazy_deregistration)
 		return FI_SUCCESS;
 
-	for (iter = rbtBegin(cache->stale);
-			iter != rbtEnd(cache->stale);
-			iter = next) {
+	while (!list_empty(&cache->lru_head)) {
 
 		if (flush_count >= 0 && flush_count == destroyed)
 			break;
 
-		rbtKeyValue(cache->stale, iter, (void **) &key,
-				(void **) &entry);
+		rc = __mr_cache_lru_dequeue(cache, &entry);
+		if (unlikely(rc != FI_SUCCESS)) {
+			GNIX_ERR(FI_LOG_MR,
+					"list may be corrupt, no entries from lru pop");
+			break;
+		}
 
-		next = rbtNext(cache->stale, iter);
-		rbtErase(cache->stale, iter);
+		GNIX_INFO(FI_LOG_MR, "attempting to flush key %llu:%llu\n",
+				entry->key.address, entry->key.length);
+		iter = rbtFind(cache->stale, &entry->key);
+		if (unlikely(!iter)) {
+			GNIX_ERR(FI_LOG_MR,
+					"lru entries MUST be present in the cache,"
+					" could not find key in stale tree");
+			break;
+		}
+
+		rc = rbtErase(cache->stale, iter);
+		if (unlikely(rc != RBT_STATUS_OK)) {
+			GNIX_ERR(FI_LOG_MR,
+					"failed to erase lru entry from stale tree");
+			break;
+		}
 
 		__mr_cache_entry_destroy(entry);
 		entry = NULL;
@@ -534,7 +608,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 int _gnix_mr_cache_flush(gnix_mr_cache_t *cache)
 {
 
-	if (cache->state != GNIX_MRC_STATE_READY)
+	if (unlikely(cache->state != GNIX_MRC_STATE_READY))
 		return -FI_EINVAL;
 
 	__mr_cache_flush(cache, cache->attr.hard_reg_limit);
@@ -573,11 +647,6 @@ static int __mr_cache_register(
 	struct gnix_nic *nic;
 	gni_return_t grc = GNI_RC_SUCCESS;
 
-	/* if we shouldn't introduce any new elements, return -FI_ENOSPC */
-	if (cache->attr.hard_reg_limit > 0 &&
-			atomic_get(&cache->inuse_elements) >= cache->attr.hard_reg_limit)
-		return FI_ENOSPC;
-
 	/* build key for searching */
 	key.address = address;
 	key.length = length;
@@ -590,8 +659,18 @@ static int __mr_cache_register(
 				(void **) &entry);
 
 		__mr_cache_entry_get(cache, entry);
+
+		/* Done, go to the end */
 		goto success;
-	} else if (cache->attr.lazy_deregistration) {
+	}
+
+	/* if we shouldn't introduce any new elements, return -FI_ENOSPC */
+	if (unlikely(cache->attr.hard_reg_limit > 0 &&
+			(atomic_get(&cache->inuse_elements) >=
+					cache->attr.hard_reg_limit)))
+		return FI_ENOSPC;
+
+	if (cache->attr.lazy_deregistration) {
 		/* if lazy deregistration is in use, we can check the
 		 *   stale tree
 		 */
@@ -609,14 +688,17 @@ static int __mr_cache_register(
 			rbtErase(cache->stale, iter);
 			atomic_dec(&cache->stale_elements);
 
-			GNIX_INFO(FI_LOG_MR, "moving key %i:%i from stale into inuse\n",
+			list_del(&entry->lru_entry);
+
+			GNIX_INFO(FI_LOG_MR,
+					"moving key %llu:%llu from stale into inuse\n",
 					entry->key.address, entry->key.length);
 			rc = rbtInsert(cache->inuse, (void *) &entry->key,
 					(void *) entry);
-			if (rc == RBT_STATUS_MEM_EXHAUSTED) {
+			if (unlikely(rc == RBT_STATUS_MEM_EXHAUSTED)) {
 				__mr_cache_entry_destroy(entry);
 				return -FI_ENOMEM;
-			} else if (rc != RBT_STATUS_OK) {
+			} else if (unlikely(rc != RBT_STATUS_OK)) {
 				GNIX_WARN(FI_LOG_MR, "unexpected error condition "
 						"during cache insert, ret=%i\n", rc);
 			}
@@ -650,7 +732,7 @@ static int __mr_cache_register(
 			break;
 	}
 
-	if (grc != GNI_RC_SUCCESS) {
+	if (unlikely(grc != GNI_RC_SUCCESS)) {
 		free(entry);
 		GNIX_INFO(FI_LOG_MR, "failed to register memory with uGNI, "
 				"ret=%s", gni_err_str[grc]);
@@ -661,15 +743,15 @@ static int __mr_cache_register(
 	entry->key.address = address;
 	entry->key.length = length;
 
-	GNIX_INFO(FI_LOG_MR, "inserting key %i:%i into inuse\n",
+	GNIX_INFO(FI_LOG_MR, "inserting key %llu:%llu into inuse\n",
 			entry->key.address, entry->key.length);
 	rc = rbtInsert(cache->inuse, &entry->key, entry);
-	if (rc != RBT_STATUS_OK) {
+	if (unlikely(rc != RBT_STATUS_OK)) {
 		GNIX_INFO(FI_LOG_MR, "failed to insert registration "
 				"into cache, ret=%i", rc);
 
 		grc = GNI_MemDeregister(nic->gni_nic_hndl, &entry->mem_hndl);
-		if (grc != GNI_RC_SUCCESS) {
+		if (unlikely(grc != GNI_RC_SUCCESS)) {
 			GNIX_INFO(FI_LOG_MR, "failed to deregister memory with "
 					"uGNI, ret=%s", gni_err_str[grc]);
 		}
@@ -717,10 +799,10 @@ static int __mr_cache_deregister(
 	/* check to see if we can find the entry so that we can drop the
 	 *   held reference
 	 */
-	GNIX_INFO(FI_LOG_MR, "searching for key %i:%i\n",
+	GNIX_INFO(FI_LOG_MR, "searching for key %llu:%llu\n",
 			mr->key.address, mr->key.length);
 	iter = rbtFind(cache->inuse, &mr->key);
-	if (!iter) {
+	if (unlikely(!iter)) {
 		GNIX_WARN(FI_LOG_MR, "failed to find entry in the inuse cache\n");
 		return -FI_ENOENT;
 	}

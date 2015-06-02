@@ -30,6 +30,35 @@
  * SOFTWARE.
  */
 
+/**
+ * @note The GNIX memory registration cache has the following properties:
+ *         - Not thread safe
+ *         - Uses two red black trees for internal storage and fast lookups
+ *         - The hard registration limit includes the number of stale entries.
+ *             Stale entries will be evicted to make room for new entries as
+ *             the registration cache becomes full.
+ *         - Allows multiplexing of libfabric memory registrations onto a
+ *             single GNIX memory registration so long as the libfabric
+ *             registration can be contained wholly within the GNIX memory
+ *             registration.
+ *         - Uses a LRU cache eviction scheme. This should reduce the overall
+ *             calls to reg/dereg in the underlying layers when the user
+ *             application consistently sends messages from the same buffers
+ *             but continually registers and deregisters those regions. The
+ *             LRU is implemented as a queue using a doubly linked list for
+ *             fast removal/insertion .
+ *         - By default, there is no limit to the number of 'inuse'
+ *             registrations in the cache. This can be changed by passing
+ *             in a set of attributes during _gnix_mr_cache_init.
+ *         - By default, there is a limit of 128 stale entries in the cache.
+ *             This is done to limit the amount of unused entries to retain.
+ *             Some traffic patterns may burst traffic across a network,
+ *             potentially leaving stale entries unused for long periods of
+ *             time. Some stale entries may never be reused by an application.
+ *             This value may also be changed by passing in a set of attributes
+ *             during _gnix_mr_cache_init.
+ */
+
 #ifndef GNIX_MR_H_
 #define GNIX_MR_H_
 
@@ -159,6 +188,7 @@ typedef struct gnix_mr_cache {
 	RbtHandle stale;
 	atomic_t inuse_elements;
 	atomic_t stale_elements;
+	struct list_head lru_head;
 } gnix_mr_cache_t;
 
 /**
