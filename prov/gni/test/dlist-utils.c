@@ -68,10 +68,49 @@ struct dlist_test {
 	int x;
 };
 
+Test(dlist_utils, for_each)
+{
+	int i;
+	const int n = 593;
+	struct dlist_entry dl;
+	struct dlist_test dt[n];
+	struct dlist_test *elem;
+	int perm[n];
+
+	for (i = 0; i < n; i++)
+		perm[i] = i;
+
+	generate_perm(perm, n);
+
+	dlist_init(&dl);
+	for (i = 0; i < n; i++) {
+		dt[perm[i]].x = i;
+		dlist_insert_tail(&dt[perm[i]].le, &dl);
+	}
+
+	i = 0;
+	dlist_for_each(&dl, elem, le) {
+		cr_assert(elem->x == i);
+		++i;
+	}
+}
+
+Test(dlist_utils, for_each_empty)
+{
+	struct dlist_entry dl;
+	struct dlist_test *elem;
+
+	dlist_init(&dl);
+
+	dlist_for_each(&dl, elem, le) {
+		cr_assert(false);
+	}
+}
+
 Test(dlist_utils, for_each_safe)
 {
 	int i;
-	const int n = 13;
+	const int n = 1129;
 	struct dlist_entry dl;
 	struct dlist_test dt[n];
 	struct dlist_test *elem, *next;
