@@ -235,9 +235,10 @@ void _gnix_convert_key_to_mhdl(
 		gnix_mr_key_t *key,
 		gni_mem_handle_t *mhdl)
 {
-	uint64_t va = (uint64_t) __sign_extend(key->pfn << GNIX_MR_PAGE_SHIFT,
-			GNIX_MR_VA_BITS);
+	uint64_t va = key->pfn;
 	uint8_t flags = 0;
+
+	va = (uint64_t) __sign_extend(va << GNIX_MR_PAGE_SHIFT, GNIX_MR_VA_BITS);
 
 	if (key->flags & GNIX_MR_FLAG_READONLY)
 		flags |= GNI_MEMHNDL_ATTR_READONLY;
