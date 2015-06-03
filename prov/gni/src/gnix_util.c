@@ -398,6 +398,29 @@ int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit)
 	}
 
 	*limit = job_res_desc.limit;
+	GNIX_INFO(FI_LOG_FABRIC, "fma_limit: %u\n", job_res_desc.limit);
+
+	return FI_SUCCESS;
+}
+
+int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit)
+{
+	gni_return_t status;
+	gni_job_res_desc_t job_res_desc;
+
+	if (!limit) {
+		return -FI_EINVAL;
+	}
+
+	status = GNI_GetJobResInfo(dev_id, ptag, GNI_JOB_RES_CQ, &job_res_desc);
+	if (status) {
+		GNIX_ERR(FI_LOG_FABRIC, "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
+			 dev_id, ptag, gni_err_str[status]);
+		return -FI_EINVAL;
+	}
+
+	*limit = job_res_desc.limit;
+	GNIX_INFO(FI_LOG_FABRIC, "cq_limit: %u\n", job_res_desc.limit);
 
 	return FI_SUCCESS;
 }
@@ -418,6 +441,7 @@ int _gnix_pes_on_node(uint32_t *num_pes)
 	}
 
 	*num_pes = gnix_appLayout.numPesHere;
+	GNIX_INFO(FI_LOG_FABRIC, "num_pes: %u\n", gnix_appLayout.numPesHere);
 
 	return FI_SUCCESS;
 }
@@ -425,10 +449,17 @@ int _gnix_pes_on_node(uint32_t *num_pes)
 int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 {
 	int rc;
-	uint32_t npes, fmas;
+	uint32_t npes, fmas, cqs, limiting_resource;
 
 	if (!nics_per_rank) {
 		return -FI_EINVAL;
+	}
+
+	rc = gnix_alps_init();
+	if (rc) {
+		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
+			       rc, strerror(errno));
+		return rc;
 	}
 
 	rc = _gnix_job_fma_limit(gnix_device_id, gnix_app_ptag, &fmas);
@@ -436,12 +467,20 @@ int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 		return rc;
 	}
 
+	rc = _gnix_job_cq_limit(gnix_device_id, gnix_app_ptag, &cqs);
+	if (rc) {
+		return rc;
+	}
+	cqs /= GNIX_CQS_PER_EP;
+
 	rc = _gnix_pes_on_node(&npes);
 	if (rc) {
 		return rc;
 	}
 
-	*nics_per_rank = fmas / npes;
+	limiting_resource = fmas > cqs ? cqs : fmas;
+
+	*nics_per_rank = limiting_resource / npes;
 
 	return FI_SUCCESS;
 }
