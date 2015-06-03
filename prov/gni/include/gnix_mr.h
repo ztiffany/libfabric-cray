@@ -188,7 +188,7 @@ typedef struct gnix_mr_cache {
 	RbtHandle stale;
 	atomic_t inuse_elements;
 	atomic_t stale_elements;
-	struct list_head lru_head;
+	struct dlist_entry lru_head;
 } gnix_mr_cache_t;
 
 /**

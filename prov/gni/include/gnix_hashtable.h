@@ -37,7 +37,7 @@
 #include <pthread.h>
 
 #include <fi.h>
-#include "prov/gni/ccan/list.h"
+#include <fi_list.h>
 
 typedef uint64_t gnix_ht_key_t;
 
@@ -48,18 +48,18 @@ typedef enum gnix_ht_state {
 } gnix_ht_state_e;
 
 typedef struct gnix_ht_entry {
-	struct list_node entry;
+	struct dlist_entry entry;
 	gnix_ht_key_t key;
 	void *value;
 } gnix_ht_entry_t;
 
 typedef struct gnix_ht_lk_lh {
 	pthread_rwlock_t lh_lock;
-	struct list_head head;
+	struct dlist_entry head;
 } gnix_ht_lk_lh_t;
 
 typedef struct gnix_ht_lf_lh {
-	struct list_head head;
+	struct dlist_entry head;
 } gnix_ht_lf_lh_t;
 
 enum gnix_ht_increase {
@@ -112,7 +112,7 @@ typedef struct gnix_hashtable_ops {
 	int   (*remove)(struct gnix_hashtable *, gnix_ht_key_t);
 	void *(*lookup)(struct gnix_hashtable *, gnix_ht_key_t);
 	int   (*resize)(struct gnix_hashtable *, int, int);
-	struct list_head *(*retrieve_list)(struct gnix_hashtable *, int bucket);
+	struct dlist_entry *(*retrieve_list)(struct gnix_hashtable *, int bucket);
 } gnix_hashtable_ops_t;
 
 /**

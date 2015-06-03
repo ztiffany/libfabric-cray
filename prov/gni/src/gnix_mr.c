@@ -42,7 +42,6 @@
 #include "gnix_mr.h"
 #include "gnix_priv.h"
 #include "common/atomics.h"
-#include "ccan/list.h"
 
 /* forward declarations */
 static int __mr_cache_register(
@@ -78,7 +77,7 @@ typedef struct gnix_mr_cache_entry {
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	atomic_t ref_cnt;
-	struct list_node lru_entry;
+	struct dlist_entry lru_entry;
 } gnix_mr_cache_entry_t;
 
 static struct fi_ops fi_gnix_mr_ops = {
@@ -160,7 +159,7 @@ static inline int __mr_cache_lru_enqueue(
 		gnix_mr_cache_t       *cache,
 		gnix_mr_cache_entry_t *entry)
 {
-	list_add_tail(&cache->lru_head, &entry->lru_entry);
+	dlist_insert_tail(&entry->lru_entry, &cache->lru_head);
 
 	return FI_SUCCESS;
 }
@@ -180,7 +179,8 @@ static inline int __mr_cache_lru_dequeue(
 {
 	gnix_mr_cache_entry_t *ret;
 
-	ret = list_top(&cache->lru_head, gnix_mr_cache_entry_t, lru_entry);
+	ret = dlist_first_entry(&cache->lru_head,
+			gnix_mr_cache_entry_t, lru_entry);
 	if (unlikely(!ret)) { /* we check list_empty before calling */
 		*entry = NULL;
 		return -FI_ENOENT;
@@ -188,7 +188,7 @@ static inline int __mr_cache_lru_dequeue(
 
 	/* remove entry from the list */
 	*entry = ret;
-	list_del(&ret->lru_entry);
+	dlist_remove(&ret->lru_entry);
 
 	return FI_SUCCESS;
 }
@@ -483,7 +483,7 @@ int _gnix_mr_cache_init(
 	/* list is used because entries can be removed from the stale list if
 	 *   a user might call register on a stale entry's memory region
 	 */
-	list_head_init(&cache->lru_head);
+	dlist_init(&cache->lru_head);
 
 	/* set up inuse tree */
 	cache->inuse = rbtNew(__mr_cache_key_comp);
@@ -561,7 +561,7 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 	if (!cache->attr.lazy_deregistration)
 		return FI_SUCCESS;
 
-	while (!list_empty(&cache->lru_head)) {
+	while (!dlist_empty(&cache->lru_head)) {
 
 		if (flush_count >= 0 && flush_count == destroyed)
 			break;
@@ -689,7 +689,7 @@ static int __mr_cache_register(
 			rbtErase(cache->stale, iter);
 			atomic_dec(&cache->stale_elements);
 
-			list_del(&entry->lru_entry);
+			dlist_remove(&entry->lru_entry);
 
 			GNIX_INFO(FI_LOG_MR,
 					"moving key %llu:%llu from stale into inuse\n",
