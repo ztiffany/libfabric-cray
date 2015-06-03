@@ -368,6 +368,22 @@ Test(reading, error)
 	cr_assert_eq(err_entry.err_data, 0);
 }
 
+#define ENTRY_CNT 5
+Test(reading, issue192)
+{
+	int ret = 0;
+	char input_ctx = 'a';
+	struct fi_cq_entry entries[ENTRY_CNT];
+
+	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0);
+
+	ret = fi_cq_read(rcq, &entries, ENTRY_CNT);
+	cr_assert_eq(ret, 1);
+
+	ret = fi_cq_read(rcq, &entries, ENTRY_CNT);
+	cr_assert_eq(ret, -FI_EAGAIN);
+}
+
 TestSuite(cq_msg, .init = cq_msg_setup, .fini = cq_teardown);
 
 Test(cq_msg, single)
