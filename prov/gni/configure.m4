@@ -132,9 +132,16 @@ m4_include([config/pkg.m4])
 		AC_MSG_CHECKING([criterion path])
 		if test -d "$with_criterion"; then
 			AC_MSG_RESULT([yes])
-			have_criterion=true
 			CPPFLAGS="-I$with_criterion/include $CPPFLAGS"
-			LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $LDFLAGS"
+			if test -d "$with_criterion/lib"; then
+				LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib $LDFLAGS"
+				have_criterion=true
+			elif test -d "$with_criterion/lib64"; then
+				LDFLAGS="$CRAY_ALPS_LLI_STATIC_LIBS -L$with_criterion/lib64 $LDFLAGS"
+				have_criterion=true
+			else
+				have_criterion=false
+			fi
 		else
 			AC_MSG_RESULT([no])
 			AC_MSG_ERROR([criterion requested but invalid path given])
@@ -142,6 +149,7 @@ m4_include([config/pkg.m4])
 	fi
 
 	AM_CONDITIONAL([HAVE_CRITERION], [test "x$have_criterion" = "xtrue"])
+
 
 	AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
