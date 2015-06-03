@@ -37,6 +37,8 @@
 #include "gnix_hashtable.h"
 #include "fasthash/fasthash.h"
 
+#include "gnix_util.h"
+
 #define __GNIX_HT_INITIAL_SIZE 128
 #define __GNIX_HT_MAXIMUM_SIZE 1024
 #define __GNIX_HT_INCREASE_STEP 2
@@ -137,7 +139,7 @@ static int __gnix_ht_check_attr_sanity(gnix_hashtable_attr_t *attr)
 
 static inline void __gnix_ht_delete_entry(gnix_ht_entry_t *ht_entry)
 {
-	list_del(&ht_entry->entry);
+	dlist_remove(&ht_entry->entry);
 
 	ht_entry->value = NULL;
 	ht_entry->key = 0;
@@ -146,13 +148,13 @@ static inline void __gnix_ht_delete_entry(gnix_ht_entry_t *ht_entry)
 
 static inline void __gnix_ht_init_lk_list_head(gnix_ht_lk_lh_t *lh)
 {
-	list_head_init(&lh->head);
+	dlist_init(&lh->head);
 	pthread_rwlock_init(&lh->lh_lock, NULL);
 }
 
 static inline void __gnix_ht_init_lf_list_head(gnix_ht_lf_lh_t *lh)
 {
-	list_head_init(&lh->head);
+	dlist_init(&lh->head);
 }
 
 static inline gnix_ht_key_t __gnix_hash_func(
@@ -164,16 +166,16 @@ static inline gnix_ht_key_t __gnix_hash_func(
 }
 
 static inline gnix_ht_entry_t *__gnix_ht_lookup_entry(
-		struct list_head *head,
+		struct dlist_entry *head,
 		gnix_ht_key_t key,
 		uint64_t *collision_count)
 {
 	gnix_ht_entry_t *ht_entry;
 
-	if (list_empty(head))
+	if (dlist_empty(head))
 		return NULL;
 
-	list_for_each(head, ht_entry, entry) {
+	dlist_for_each(head, ht_entry, entry) {
 		if (ht_entry->key == key)
 			return ht_entry;
 
@@ -185,7 +187,7 @@ static inline gnix_ht_entry_t *__gnix_ht_lookup_entry(
 }
 
 static inline void *__gnix_ht_lookup_key(
-		struct list_head *head,
+		struct dlist_entry *head,
 		gnix_ht_key_t key)
 {
 	gnix_ht_entry_t *ht_entry = __gnix_ht_lookup_entry(head, key, NULL);
@@ -198,12 +200,12 @@ static inline void *__gnix_ht_lookup_key(
 
 static inline int __gnix_ht_destroy_list(
 		gnix_hashtable_t *ht,
-		struct list_head *head)
+		struct dlist_entry *head)
 {
 	gnix_ht_entry_t *ht_entry, *iter;
 	int entries_freed = 0;
 
-	list_for_each_safe(head, ht_entry, iter, entry) {
+	dlist_for_each_safe(head, ht_entry, iter, entry) {
 		__gnix_ht_delete_entry(ht_entry);
 
 		++entries_freed;
@@ -213,7 +215,7 @@ static inline int __gnix_ht_destroy_list(
 }
 
 static inline int __gnix_ht_insert_list(
-		struct list_head *head,
+		struct dlist_entry *head,
 		gnix_ht_entry_t *ht_entry,
 		uint64_t *collisions)
 {
@@ -221,7 +223,7 @@ static inline int __gnix_ht_insert_list(
 
 	found = __gnix_ht_lookup_entry(head, ht_entry->key, collisions);
 	if (!found) {
-		list_add_tail(head, &ht_entry->entry);
+		dlist_insert_tail(&ht_entry->entry, head);
 	} else {
 		return -FI_ENOSPC;
 	}
@@ -230,7 +232,7 @@ static inline int __gnix_ht_insert_list(
 }
 
 static inline int __gnix_ht_remove_list(
-		struct list_head *head,
+		struct dlist_entry *head,
 		gnix_ht_key_t key)
 {
 	gnix_ht_entry_t *ht_entry;
@@ -246,20 +248,20 @@ static inline int __gnix_ht_remove_list(
 
 static inline void __gnix_ht_rehash_list(
 		gnix_hashtable_t *ht,
-		struct list_head *head)
+		struct dlist_entry *head)
 {
 	gnix_ht_entry_t *ht_entry, *tmp;
 	gnix_ht_key_t bucket;
-	struct list_head *ht_lh;
+	struct dlist_entry *ht_lh;
 
-	if (list_empty(head))
+	if (dlist_empty(head))
 		return;
 
-	list_for_each_safe(head, ht_entry, tmp, entry) {
+	dlist_for_each_safe(head, ht_entry, tmp, entry) {
 		bucket = __gnix_hash_func(ht, ht_entry->key);
 		ht_lh = ht->ht_ops->retrieve_list(ht, bucket);
 
-		list_del(&ht_entry->entry);
+		dlist_remove(&ht_entry->entry);
 
 		__gnix_ht_insert_list(ht_lh, ht_entry, NULL);
 	}
@@ -414,7 +416,7 @@ static void *__gnix_ht_lf_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
 	return __gnix_ht_lookup_key(&lh->head, key);
 }
 
-static struct list_head *__gnix_ht_lf_retrieve_list(
+static struct dlist_entry *__gnix_ht_lf_retrieve_list(
 		gnix_hashtable_t *ht,
 		int bucket)
 {
@@ -573,7 +575,7 @@ static void *__gnix_ht_lk_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key)
 	return ret;
 }
 
-static struct list_head *__gnix_ht_lk_retrieve_list(
+static struct dlist_entry *__gnix_ht_lk_retrieve_list(
 		gnix_hashtable_t *ht,
 		int bucket)
 {
