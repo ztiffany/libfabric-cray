@@ -81,7 +81,7 @@ Test(utils, alps)
 {
 	int rc;
 	uint8_t ptag;
-	uint32_t cookie, fmas, npes, npr;
+	uint32_t cookie, fmas, cqs, npes, npr;
 	void *addr = NULL;
 
 	_gnix_alps_cleanup();
@@ -92,13 +92,16 @@ Test(utils, alps)
 	rc = _gnix_job_fma_limit(0, ptag, &fmas);
 	cr_expect(!rc);
 
+	rc = _gnix_job_cq_limit(0, ptag, &cqs);
+	cr_expect(!rc);
+
 	rc = _gnix_pes_on_node(&npes);
 	cr_expect(!rc);
 
 	rc = _gnix_nics_per_rank(&npr);
 	cr_expect(!rc);
 
-	cr_expect((fmas / npes) == npr);
+	cr_expect(((fmas > cqs ? cqs : fmas) / npes) == npr);
 
 	_gnix_alps_cleanup();
 }

@@ -68,6 +68,8 @@ static inline void dlist_remove_init(struct dlist_entry *e)
 	e->prev = e->next = e;
 }
 
+#define DLIST_HEAD(dlist)  struct dlist_entry dlist = { &(dlist), &(dlist) }
+
 #define dlist_entry(e, type, member) container_of(e, type, member)
 
 #define dlist_first_entry(h, type, member)				\
@@ -109,6 +111,7 @@ int _gnix_job_disable_affinity_apply(void);
 
 void _gnix_alps_cleanup(void);
 int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
+int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_pes_on_node(uint32_t *num_pes);
 int _gnix_nics_per_rank(uint32_t *nics_per_rank);
 

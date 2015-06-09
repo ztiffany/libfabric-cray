@@ -41,15 +41,14 @@
 #include "gnix_mbox_allocator.h"
 
 static int gnix_nics_per_ptag[GNI_PTAG_USER_END];
-static LIST_HEAD(gnix_nic_list);
+static DLIST_HEAD(gnix_nic_list);
 static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 /*
  * globals
  */
 
-/* TODO: this will need to be adjustable - probably set in GNI_INI*/
-uint32_t gnix_def_max_nics_per_ptag = 4;
+uint32_t gnix_max_nics_per_ptag = GNIX_DEF_MAX_NICS_PER_PTAG;
 
 /*
  * function to process GNI CQ TX CQES to progress a gnix_nic
@@ -402,9 +401,9 @@ int _gnix_nic_free(struct gnix_nic *nic)
 err:
 		pthread_mutex_lock(&gnix_nic_list_lock);
 
-		gnix_list_del_init(&nic->gnix_nic_list);
+		dlist_remove(&nic->gnix_nic_list);
 		--gnix_nics_per_ptag[nic->ptag];
-		gnix_list_del_init(&nic->list);
+		dlist_remove(&nic->list);
 
 		pthread_mutex_unlock(&gnix_nic_list_lock);
 
@@ -423,7 +422,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 				struct gnix_nic **nic_ptr)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_nic *nic = NULL, *elem;
+	struct gnix_nic *nic = NULL;
 	uint32_t device_addr;
 	gni_return_t status;
 	uint32_t fake_cdm_id;
@@ -451,25 +450,14 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 	pthread_mutex_lock(&gnix_nic_list_lock);
 
-	if (gnix_nics_per_ptag[domain->ptag] ==
-					gnix_def_max_nics_per_ptag) {
-		list_for_each(&gnix_nic_list, elem, list) {
-			if ((elem->ptag == domain->ptag) &&
-				(elem->cookie == domain->cookie)) {
-				nic = elem;
-				break;
-			}
-		}
+	if (gnix_nics_per_ptag[domain->ptag] >= gnix_max_nics_per_ptag) {
+		assert(!dlist_empty(&domain->nic_list));
 
-		/*
-		 * nic found, balance use by removing from head and
-		 * positioning at end
-		 */
+		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic, list);
+		dlist_remove(&nic->list);
+		dlist_insert_tail(&nic->list, &domain->nic_list);
 
-		if (nic) {
-			gnix_list_del_init(&nic->gnix_nic_list);
-			list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
-		}
+		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
 	}
 
 	/*
@@ -641,10 +629,12 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 
 
-		list_add_tail(&gnix_nic_list, &nic->gnix_nic_list);
+		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
+
+		dlist_insert_tail(&nic->list, &domain->nic_list);
 		++gnix_nics_per_ptag[domain->ptag];
 
-		list_add_tail(&domain->nic_list, &nic->list);
+		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);
 	}
 
 	*nic_ptr = nic;

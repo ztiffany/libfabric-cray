@@ -48,6 +48,10 @@ extern "C" {
 #include <fi_list.h>
 #include <assert.h>
 
+#define GNIX_DEF_MAX_NICS_PER_PTAG	4
+
+extern uint32_t gnix_max_nics_per_ptag;
+
 /*
  * gnix nic struct - to be used for GNI_PostRdma/PostFma,
  *                   GNI_SmsgSend, GNI_CqGetEvent, etc.
@@ -76,8 +80,8 @@ extern "C" {
  */
 
 struct gnix_nic {
-	struct list_node list;          /* global NIC list */
-	struct list_node gnix_nic_list; /* domain list */
+	struct dlist_entry list;          /* global NIC list */
+	struct dlist_entry gnix_nic_list; /* domain list */
 	fastlock_t lock;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;

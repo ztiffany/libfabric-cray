@@ -362,7 +362,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		fi_gnix_access |= GNI_MEM_READ_ONLY;
 
 	/* If the nic list is empty, create a nic */
-	if (unlikely(list_empty(&domain->nic_list))) {
+	if (unlikely(dlist_empty(&domain->nic_list))) {
 		rc = gnix_nic_alloc(domain, &nic);
 		if (rc) {
 			GNIX_WARN(FI_LOG_MR, "could not allocate nic to do mr_reg,"
@@ -724,7 +724,7 @@ static int __mr_cache_register(
 		return -FI_ENOMEM;
 
 	/* TODO: should we just try the first nic we find? */
-	list_for_each(&domain->nic_list, nic, list)
+	dlist_for_each(&domain->nic_list, nic, list)
 	{
 		grc = GNI_MemRegister(nic->gni_nic_hndl, address, length,
 					dst_cq_hndl, flags,

@@ -108,15 +108,13 @@ static int gnix_domain_close(fid_t fid)
 	 *  drops to 0, destroy the cdm, remove from
 	 *  the global nic list.
 	 */
-	list_for_each_safe(&domain->nic_list, p, next, list)
+	dlist_for_each_safe(&domain->nic_list, p, next, list)
 	{
-		list_del(&p->list);
-		gnix_list_node_init(&p->list);
+		dlist_remove(&p->list);
 		v = atomic_dec(&p->ref_cnt);
 		assert(v >= 0);
 		if (v == 0) {
-			list_del(&p->gnix_nic_list);
-			gnix_list_node_init(&p->gnix_nic_list);
+			dlist_remove(&p->gnix_nic_list);
 			status = GNI_CdmDestroy(p->gni_cdm_hndl);
 			if (status != GNI_RC_SUCCESS)
 				GNIX_ERR(FI_LOG_DOMAIN,
@@ -221,7 +219,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (ret != FI_SUCCESS)
 		goto err;
 
-	list_head_init(&domain->nic_list);
+	dlist_init(&domain->nic_list);
 	gnix_list_node_init(&domain->list);
 
 	list_add_tail(&fabric_priv->domain_list, &domain->list);

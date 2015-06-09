@@ -407,6 +407,7 @@ GNI_INI
 	gni_return_t status;
 	gni_version_info_t lib_version;
 	int num_devices;
+	int rc;
 
 	/*
 	 * if no GNI devices available, don't register as provider
@@ -428,6 +429,14 @@ GNI_INI
 	    ((GNI_GET_MAJOR(lib_version.ugni_version) == GNI_MAJOR_REV) &&
 	     GNI_GET_MINOR(lib_version.ugni_version) >= GNI_MINOR_REV)) {
 		provider = &gnix_prov;
+	}
+
+	rc = _gnix_nics_per_rank(&gnix_max_nics_per_ptag);
+	if (rc == FI_SUCCESS) {
+		GNIX_INFO(FI_LOG_FABRIC, "gnix_max_nics_per_ptag: %u\n",
+			  gnix_max_nics_per_ptag);
+	} else {
+		GNIX_INFO(FI_LOG_FABRIC, "_gnix_nics_per_rank failed: %d\n", rc);
 	}
 
 	return (provider);

@@ -223,7 +223,7 @@ struct gnix_fid_domain {
 	/* used for fabric object llist of domains*/
 	struct list_node list;
 	/* list nics this domain is attached to, TODO: thread safety */
-	struct list_head nic_list;
+	struct dlist_entry nic_list;
 	struct gnix_fid_fabric *fabric;
 	uint8_t ptag;
 	uint32_t cookie;
@@ -242,6 +242,8 @@ struct gnix_fid_domain {
 	atomic_t ref_cnt;
 	gnix_mr_cache_t mr_cache;
 };
+
+#define GNIX_CQS_PER_EP		8
 
 /*
  *   gnix endpoint structure
