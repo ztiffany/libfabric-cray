@@ -471,14 +471,11 @@ static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 	if (_gnix_queue_peek(cq_priv->errors))
 		return -FI_EAVAIL;
 
-	if (!_gnix_queue_peek(cq_priv->events))
-		return -FI_EAGAIN;
-
 	assert(buf);
 
 	fastlock_acquire(&cq_priv->lock);
 
-	while (count--) {
+	while (_gnix_queue_peek(cq_priv->events) && count--) {
 		temp = _gnix_queue_dequeue(cq_priv->events);
 		event = container_of(temp, struct gnix_cq_entry, item);
 
@@ -495,7 +492,7 @@ static ssize_t gnix_cq_readfrom(struct fid_cq *cq, void *buf, size_t count,
 
 	fastlock_release(&cq_priv->lock);
 
-	return read_count;
+	return read_count ?: -FI_EAGAIN;
 }
 
 static ssize_t gnix_cq_read(struct fid_cq *cq, void *buf, size_t count)
