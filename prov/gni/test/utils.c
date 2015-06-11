@@ -54,6 +54,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_util.h"
+#include "gnix.h"
 
 Test(utils, proc)
 {
@@ -101,6 +102,7 @@ Test(utils, alps)
 	rc = _gnix_nics_per_rank(&npr);
 	cr_expect(!rc);
 
+	cqs /= GNIX_CQS_PER_EP;
 	cr_expect(((fmas > cqs ? cqs : fmas) / npes) == npr);
 
 	_gnix_alps_cleanup();
