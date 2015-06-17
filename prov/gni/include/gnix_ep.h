@@ -88,7 +88,7 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
  *         ep/dest_addr.
  *
  * @param[in] ep        pointer to a previously allocated endpoint
- * @param[in] dest_addr for FI_EP_RDM endpoints, used to look up vc assciated
+ * @param[in] dest_addr for FI_EP_RDM endpoints, used to look up vc associated
  *                      with this target address
  * @param[out] vc_ptr   address in which to store pointer to returned vc
  * @return              FI_SUCCESS on success, -FI_ENOMEM insufficient
@@ -101,7 +101,7 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 /**
  * @brief  try to push any messages on the sendq of a vc
  *
- * @param[in] vc        pointer to a previously allocated endpoint
+ * @param[in] vc        pointer to a previously allocated vc
  * @return              FI_SUCCESS on success meaning that no errors
  *                      were encountered trying to push any messages
  *                      on the send queue, -FI_ENOSPC insufficient
@@ -113,7 +113,7 @@ int _gnix_ep_push_vc_sendq(struct gnix_vc *vc);
  * @brief  dequeue smsg messages that arrived before vc fully
  *         initialized at receiver
  *
- * @param[in] vc        pointer to a previously allocated endpoint
+ * @param[in] vc        pointer to a previously allocated vc
  * @return              FI_SUCCESS on success meaning that no errors
  *                      were encountered dequeing SMSG messages, -FI_EINVAL
  *                      if an invalid argument is supplied,
@@ -197,7 +197,7 @@ typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
  * inline functions
  */
 
-static __attribute__((unused)) struct gnix_fab_req *
+static inline struct gnix_fab_req *
 _gnix_fr_alloc(struct gnix_fid_ep *ep)
 {
 	struct slist_entry *se;
@@ -215,11 +215,24 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 	return fr;
 }
 
-static __attribute__((unused)) void
+static inline void
 _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
 	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
 }
+
+static inline int
+__msg_match_fab_req(struct slist_entry *item, const void *arg)
+{
+	struct gnix_fab_req *req;
+	const struct gnix_address *addr_ptr = arg;
+
+	req = container_of(item, struct gnix_fab_req, slist);
+
+	return ((GNIX_ADDR_UNSPEC(*addr_ptr)) ||
+				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr)));
+}
+
 
 #endif /* _GNIX_EP_H_ */

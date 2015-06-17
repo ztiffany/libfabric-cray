@@ -78,14 +78,14 @@ typedef int (*smsg_completer_fn_t)(void  *desc);
  * @var rx_cq                GNI rx cq (non-blocking) bound to this nic
  * @var rx_cq_blk            GNI rx cq (blocking) bound to this nic
  * @var tx_cq                GNI tx cq (non-blocking) bound to this nic
- * @var tx_cq_blk            GNI rx cq (blocking) bound to this nic
+ * @var tx_cq_blk            GNI tx cq (blocking) bound to this nic
  * @var tx_desc_active_list  linked list of active tx descriptors associated
  *                           with this nic
  * @var tx_desc_free_list    linked list of free tx descriptors associated
  *                           with this nic
- * @var tx_desc_desc         base address for the block of memory from which
- *                           tx desc scriptors were allocated
- * @var outstanding fab_reqs_nic number of outstanding (active) gnix_fab_reqs
+ * @var tx_desc_base         base address for the block of memory from which
+ *                           tx descriptors were allocated
+ * @var outstanding_fab_reqs_nic number of outstanding (active) gnix_fab_reqs
  *                           associated with this nic
  * @var wq_lock              lock for serializing access to the nic's work queue
  * @var nic_wq               head of linked list of work queue elements
@@ -106,7 +106,7 @@ typedef int (*smsg_completer_fn_t)(void  *desc);
  *                           below this entry.
  * @var vc_id_bitmap         bitmap indicating which entries in the vc_id_table are
  *                           currently in use (1 - used, 0 - unused)
- * @var mem_per_mbox         number of bytes consumed per GNI smsg mailbox associated
+ * @var mem_per_mbox         number of bytes consumed per GNI SMSG mailbox associated
  *                           with this nic's vd_id_table
  * @var mbox_hndl            handle for the mailbox allocator bound to this nic
  * @var ref_cnt              ref cnt for this nid
@@ -148,7 +148,7 @@ struct gnix_nic {
 
 
 /**
- * gni_smsg_hdr  - first part of any SMSG message for app data
+ * gnix_smsg_hdr  - first part of any SMSG message for app data
  *
  * @var len        length in bytes of the incoming message
  * @var flags      flag bits from send side that are needed at
@@ -163,7 +163,7 @@ struct gnix_smsg_hdr {
 
 /**
  * gnix_smsg_descriptor - descriptor to track GNI SMSG messages
- *                       on the send sicde
+ *                       on the send side
  *
  * @var hdr        imbedded gni_smsg_hdr struct
  * @var buf        pointer to the application's send buffer or
@@ -178,21 +178,20 @@ struct gnix_smsg_descriptor {
 
 
 /**
- * gni_tx_descriptor0 - first part of the send side tx
- *                      desciptor used to track GNI SMSG and Post
- *                      operations
+ * gnix_tx_descriptor0 - first part of the send side tx desciptor
+ *                       used to track GNI SMSG and Post operations
  *
- * @var list       list element
- * @var gni_desc   embedded GNI post descriptor
- * @var gnix_smsg_desc   embedded gnix smsg descriptor
- * @var req        pointer to fab request associated with this
- *                 descriptor
- * @var completer_fn pointer to function to be invoked open
- *                 receipt of the GNI CQE associated with
- *                 the GNI Post or Smsg transaction being
- *                 tracked by this descriptor
- * @var id         the id of this descriptor - the value returned
- *                 from GNI_CQ_MSG_ID
+ * @var list             list element
+ * @var gni_desc         embedded GNI post descriptor
+ * @var gnix_smsg_desc   embedded gnix SMSG descriptor
+ * @var req              pointer to fab request associated with this
+ *                       descriptor
+ * @var completer_fn     pointer to function to be invoked open
+ *                       receipt of the GNI CQE associated with
+ *                       the GNI Post or Smsg transaction being
+ *                       tracked by this descriptor
+ * @var id               the id of this descriptor - the value returned
+ *                       from GNI_CQ_MSG_ID
  */
 union gnix_tx_descriptor0 {
 	struct {
@@ -333,19 +332,6 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 	return nic->vc_id_table[rem_id];
 	return 0;
 }
-
-#if 0
-static inline struct gnix_tx_descriptor *
-		gnix_desc_lkup_by_id(struct gnix_nic *nic,
-				     int desc_id)
-{
-	struct gnix_tx_descriptor *tx_desc;
-
-	assert((desc_id >= 0) && (desc_id < nic->max_tx_desc_id));
-	tx_desc = &nic->tx_desc_base[desc_id];
-	return tx_desc;
-}
-#endif
 
 #ifdef __cplusplus
 } /* extern "C" */

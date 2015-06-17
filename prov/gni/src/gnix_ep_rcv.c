@@ -57,50 +57,37 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 				   uint64_t imm, uint64_t sflags)
 {
 	int matched = 0, ret = FI_SUCCESS;
-	struct slist_entry *item, *prev = NULL;
-	struct slist *list;
+	struct slist_entry *item = NULL;
 	struct gnix_fab_req *req;
 	struct gnix_fid_cq *cq;
 	ssize_t cq_len;
 	uint64_t flags;
+	struct gnix_address *addr_ptr;
 
 	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	flags = (sflags & FI_REMOTE_CQ_DATA) ? FI_REMOTE_CQ_DATA : 0;
-
-	list = &ep->posted_recv_queue;
 
 	/*
 	 * we have to keep this lock till either we find a match
 	 * or we add the request to the tail of the unexpected queue
 	 */
 
+	addr_ptr = (struct gnix_address *)&addr;
 	fastlock_acquire(&ep->recv_queue_lock);
 
-	for (prev = NULL, item = list->head;
-			item; prev = item, item = item->next) {
-		req = (struct gnix_fab_req *)container_of(item,
-							  struct gnix_fab_req,
-							  slist);
-		if ((GNIX_ADDR_UNSPEC(req->addr)) ||
-			(GNIX_ADDR_EQUAL(req->addr, addr))) {
-			memcpy(req->buf, msg, MIN(req->len, len));
-			req->addr = addr;
-			req->imm = imm;
-			req->len = MIN(req->len, len);
-			if (prev)
-				prev->next = item->next;
-			else
-				list->head = item->next;
-
-			if (!item->next)
-				list->tail = prev;
-
-			req->modes |= (GNIX_FAB_RQ_M_MATCHED |
-						GNIX_FAB_RQ_M_COMPLETE);
-			matched = 1;
-			break;
-		}
+	item = slist_remove_first_match(&ep->posted_recv_queue,
+					__msg_match_fab_req,
+					(const void *)addr_ptr);
+	if (item) {
+		req = container_of(item, struct gnix_fab_req, slist);
+		memcpy(req->buf, msg, MIN(req->len, len));
+		req->addr = addr;
+		req->imm = imm;
+		req->len = MIN(req->len, len);
+		req->modes |= (GNIX_FAB_RQ_M_MATCHED |
+					GNIX_FAB_RQ_M_COMPLETE);
+		matched = 1;
 	}
 
 	/*

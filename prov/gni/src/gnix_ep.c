@@ -306,12 +306,12 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	struct gnix_fid_ep *ep_priv;
 	struct gnix_fid_cq *cq;
 	struct gnix_fid_av *av;
-	struct slist_entry *item, *prev;
+	struct slist_entry *item;
 	struct slist *list;
-	struct gnix_fab_req *req;
+	struct gnix_fab_req *req = NULL;
 	int matched = 0;
 	ssize_t cq_len;
-	struct gnix_address *addr_ptr;
+	struct gnix_address *addr_ptr = NULL;
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	if (unlikely((ep_priv->type != FI_EP_RDM) &&
@@ -323,13 +323,17 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 		assert(av != NULL);
 		if (av->type == FI_AV_TABLE) {
 			/*
-			 * TODO: look up gni address
+			 * TODO: look up gni address -
+			 *        just return no support for now
 			 */
+			return -FI_ENOSYS;
 		} else
 			addr_ptr = (struct gnix_address *)&src_addr;
 	} else {
 		addr_ptr = (struct gnix_address *)&src_addr;
 	}
+
+	assert(addr_ptr != NULL);
 
 	/*
 	 * if type FI_EP_RDM, search unexpected on this ep to see if we
@@ -342,31 +346,20 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 
 	if (ep_priv->type == FI_EP_RDM) {
 
-		for (prev = NULL, item = list->head;
-				item; prev = item, item = item->next) {
-			req = (struct gnix_fab_req *)container_of(item,
-							  struct gnix_fab_req,
-							  slist);
-			if ((GNIX_ADDR_UNSPEC(*addr_ptr)) ||
-				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr))) {
-				if (prev)
-					prev->next = item->next;
-				else
-					list->head = item->next;
-				if (!item->next)
-					list->tail = prev;
-				matched = 1;
-				req->modes |= GNIX_FAB_RQ_M_MATCHED;
-				break;
-			}
+		item = slist_remove_first_match(&ep_priv->unexp_recv_queue,
+						__msg_match_fab_req,
+						(const void *)addr_ptr);
+		if (item != NULL) {
+			req = container_of(item, struct gnix_fab_req, slist);
+			req->modes |= GNIX_FAB_RQ_M_MATCHED;
+			matched = 1;
 		}
+
 	} else if (ep_priv->type == FI_EP_MSG) {
 
 		item = slist_remove_head(list);
 		if (item) {
-			req = (struct gnix_fab_req *)container_of(item,
-							  struct gnix_fab_req,
-							  slist);
+			req = container_of(item, struct gnix_fab_req, slist);
 			req->modes |= GNIX_FAB_RQ_M_MATCHED;
 			matched = 1;
 		}
@@ -415,9 +408,10 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	} else {
 
 		req = _gnix_fr_alloc(ep_priv);
-		if (req == NULL)
-			return -FI_EAGAIN;  /* odd, maybe we can
-						allocate later */
+		if (req == NULL) {
+			ret = -FI_EAGAIN;
+			goto err;
+		}
 
 		req->addr = *addr_ptr;
 		req->len = len;
@@ -428,6 +422,7 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 				  &ep_priv->posted_recv_queue);
 	}
 
+err:
 	fastlock_release(&ep_priv->recv_queue_lock);
 	if (sched_req) {
 		/*

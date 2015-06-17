@@ -56,8 +56,7 @@ uint32_t gnix_max_nics_per_ptag = GNIX_DEF_MAX_NICS_PER_PTAG;
  ******************************************************************************/
 
 static inline struct gnix_tx_descriptor *
-		__desc_lkup_by_id(struct gnix_nic *nic,
-				     int desc_id)
+__desc_lkup_by_id(struct gnix_nic *nic, int desc_id)
 {
 	struct gnix_tx_descriptor *tx_desc;
 
@@ -79,17 +78,43 @@ static inline struct gnix_tx_descriptor *
  * may need to have some kind of post-nic-lock work to do.
  * Want to avoid using recursive locks.
  */
+static inline int __process_smsg(struct gnix_vc *vc)
+{
+	int ret = FI_SUCCESS;
+	int status = GNI_RC_SUCCESS;
+	struct gnix_nic *nic = vc->ep->nic;
+	uint8_t tag = GNI_SMSG_ANY_TAG;
+	void *msg_ptr;
+
+	do {
+		status = GNI_SmsgGetNextWTag(vc->gni_ep,
+					     &msg_ptr,
+					     &tag);
+		if (status == GNI_RC_SUCCESS) {
+			ret = nic->smsg_callbacks[tag](vc,
+						       msg_ptr);
+			assert(ret == FI_SUCCESS);
+		}
+	} while (status == GNI_RC_SUCCESS);
+
+	if (status != GNI_RC_NOT_DONE) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "GNI_SmsgGetNextWTag returned %s\n",
+			  gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+	return ret;
+}
 
 static int __nic_rx_progress(struct gnix_nic *nic)
 {
 	int i, ret = FI_SUCCESS;
-	int vc_id = 0, have_lock = 1;
+	int vc_id = 0;
 	int max_id;
 	gni_return_t  status = GNI_RC_NOT_DONE;
 	gni_cq_entry_t cqe;
 	struct gnix_vc *vc;
-	uint8_t tag = GNI_SMSG_ANY_TAG;
-	void *msg_ptr;
 
 	/*
 	 * first see if there are any CQE's on the
@@ -101,8 +126,8 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 	if (status == GNI_RC_NOT_DONE)
 		return FI_SUCCESS;
 
-try_again:
 	fastlock_acquire(&nic->lock);
+try_again:
 	status = GNI_CqGetEvent(nic->rx_cq, &cqe);
 	if (status  == GNI_RC_NOT_DONE) {
 		fastlock_release(&nic->lock);
@@ -113,6 +138,7 @@ try_again:
 	 * no CQ overrun
 	 */
 	if (status == GNI_RC_SUCCESS) {
+
 		vc_id =  GNI_CQ_GET_INST_ID(cqe);
 		vc = __gnix_nic_elem_by_rem_id(nic, vc_id);
 		if (vc->conn_state != GNIX_VC_CONNECTED) {
@@ -121,32 +147,9 @@ try_again:
 			goto out;
 		}
 
-		/*
-		 * what's going on here? The rule
-		 * is that there is not a one-to-one
-		 * relationship between CQEs and messages
-		 * in the mailbox, so need to poll on
-		 * the mailbox till there are no
-		 * more messages.
-		 */
-try_again2:
-		status = GNI_SmsgGetNextWTag(vc->gni_ep,
-					     &msg_ptr,
-					     &tag);
-		if (status == GNI_RC_SUCCESS) {
-			ret = nic->smsg_callbacks[tag](vc, msg_ptr);
-			assert(ret == FI_SUCCESS);
-			goto try_again2;
-		} else if (status == GNI_RC_NOT_DONE) {
-			ret = FI_SUCCESS;
-			goto out;
-		} else {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				"GNI_SmsgGetNextWTag returned %s\n",
-				gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
+		ret = __process_smsg(vc);
+		if (ret == FI_SUCCESS)
+			goto try_again;
 
 	} else if (status == GNI_RC_ERROR_RESOURCE) {
 		assert(GNI_CQ_OVERRUN(cqe));
@@ -168,29 +171,11 @@ try_again2:
 			ret = _gnix_test_bit(&nic->vc_id_bitmap, i);
 			if (ret) {
 				vc = __gnix_nic_elem_by_rem_id(nic, i);
-try_again3:
-				status = GNI_SmsgGetNextWTag(vc->gni_ep,
-							     &msg_ptr,
-							     &tag);
-				if (status == GNI_RC_SUCCESS) {
-					ret = nic->smsg_callbacks[tag](vc,
-								    msg_ptr);
-					assert(ret == FI_SUCCESS);
-					fastlock_acquire(&nic->lock);
-					have_lock = 1;
-					goto try_again3;
-				} else if (status == GNI_RC_NOT_DONE) {
-					ret = FI_SUCCESS;
-					goto out;
-				} else {
-					GNIX_WARN(FI_LOG_EP_DATA,
-						"GNI_SmsgGetNextWTag returned %s\n",
-						gni_err_str[status]);
-					ret = gnixu_to_fi_errno(status);
-					goto err;
-				}
+				ret = __process_smsg(vc);
+				assert(ret == FI_SUCCESS);
 			}
 		}
+		goto try_again;
 	} else {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			"GNI_SmsgGetNextWTag returned %s\n",
@@ -198,15 +183,8 @@ try_again3:
 		ret = gnixu_to_fi_errno(status);
 	}
 
-err:
 out:
-	if (have_lock)
-		fastlock_release(&nic->lock);
-	if (ret == FI_SUCCESS) {
-		have_lock = 0;
-		goto try_again;  /* let's try again to see
-					if we have a new CQE */
-	}
+	fastlock_release(&nic->lock);
 	return ret;
 }
 

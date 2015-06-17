@@ -378,13 +378,6 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 	 */
 	assert(wc_vc->conn_state == GNIX_VC_CONNECTING);
 
-#if 0
-	/*
-	 * remove the vc from the EPs dlist of wc vc's
-	 */
-	dlist_remove(&wc_vc->entry);
-#endif
-
 	/*
 	 * if the wc vc is not in the hash table
 	 * that means we are hitting the case where
@@ -811,7 +804,7 @@ static int __gnix_vc_prog_fn(void *data, int *complete_ptr)
 	*complete_ptr = 0;
 
 	/*
-	 * TODO: this is termporary and will be removed
+	 * TODO: this is temporary and will be removed
 	 * once the cm_nic functionality goes in to
 	 * nic functionality (see issue 218)
 	 */
