@@ -18,7 +18,7 @@ before_install:
     popd;
   - git clone https://github.com/Snaipe/Criterion.git;
     pushd Criterion;
-    git checkout v1.1.0;
+    git checkout bleeding;
     ./autogen.sh;
     ./configure --prefix=/usr;
     sudo make install;
