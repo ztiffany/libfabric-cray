@@ -273,7 +273,7 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 #define NUM_GNI_RC (GNI_RC_ERROR_NOMEM+1)
 static int gnix_rc_table[NUM_GNI_RC] = {
 	[GNI_RC_SUCCESS] = FI_SUCCESS,
-	[GNI_RC_NOT_DONE] = -FI_EOPBADSTATE,
+	[GNI_RC_NOT_DONE] = -FI_EAGAIN,
 	[GNI_RC_INVALID_PARAM] = -FI_EINVAL,
 	[GNI_RC_ERROR_RESOURCE] = -FI_EBUSY,
 	[GNI_RC_TIMEOUT] = -FI_ETIMEDOUT,

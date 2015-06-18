@@ -262,7 +262,7 @@ int _gnix_nic_tx_free(struct gnix_nic *nic, struct gnix_tx_descriptor *tdesc);
  *                     struct was supplied, -FI_EBUSY if insufficient resources
  *                     are available to allocate the nic struct, -FI_EACCESS
  *                     if a permissions access error occurred while allocating
- *                     the nic struct, -FI_EOPBADSTATE an invalid state
+ *                     the nic struct, -FI_EAGAIN if an invalid state
  *                     prevents creation or an interrupt was received while
  *                     allocating kernel related resources for the nic.
  */

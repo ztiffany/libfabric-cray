@@ -117,7 +117,7 @@ int _gnix_ep_push_vc_sendq(struct gnix_vc *vc);
  * @return              FI_SUCCESS on success meaning that no errors
  *                      were encountered dequeing SMSG messages, -FI_EINVAL
  *                      if an invalid argument is supplied,
- *                      -FI_EOPBADSTATE if the SMSG channel is in an
+ *                      -FI_EAGAIN if the SMSG channel is in an
  *                      invalid state.
  */
 int _gnix_ep_vc_dequeue_smsg(struct gnix_vc *vc);
