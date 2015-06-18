@@ -16,15 +16,8 @@ before_install:
     source set_pkg_path.sh;
     popd;
     popd;
-  - git clone https://github.com/Snaipe/Criterion.git;
-    pushd Criterion;
-    git checkout v1.1.0;
-    ./autogen.sh;
-    ./configure --prefix=/usr;
-    sudo make install;
-    popd;
 
 os:
   - linux
 
-script: ./autogen.sh && ./configure --with-criterion="/usr" && make V=1
+script: ./autogen.sh && ./configure && make V=1
