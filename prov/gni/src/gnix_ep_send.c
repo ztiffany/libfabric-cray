@@ -60,6 +60,10 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 
 	av = ep->av;
 	assert(av != NULL);
+
+	if (av->type == FI_AV_TABLE)
+		return -FI_ENOSYS;
+
 	if (av->type == FI_AV_MAP) {
 		memcpy(&key, &dest_addr, sizeof(gnix_ht_key_t));
 		vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht,
@@ -70,7 +74,7 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 					    &vc);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_DATA,
-					  "_gnix_ht_alloc returned %d\n",
+					  "_gnix_vc_alloc returned %d\n",
 					  ret);
 				goto err;
 			}
@@ -85,7 +89,7 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 				ret = _gnix_vc_connect(vc);
 				if (ret != FI_SUCCESS) {
 					GNIX_WARN(FI_LOG_EP_DATA,
-						"_gnix_ht_connect returned %d\n",
+						"_gnix_vc_connect returned %d\n",
 						   ret);
 					goto err;
 				}
@@ -115,13 +119,13 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 				ret = _gnix_vc_connect(vc);
 				if (ret != FI_SUCCESS) {
 					GNIX_WARN(FI_LOG_EP_DATA,
-						  "_gnix_ht_connect returned %d\n",
+						  "_gnix_vc_connect returned %d\n",
 						   ret);
 					goto err;
 				}
 			} else {
 				GNIX_WARN(FI_LOG_EP_DATA,
-					  "_gnix_ht_alloc returned %d\n",
+					  "_gnix_vc_alloc returned %d\n",
 					   ret);
 				goto err;
 			}
