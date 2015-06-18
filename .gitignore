@@ -17,6 +17,7 @@ config.status
 configure
 libtool
 libfabric.spec
+doxygen
 
 config/ar-lib
 config/compile
