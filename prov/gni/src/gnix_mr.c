@@ -41,7 +41,6 @@
 #include "gnix_util.h"
 #include "gnix_mr.h"
 #include "gnix_priv.h"
-#include "common/atomics.h"
 
 /* forward declarations */
 static int __mr_cache_register(
