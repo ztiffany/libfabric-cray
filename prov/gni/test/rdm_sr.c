@@ -51,11 +51,13 @@
 #include <inttypes.h>
 
 #include "gnix_vc.h"
-#include "gnix_nic.h"
 #include "gnix_cm_nic.h"
 #include "gnix_hashtable.h"
+#include "gnix_rma.h"
 
 #include <criterion/criterion.h>
+
+#define dbg_printf(...)
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -65,8 +67,10 @@ static struct fi_info *hints;
 static struct fi_info *fi;
 void *ep_name[2];
 size_t gni_addr[2];
+static struct fid_cq *msg_cq;
+static struct fi_cq_attr cq_attr;
 
-void vc_setup(void)
+void rdm_sr_setup(void)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
@@ -98,20 +102,33 @@ void vc_setup(void)
 	ret = fi_endpoint(dom, fi, &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
+	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.size = 1024;
+	cq_attr.wait_obj = 0;
+
+	ret = fi_cq_open(dom, &cq_attr, &msg_cq, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_ep_bind(ep[0], &msg_cq->fid, FI_SEND | FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
+
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
 	cr_assert(addrlen > 0);
 
 	ep_name[0] = malloc(addrlen);
 	cr_assert(ep_name[0] != NULL);
 
-	ep_name[1] = malloc(addrlen);
-	cr_assert(ep_name[1] != NULL);
-
 	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
 
 	ret = fi_endpoint(dom, fi, &ep[1], NULL);
 	cr_assert(!ret, "fi_endpoint");
+
+	ret = fi_ep_bind(ep[1], &msg_cq->fid, FI_SEND | FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
+
+	ep_name[1] = malloc(addrlen);
+	cr_assert(ep_name[1] != NULL);
 
 	ret = fi_getname(&ep[1]->fid, ep_name[1], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
@@ -129,9 +146,15 @@ void vc_setup(void)
 
 	ret = fi_ep_bind(ep[1], &av->fid, 0);
 	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_enable(ep[0]);
+	cr_assert(!ret, "fi_ep_enable");
+
+	ret = fi_enable(ep[1]);
+	cr_assert(!ret, "fi_ep_enable");
 }
 
-void vc_teardown(void)
+void rdm_sr_teardown(void)
 {
 	int ret = 0;
 
@@ -140,6 +163,9 @@ void vc_teardown(void)
 
 	ret = fi_close(&ep[1]->fid);
 	cr_assert(!ret, "failure in closing ep.");
+
+	ret = fi_close(&msg_cq->fid);
+	cr_assert(!ret, "failure in send cq.");
 
 	ret = fi_close(&av->fid);
 	cr_assert(!ret, "failure in closing av.");
@@ -160,178 +186,51 @@ void vc_teardown(void)
  * Test vc functions.
  ******************************************************************************/
 
-TestSuite(vc_management, .init = vc_setup, .fini = vc_teardown,
+TestSuite(rdm_sr, .init = rdm_sr_setup, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
-Test(vc_management, vc_alloc_simple)
+Test(rdm_sr, pingpong)
 {
-	int ret;
-	struct gnix_vc *vc[2];
-	struct gnix_fid_ep *ep_priv;
+	int ret, i, got_r = 0;
+	struct fi_context r_context, s_context;
+	struct fi_cq_entry cqe;
+	char s_buffer[128], r_buffer[128];
 
-	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
+	for (i = 0; i < 16; i++) {
+		sprintf(s_buffer, "Hello there iter=%d", i);
+		memset(r_buffer, 0, 128);
+		ret = fi_recv(ep[1],
+			      r_buffer,
+			      sizeof(r_buffer),
+			      NULL,
+			      gni_addr[0],
+			      &r_context);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_recv");
+		ret = fi_send(ep[0],
+			      s_buffer,
+			      strlen(s_buffer),
+			      NULL,
+			      gni_addr[1],
+			      &s_context);
+		cr_assert_eq(ret, FI_SUCCESS, "fi_send");
 
-	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
+		while ((ret = fi_cq_read(msg_cq, &cqe, 1)) == -FI_EAGAIN)
+			pthread_yield();
 
-	ret = _gnix_vc_alloc(ep_priv, gni_addr[1], &vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
+		cr_assert((cqe.op_context == &r_context) ||
+			(cqe.op_context == &s_context), "fi_cq_read");
+		got_r = (cqe.op_context == &r_context) ? 1 : 0;
 
-	/*
-	 * vc_id's have to be different since the
-	 * vc's were allocated using the same ep.
-	 */
-	cr_assert_neq(vc[0]->vc_id, vc[1]->vc_id);
+		while ((ret = fi_cq_read(msg_cq, &cqe, 1)) == -FI_EAGAIN)
+			pthread_yield();
 
-	ret = _gnix_vc_destroy(vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
+		if (got_r)
+			cr_assert((cqe.op_context == &s_context), "fi_cq_read");
+		else
+			cr_assert((cqe.op_context == &r_context), "fi_cq_read");
+		got_r = 0;
 
-	ret = _gnix_vc_destroy(vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-}
-
-Test(vc_management, vc_lookup_by_id)
-{
-	int ret;
-	struct gnix_vc *vc[2], *vc_chk;
-	struct gnix_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-
-	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_alloc(ep_priv, gni_addr[1], &vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	vc_chk = __gnix_nic_elem_by_rem_id(ep_priv->nic, vc[0]->vc_id);
-	cr_assert_eq(vc_chk, vc[0]);
-
-	vc_chk = __gnix_nic_elem_by_rem_id(ep_priv->nic, vc[1]->vc_id);
-	cr_assert_eq(vc_chk, vc[1]);
-
-	ret = _gnix_vc_destroy(vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_destroy(vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-}
-
-Test(vc_management, vc_accept)
-{
-	int ret;
-	struct gnix_vc *vc[2];
-	struct gnix_fid_ep *ep_priv;
-
-	ep_priv = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-
-	ret = _gnix_vc_alloc(ep_priv, gni_addr[0], &vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_alloc(ep_priv, FI_ADDR_UNSPEC, &vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	/*
-	 * this should fail because the vc was allocated with
-	 * an addr other than FI_ADDR_UNSPEC
-	 */
-
-	ret = _gnix_vc_accept(vc[0]);
-	cr_assert_eq(ret, -FI_EINVAL);
-
-	/*
-	 * this should succeed because the vc was allocated with
-	 * FI_ADDR_UNSPEC
-	 */
-
-	ret = _gnix_vc_accept(vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_destroy(vc[0]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_destroy(vc[1]);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-}
-
-Test(vc_management, vc_conn_accept)
-{
-	int ret;
-	struct gnix_vc *vc_conn, *vc_listen;
-	struct gnix_fid_ep *ep_priv[2];
-	struct gnix_cm_nic *cm_nic[2];
-	gnix_ht_key_t key;
-	enum gnix_vc_conn_state state;
-
-	ep_priv[0] = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-	cm_nic[0] = ep_priv[0]->cm_nic;
-
-	ep_priv[1] = container_of(ep[1], struct gnix_fid_ep, ep_fid);
-	cm_nic[1] = ep_priv[1]->cm_nic;
-
-	ret = _gnix_vc_alloc(ep_priv[0], gni_addr[1], &vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	memcpy(&key, &gni_addr[1],
-		sizeof(gnix_ht_key_t));
-
-	ret = _gnix_ht_insert(ep_priv[0]->vc_ht, key, vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-	vc_conn->modes |= GNIX_VC_MODE_IN_HT;
-
-	ret = _gnix_vc_alloc(ep_priv[1], FI_ADDR_UNSPEC, &vc_listen);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_accept(vc_listen);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	/*
-	 * this is the moral equivalent of fi_enable(ep[0]),
-	 * but we don't want to do that in our prologue since
-	 * the fi_enable would consume all of the available wc datagrams.
-	 */
-	dlist_insert_tail(&vc_listen->entry, &ep_priv[1]->wc_vc_list);
-
-	ret = _gnix_vc_connect(vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	/*
-	 * progress the cm_nic
-	 */
-
-	state = GNIX_VC_CONN_NONE;
-	while (state != GNIX_VC_CONNECTED) {
-		ret = _gnix_cm_nic_progress(cm_nic[0]);
-		cr_assert_eq(ret, FI_SUCCESS);
-		pthread_yield();
-		state = _gnix_vc_state(vc_conn);
+		cr_assert(strcmp(s_buffer, r_buffer) == 0, "check message");
 	}
 
-	state = GNIX_VC_CONN_NONE;
-	while (state != GNIX_VC_CONNECTED) {
-		ret = _gnix_cm_nic_progress(cm_nic[1]);
-		cr_assert_eq(ret, FI_SUCCESS);
-		pthread_yield();
-		state = _gnix_vc_state(vc_listen);
-	}
-
-	ret = _gnix_vc_disconnect(vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_destroy(vc_conn);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	/*
-	 * don't disconnect/destroy listening vc no
-	 * as this is part of ep_close op.
-	 */
-#if 0
-	ret = _gnix_vc_disconnect(vc_listen);
-	cr_assert_eq(ret, FI_SUCCESS);
-
-	ret = _gnix_vc_destroy(vc_listen);
-	cr_assert_eq(ret, FI_SUCCESS);
-#endif
 }

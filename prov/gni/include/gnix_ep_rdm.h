@@ -42,12 +42,6 @@
  * This file is intended to be included only in gnix_ep.c
  */
 
-static ssize_t gnix_ep_send_rdm(struct fid_ep *ep, const void *buf, size_t len,
-				void *desc, fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
-
 static ssize_t gnix_ep_sendv_rdm(struct fid_ep *ep, const struct iovec *iov,
 				 void **desc, size_t count, fi_addr_t dest_addr,
 				 void *context)
@@ -67,11 +61,6 @@ static ssize_t gnix_ep_msg_inject_rdm(struct fid_ep *ep, const void *buf,
 	return -FI_ENOSYS;
 }
 
-static ssize_t gnix_ep_recv_rdm(struct fid_ep *ep, const void *buf, size_t len,
-				void *desc, fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
 
 static ssize_t gnix_ep_recvv_rdm(struct fid_ep *ep, const struct iovec *iov,
 				 void **desc, size_t count, fi_addr_t dest_addr,

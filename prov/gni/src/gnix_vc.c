@@ -44,87 +44,14 @@
 #include "gnix_util.h"
 #include "gnix_datagram.h"
 #include "gnix_cm_nic.h"
+#include "gnix_nic.h"
+#include "gnix_ep.h"
 #include "gnix_mbox_allocator.h"
 #include "gnix_hashtable.h"
 
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
-
-static int __gnix_vc_free_id(struct gnix_vc *vc)
-{
-	struct gnix_fid_ep *ep = NULL;
-	struct gnix_nic *nic;
-
-	ep = vc->ep;
-	if (ep == NULL)
-		return -FI_EINVAL;
-
-	nic = ep->nic;
-	if (nic == NULL)
-		return -FI_EINVAL;
-
-	_gnix_clear_bit(&nic->vc_id_bitmap, vc->vc_id);
-
-	return FI_SUCCESS;
-}
-
-/*
- * this function is needed to allow for quick lookup of a vc based on
- * the contents of the GNI CQE coming off of the GNI RX CQ associated
- * with GNI nic being used by this VC.  Using a bitmap to expedite
- * scanning vc's in the case of a GNI CQ overrun.
- */
-
-static int _gnix_vc_get_id(struct gnix_vc *vc)
-{
-	int ret = FI_SUCCESS;
-	struct gnix_fid_ep *ep = NULL;
-	struct gnix_nic *nic;
-	struct gnix_vc **table_base;
-
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	ep = vc->ep;
-	if (ep == NULL)
-		return -FI_EINVAL;
-
-	nic = ep->nic;
-	if (nic == NULL)
-		return -FI_EINVAL;
-
-	/*
-	 * TODO:  really need to search bitmap for clear
-	 * bit before resizing the table
-	 */
-
-	fastlock_acquire(&nic->vc_id_lock);
-	if (nic->vc_id_table_capacity == nic->vc_id_table_count) {
-		table_base = realloc(nic->vc_id_table,
-				     2 * nic->vc_id_table_capacity *
-				     sizeof(struct gnix_vc *));
-		if (table_base == NULL) {
-			ret =  -FI_ENOMEM;
-			goto err;
-		}
-		nic->vc_id_table_capacity *= 2;
-		nic->vc_id_table = table_base;
-	}
-
-	nic->vc_id_table[nic->vc_id_table_count] = vc;
-	vc->vc_id = nic->vc_id_table_count;
-
-	/*
-	 * set bit in the bitmap
-	 */
-
-	_gnix_set_bit(&nic->vc_id_bitmap, nic->vc_id_table_count);
-
-	++(nic->vc_id_table_count);
-err:
-	fastlock_release(&nic->vc_id_lock);
-	return ret;
-}
 
 /*
  * call back prior to posting of datagram to kgni,
@@ -452,11 +379,6 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 	assert(wc_vc->conn_state == GNIX_VC_CONNECTING);
 
 	/*
-	 * remove the vc from the EPs dlist of wc vc's
-	 */
-	dlist_remove(&wc_vc->entry);
-
-	/*
 	 * if the wc vc is not in the hash table
 	 * that means we are hitting the case where
 	 * we were trying to connect with a peer
@@ -477,10 +399,18 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 		if (!slist_empty(&vc->send_queue))
 			slist_insert_head(vc->send_queue.head,
 					  &wc_vc->send_queue);
+		fastlock_acquire(&ep->vc_list_lock);
+		dlist_remove(&vc->entry);
+		fastlock_release(&ep->vc_list_lock);
 		ret = _gnix_vc_destroy(vc);
 		assert(ret == FI_SUCCESS);
 		vc = wc_vc;
 		ret = _gnix_ht_insert(ep->vc_ht, key, vc);
+		assert(ret == FI_SUCCESS);
+		fastlock_acquire(&ep->vc_list_lock);
+		dlist_insert_tail(&vc->entry,
+				  &ep->wc_vc_list);
+		fastlock_release(&ep->vc_list_lock);
 		assert(ret == FI_SUCCESS);
 	} else
 		vc = wc_vc;
@@ -601,7 +531,9 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 			  "gnix_vc_accept returned %d\n",
 			  ret);
 
+	fastlock_acquire(&ep->vc_list_lock);
 	dlist_insert_tail(&wc_vc->entry, &ep->wc_vc_list);
+	fastlock_release(&ep->vc_list_lock);
 
 	/*
 	 * put the connected vc in to the work queue of the gnix_nic
@@ -863,6 +795,72 @@ static int __gnix_vc_connect_comp_fn(void *data)
 	return FI_SUCCESS;
 }
 
+static int __gnix_vc_prog_fn(void *data, int *complete_ptr)
+{
+	int ret;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_cm_nic *cm_nic;
+
+	*complete_ptr = 0;
+
+	/*
+	 * TODO: this is temporary and will be removed
+	 * once the cm_nic functionality goes in to
+	 * nic functionality (see issue 218)
+	 */
+	if (vc->conn_state < GNIX_VC_CONNECTED) {
+		cm_nic = vc->ep->cm_nic;
+		ret = _gnix_cm_nic_progress(cm_nic);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_cm_nic_progress returned %d\n",
+				   ret);
+		goto err;
+	}
+
+	/*
+	 * check for pending messages
+	 */
+
+	if ((vc->modes & GNIX_VC_MODE_PENDING_MSGS) &&
+		(vc->conn_state == GNIX_VC_CONNECTED)) {
+		ret = _gnix_ep_vc_dequeue_smsg(vc);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_ep_vc_dqueue returned %d\n",
+				   ret);
+			goto err;
+		}
+	}
+
+	ret = _gnix_ep_push_vc_sendq(vc);
+	if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_ep_push_vc_sendq returned %d\n",
+			   ret);
+		goto err;
+	}
+
+	if (slist_empty(&vc->send_queue) &&
+	    !(vc->modes & GNIX_VC_MODE_PENDING_MSGS))
+		*complete_ptr = 1;
+#if 0
+		if ((ret == -FI_ENOSPC) || (ret == -FI_EOPBADSTATE))
+			ret = FI_SUCCESS;  /* FI_ENOSPC is not an error */
+#endif
+
+err:
+	return ret;
+}
+
+static int __gnix_vc_comp_fn(void *data)
+{
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+
+	vc->modes &= ~GNIX_VC_MODE_IN_WQ;
+	return FI_SUCCESS;
+}
+
 /*******************************************************************************
  * Internal API functions
  ******************************************************************************/
@@ -872,7 +870,9 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 
 {
 	int ret = FI_SUCCESS;
+	int remote_id;
 	struct gnix_vc *vc_ptr = NULL;
+	struct gnix_nic *nic = NULL;
 #if 0
 	struct gnix_fid_av *av = NULL;
 #endif
@@ -893,6 +893,10 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 	}
 #endif
 
+	nic = ep_priv->nic;
+	if (nic == NULL)
+		return -FI_EINVAL;
+
 	vc_ptr = calloc(1, sizeof(*vc_ptr));
 	if (!vc_ptr)
 		return -FI_ENOMEM;
@@ -908,9 +912,10 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 	 * based on GNI_CQ_GET_INST_ID
 	 */
 
-	ret = _gnix_vc_get_id(vc_ptr);
+	ret = _gnix_nic_get_rem_id(nic, &remote_id, vc_ptr);
 	if (ret != FI_SUCCESS)
 		goto err;
+	vc_ptr->vc_id = remote_id;
 
 	*vc = vc_ptr;
 
@@ -925,11 +930,16 @@ err:
 int _gnix_vc_destroy(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
+	struct gnix_nic *nic = NULL;
 	gni_return_t status;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (vc->ep == NULL)
+		return -FI_EINVAL;
+
+	nic = vc->ep->nic;
+	if (nic == NULL)
 		return -FI_EINVAL;
 
 	/*
@@ -982,7 +992,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		vc->dgram = NULL;
 	}
 
-	ret = __gnix_vc_free_id(vc);
+	ret = _gnix_nic_free_rem_id(nic, vc->vc_id);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
 		      "__gnix_vc_free_id returned %d\n", ret);
@@ -1037,9 +1047,9 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	if (work_req == NULL)
 		return -FI_ENOMEM;
 
-	work_req->progress_func = __gnix_vc_connect_prog_fn;
+	work_req->progress_fn = __gnix_vc_connect_prog_fn;
 	work_req->data = vc;
-	work_req->completer_func = __gnix_vc_connect_comp_fn;
+	work_req->completer_fn = __gnix_vc_connect_comp_fn;
 	work_req->completer_data = vc;
 
 	/*
@@ -1180,6 +1190,8 @@ err:
 
 int _gnix_vc_disconnect(struct gnix_vc *vc)
 {
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	vc->conn_state = GNIX_VC_CONN_TERMINATED;
 	return FI_SUCCESS;
 }
@@ -1189,26 +1201,24 @@ int _gnix_vc_add_to_wq(struct gnix_vc *vc)
 	struct gnix_nic *nic = vc->ep->nic;
 	struct gnix_work_req *work_req;
 
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	if (!(vc->modes & GNIX_VC_MODE_IN_WQ)) {
 
 		work_req = calloc(1, sizeof(*work_req));
 		if (work_req == NULL)
 			return -FI_ENOMEM;
 
-#if 0
-		work_req->progress_func = __gnix_vc_prog_fn;
-#endif
-		work_req->progress_func = NULL;
+		work_req->progress_fn = __gnix_vc_prog_fn;
 		work_req->data = vc;
-#if 0
-		work_req->completer_func = __gnix_vc_comp_fn;
-#endif
-		work_req->completer_func = NULL;
+
+		work_req->completer_fn = __gnix_vc_comp_fn;
 		work_req->completer_data = vc;
 
 		fastlock_acquire(&nic->wq_lock);
 		list_add_tail(&nic->nic_wq, &work_req->list);
 		fastlock_release(&nic->wq_lock);
+		vc->modes |= GNIX_VC_MODE_IN_WQ;
 	}
 
 	return FI_SUCCESS;

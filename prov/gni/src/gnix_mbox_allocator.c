@@ -641,7 +641,8 @@ int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 	position = __find_used(alloc_handle, &temp);
 	if (position >= 0) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "Can't destroy, not all mailboxes have been returned.\n");
+			  "Can't destroy, not all mailboxes have been returned (pos = %d).\n",
+			  position);
 		return -FI_EBUSY;
 	}
 
@@ -711,6 +712,8 @@ int _gnix_mbox_free(struct gnix_mbox *ptr)
 {
 	size_t position;
 	int ret;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (!ptr || !ptr->slab || !ptr->slab->allocator) {
 		GNIX_WARN(FI_LOG_EP_CTRL, "Invalid mbox given to free.\n");

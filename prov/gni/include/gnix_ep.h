@@ -35,14 +35,92 @@
 #define _GNIX_EP_H_
 
 #include "gnix.h"
+#include "gnix_nic.h"
 
 /*
- * prototypes for GNI EP internal implementation
+ * enum of tags used for GNI_SmsgSendWTag
+ * and callbacks at receive side to process
+ * these messages
  */
 
-struct gnix_fab_req *_fr_alloc(struct gnix_fid_ep *ep);
-void _fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr);
+enum {
+	GNIX_SMSG_T_EGR_W_DATA = 10,
+	GNIX_SMSG_T_EGR_W_DATA_ACK,
+	GNIX_SMSG_T_EGR_GET,
+	GNIX_SMSG_T_EGR_GET_ACK,
+	GNIX_SMSG_T_RNDZV_RTS,
+	GNIX_SMSG_T_RNDZV_RTR,
+	GNIX_SMSG_T_RNDZV_COOKIE,
+	GNIX_SMSG_T_RNDZV_SDONE,
+	GNIX_SMSG_T_RNDZV_RDONE
+};
 
+extern smsg_completer_fn_t gnix_ep_smsg_completers[];
+
+/*
+ * prototypes for GNI EP helper functions for managing
+ * transactions: send/recv, etc.
+ */
+
+/**
+ * @brief  match an incoming SMSG eager message that includes all
+ *         message data with posted receive buffer, or if none present,
+ *         add to unexpected receive queue.
+ *
+ * @param[in] ep        pointer to a previously allocated endpoint
+ * @param[in] msg       pointer to msg data in SMSG mailbox buffer
+ * @param[in] addr      address of the sender of the message
+ * @param[in] len       length of the message
+ * @param[in] imm       immediate data
+ * @param[in] sflags    flags used on sender side to indicate presence
+ *                      of immediate data - FI_REMOTE_CQ_DATA
+ * @return              FI_SUCCESS on success, -FI_ENOMEM insufficient
+ *                      memory to create unexpected request structure
+ */
+int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
+				    struct gnix_address addr, size_t len,
+				    uint64_t imm, uint64_t sflags);
+
+/**
+ * @brief  return vc associated with a given ep/dest address, or the ep in the
+ *         case of FI_EP_MSG endpoint type.  For FI_EP_RDM type, a vc may be
+ *         allocated and a connection initiated if no vc is associated with
+ *         ep/dest_addr.
+ *
+ * @param[in] ep        pointer to a previously allocated endpoint
+ * @param[in] dest_addr for FI_EP_RDM endpoints, used to look up vc associated
+ *                      with this target address
+ * @param[out] vc_ptr   address in which to store pointer to returned vc
+ * @return              FI_SUCCESS on success, -FI_ENOMEM insufficient
+ *                      memory to allocate vc, -FI_EINVAL if an invalid
+ *                      argument was supplied
+ */
+int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
+		    struct gnix_vc **vc_ptr);
+
+/**
+ * @brief  try to push any messages on the sendq of a vc
+ *
+ * @param[in] vc        pointer to a previously allocated vc
+ * @return              FI_SUCCESS on success meaning that no errors
+ *                      were encountered trying to push any messages
+ *                      on the send queue, -FI_ENOSPC insufficient
+ *                      resources to send messages
+ */
+int _gnix_ep_push_vc_sendq(struct gnix_vc *vc);
+
+/**
+ * @brief  dequeue smsg messages that arrived before vc fully
+ *         initialized at receiver
+ *
+ * @param[in] vc        pointer to a previously allocated vc
+ * @return              FI_SUCCESS on success meaning that no errors
+ *                      were encountered dequeing SMSG messages, -FI_EINVAL
+ *                      if an invalid argument is supplied,
+ *                      -FI_EOPBADSTATE if the SMSG channel is in an
+ *                      invalid state.
+ */
+int _gnix_ep_vc_dequeue_smsg(struct gnix_vc *vc);
 /*
  * typedefs for function vectors used to steer send/receive/rma/amo requests,
  * i.e. fi_send, fi_recv, etc. to ep type specific methods
@@ -114,5 +192,47 @@ typedef ssize_t (*trecvv_func_t)(struct fid_ep *ep,
 typedef ssize_t (*trecvmsg_func_t)(struct fid_ep *ep,
 				   const struct fi_msg_tagged *msg,
 				   uint64_t flags);
+
+/*
+ * inline functions
+ */
+
+static inline struct gnix_fab_req *
+_gnix_fr_alloc(struct gnix_fid_ep *ep)
+{
+	struct slist_entry *se;
+	struct gnix_fab_req *fr = NULL;
+	int ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+
+	while (ret == -FI_EAGAIN)
+		ret = _gnix_sfe_alloc(&se, &ep->fr_freelist);
+
+	if (ret == FI_SUCCESS) {
+		fr = container_of(se, struct gnix_fab_req, slist);
+		fr->gnix_ep = ep;
+	}
+
+	return fr;
+}
+
+static inline void
+_gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
+{
+	assert(fr->gnix_ep == ep);
+	_gnix_sfe_free(&fr->slist, &ep->fr_freelist);
+}
+
+static inline int
+__msg_match_fab_req(struct slist_entry *item, const void *arg)
+{
+	struct gnix_fab_req *req;
+	const struct gnix_address *addr_ptr = arg;
+
+	req = container_of(item, struct gnix_fab_req, slist);
+
+	return ((GNIX_ADDR_UNSPEC(*addr_ptr)) ||
+				(GNIX_ADDR_EQUAL(req->addr, *addr_ptr)));
+}
+
 
 #endif /* _GNIX_EP_H_ */

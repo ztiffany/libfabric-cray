@@ -310,15 +310,30 @@ Test(rdm_rma, rw)
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
 
+
 	ret = _gnix_vc_disconnect(vc_conn);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc_conn);
 	cr_assert_eq(ret, FI_SUCCESS);
 
+
+	ret = _gnix_vc_disconnect(vc_conn);
+	cr_assert_eq(ret, FI_SUCCESS);
+
+	/*
+	 * we no longer disconnect/destroy listening vc
+	 * as listening vc's are now tracked internally
+	 * and get cleaned up as part of close of ep
+	 * operation.
+	 */
+
+#if 0
 	ret = _gnix_vc_disconnect(vc_listen);
 	cr_assert_eq(ret, FI_SUCCESS);
 
 	ret = _gnix_vc_destroy(vc_listen);
 	cr_assert_eq(ret, FI_SUCCESS);
+#endif
+
 }
