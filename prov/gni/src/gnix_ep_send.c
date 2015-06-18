@@ -188,7 +188,7 @@ int _gnix_ep_push_vc_sendq(struct gnix_vc *vc)
 
 			tdesc->desc.smsg_desc.hdr.len = req->len;
 			tdesc->desc.smsg_desc.hdr.flags = 0;
-			tdesc->desc.smsg_desc.buf = req->buf;
+			tdesc->desc.smsg_desc.buf = (void *)req->loc_addr;
 			tdesc->desc.req = req;
 			tdesc->desc.ep = ep;
 			tdesc->desc.completer_fn =
@@ -197,7 +197,7 @@ int _gnix_ep_push_vc_sendq(struct gnix_vc *vc)
 			status = GNI_SmsgSendWTag(vc->gni_ep,
 						&tdesc->desc.smsg_desc.hdr,
 						sizeof(struct gnix_smsg_hdr),
-						(void *)req->buf,
+						(void *)req->loc_addr,
 						req->len,
 						tdesc->desc.id,
 						GNIX_SMSG_T_EGR_W_DATA);

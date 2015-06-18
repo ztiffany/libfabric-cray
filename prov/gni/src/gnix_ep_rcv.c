@@ -79,7 +79,7 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 					(const void *)addr_ptr);
 	if (item) {
 		req = container_of(item, struct gnix_fab_req, slist);
-		memcpy(req->buf, msg, MIN(req->len, len));
+		memcpy((void *)req->loc_addr, msg, MIN(req->len, len));
 		req->addr = addr;
 		req->imm = imm;
 		req->len = MIN(req->len, len);
@@ -115,7 +115,7 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 						    req->user_context,
 						    flags | FI_RECV | FI_MSG,
 						    req->len,
-						    req->buf,
+						    (void *)req->loc_addr,
 						    req->imm,
 						    0);
 			if (cq_len != FI_SUCCESS)  {
@@ -138,14 +138,14 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 			goto err;
 		}
 
-		req->buf = malloc(len);
-		if (req->buf == NULL) {
+		req->loc_addr = (uint64_t)malloc(len);
+		if (req->loc_addr == 0UL) {
 			_gnix_fr_free(ep, req);
 			ret = -FI_ENOMEM;
 			goto err;
 		}
 
-		memcpy(req->buf, msg, len);
+		memcpy((void *)req->loc_addr, msg, len);
 		req->addr = addr;
 		req->imm = imm;
 		req->len = len;

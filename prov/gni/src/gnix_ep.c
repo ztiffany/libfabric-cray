@@ -368,9 +368,9 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 	if (matched) {
 
 		if (req->modes & GNIX_FAB_RQ_M_COMPLETE) {
-			memcpy(buf, req->buf, MIN(req->len, len));
-			free(req->buf);
-			req->buf = NULL;
+			memcpy(buf, (void *)req->loc_addr, MIN(req->len, len));
+			free((void *)req->loc_addr);
+			req->loc_addr = 0UL;
 		}
 
 		cq = ep_priv->recv_cq;
@@ -415,7 +415,7 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 
 		req->addr = *addr_ptr;
 		req->len = len;
-		req->buf = buf;
+		req->loc_addr = (uint64_t)buf;
 		req->type = GNIX_FAB_RQ_RECV;
 		req->user_context = context;
 		slist_insert_tail(&req->slist,
@@ -557,11 +557,11 @@ slow:
 
 	addr_ptr = (struct gnix_address *)&dest_addr;
 	req->addr = *addr_ptr;
-	req->buf = (void *)buf;
+	req->loc_addr = (uint64_t)buf;
 	req->modes = 0;
 	req->gnix_ep = ep_priv;
 	if (desc != NULL)
-		req->loc_md = desc;
+		req->rma.loc_md = desc;
 	req->len = len;
 	req->user_context = context;
 
