@@ -39,6 +39,8 @@
 #include <fi.h>
 #include <fi_list.h>
 
+#include "gnix_util.h"
+
 typedef uint64_t gnix_ht_key_t;
 
 typedef enum gnix_ht_state {
@@ -54,7 +56,7 @@ typedef struct gnix_ht_entry {
 } gnix_ht_entry_t;
 
 typedef struct gnix_ht_lk_lh {
-	pthread_rwlock_t lh_lock;
+	rwlock_t lh_lock;
 	struct dlist_entry head;
 } gnix_ht_lk_lh_t;
 
