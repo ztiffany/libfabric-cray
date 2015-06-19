@@ -39,7 +39,7 @@ _gni_files = \
 	prov/gni/src/gnix_rma.c
 
 if HAVE_CRITERION
-bin_PROGRAMS = prov/gni/test/gnitest
+bin_PROGRAMS += prov/gni/test/gnitest
 dist_bin_SCRIPTS = prov/gni/test/run_gnitest
 prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/cq.c \
