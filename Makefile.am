@@ -33,6 +33,13 @@ common_srcs = \
 # ensure dl-built providers link back to libfabric
 linkback = $(top_builddir)/src/libfabric.la
 
+bin_PROGRAMS = \
+	util/fi_info
+
+util_fi_info_SOURCES = \
+	util/info.c
+util_fi_info_LDADD = $(linkback)
+
 src_libfabric_la_SOURCES = \
 	include/fi.h \
 	include/fi_enosys.h \
@@ -153,9 +160,9 @@ libusnic_direct_sources = \
 	prov/usnic/src/usnic_direct/usd_poll.c \
 	prov/usnic/src/usnic_direct/usd_post.c \
 	prov/usnic/src/usnic_direct/usd_post.h \
-	prov/usnic/src/usnic_direct/usd_post_raw_normal.c \
-	prov/usnic/src/usnic_direct/usd_post_udp_normal.c \
-	prov/usnic/src/usnic_direct/usd_post_udp_pio.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_raw.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_udp.c \
+	prov/usnic/src/usnic_direct/usd_post_ud_pio_udp.c \
 	prov/usnic/src/usnic_direct/usd_queue.h \
 	prov/usnic/src/usnic_direct/usd_queues.c \
 	prov/usnic/src/usnic_direct/usd_socket.c \
