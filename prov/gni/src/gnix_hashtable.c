@@ -45,49 +45,6 @@
 
 #define __GNIX_HT_COLLISION_THRESH 400 /* average of 4 elements per bucket */
 
-/* This is temporary until I can convince someone that this belongs in the
- *   fi.h header file.
- */
-#if HAVE_ATOMICS
-static inline int atomic_add(atomic_t *atomic, int val)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_add_explicit(&atomic->val,
-			val, memory_order_acq_rel) + 1;
-}
-
-static inline int atomic_sub(atomic_t *atomic, int val)
-{
-	ATOMIC_IS_INITIALIZED(atomic);
-	return atomic_fetch_sub_explicit(&atomic->val,
-			val, memory_order_acq_rel) - 1;
-}
-#else
-static inline int atomic_add(atomic_t *atomic, int val)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	atomic->val += val;
-	v = atomic->val;
-	fastlock_release(&atomic->lock);
-	return v;
-}
-
-static inline int atomic_sub(atomic_t *atomic, int val)
-{
-	int v;
-
-	ATOMIC_IS_INITIALIZED(atomic);
-	fastlock_acquire(&atomic->lock);
-	atomic->val += val;
-	v = atomic->val;
-	fastlock_release(&atomic->lock);
-	return v;
-}
-#endif
-
 /*
  * __gnix_ht_lf* prefixes denote lock free version of functions intended for
  *   use with hashtables that had attr->ht_internal_locking set to zero
