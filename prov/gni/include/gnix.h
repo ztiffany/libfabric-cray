@@ -339,6 +339,17 @@ enum gnix_fab_req_type {
 	GNIX_FAB_RQ_TRECV
 };
 
+struct gnix_fab_req_rma {
+	void *loc_md;
+	uint64_t rem_addr;
+	uint64_t rem_mr_key;
+};
+
+struct gnix_fab_req_msg {
+	uint64_t tag;
+	uint64_t mask_bits;
+};
+
 /*
  * Fabric request layout, there is a one to one
  * correspondence between an application's invocation of fi_send, fi_recv
@@ -346,7 +357,6 @@ enum gnix_fab_req_type {
  */
 
 struct gnix_fab_req {
-	struct list_node          list;
 	struct slist_entry        slist;
 	uint64_t tag;
 	uint64_t mask_bits;
@@ -359,26 +369,21 @@ struct gnix_fab_req {
 	/* current point in the buffer for next transfer chunk -
 	   case of long messages or rdma requests greater than 4 GB */
 	void     *cur_pos;
-	uint64_t imm;
 	struct gnix_vc *vc;
 	void *completer_data;
 	int (*completer_fn)(void *);
 	uint64_t cq_flags;
 	int modes;
 	int retries;
-	uint32_t id;
-
-	/* RMA stuff */
-	union {
-		uint64_t loc_addr;
-		void *buf;
-	};
-	void *loc_md;
-	uint64_t rem_addr;
-	uint64_t rem_mr_key;
+	/* common to rma/amo/msg */
+	uint64_t loc_addr;
+	uint64_t imm;
 	size_t len;
 	uint64_t flags;
-	uint64_t data;
+	union {
+		struct gnix_fab_req_rma rma;
+		struct gnix_fab_req_msg msg;
+	};
 };
 
 /*

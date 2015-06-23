@@ -58,7 +58,7 @@ static int __gnix_rma_fab_req_complete(void *arg)
 		rc = _gnix_cq_add_event(ep->send_cq, req->user_context,
 					req->flags, req->len,
 					(void *)req->loc_addr,
-					req->data, req->tag);
+					req->imm, req->msg.tag);
 		if (rc) {
 			GNIX_WARN(FI_LOG_CQ,
 				  "_gnix_cq_add_event() failed: %d\n", rc);
@@ -109,7 +109,8 @@ static int __gnix_post_req(struct gnix_fab_req *fab_req)
 
 	rc = _gnix_nic_tx_alloc(nic, &txd);
 	if (rc) {
-		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n", rc);
+		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
+			 rc);
 		fastlock_release(&nic->lock);
 		return -FI_ENOSPC;
 	}
@@ -117,8 +118,9 @@ static int __gnix_post_req(struct gnix_fab_req *fab_req)
 	txd->desc.completer_fn = __gnix_rma_txd_complete;
 	txd->desc.req = fab_req;
 
-	_gnix_convert_key_to_mhdl((gnix_mr_key_t *)&fab_req->rem_mr_key, &mdh);
-	md = (struct gnix_fid_mem_desc *)fab_req->loc_md;
+	_gnix_convert_key_to_mhdl((gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
+				  &mdh);
+	md = (struct gnix_fid_mem_desc *)fab_req->rma.loc_md;
 
 	//txd->desc.gni_desc.post_id = (uint64_t)fab_req; /* unused */
 	txd->desc.gni_desc.type = __gnix_fr_post_type(fab_req->type);
@@ -126,7 +128,7 @@ static int __gnix_post_req(struct gnix_fab_req *fab_req)
 	txd->desc.gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
 	txd->desc.gni_desc.local_addr = (uint64_t)fab_req->loc_addr;
 	txd->desc.gni_desc.local_mem_hndl = md->mem_hndl;
-	txd->desc.gni_desc.remote_addr = (uint64_t)fab_req->rem_addr;
+	txd->desc.gni_desc.remote_addr = (uint64_t)fab_req->rma.rem_addr;
 	txd->desc.gni_desc.remote_mem_hndl = mdh;
 	txd->desc.gni_desc.length = fab_req->len;
 	txd->desc.gni_desc.rdma_mode = 0; /* check flags */
@@ -141,7 +143,7 @@ static int __gnix_post_req(struct gnix_fab_req *fab_req)
 		GNIX_INFO(FI_LOG_EP_DATA, "lmdh: %llx:%llx rmdh: %llx:%llx key: %llx\n",
 			  *(uint64_t *)tl_mdh, *(((uint64_t *)tl_mdh) + 1),
 			  *(uint64_t *)tr_mdh, *(((uint64_t *)tr_mdh) + 1),
-			  fab_req->rem_mr_key);
+			  fab_req->rma.rem_mr_key);
 	}
 
 	status = GNI_PostRdma(fab_req->vc->gni_ep, &txd->desc.gni_desc);
@@ -185,9 +187,9 @@ ssize_t _gnix_rma(struct gnix_vc *vc, enum gnix_fab_req_type fr_type,
 
 	md = container_of(mdesc, struct gnix_fid_mem_desc, mr_fid);
 	req->loc_addr = loc_addr;
-	req->loc_md = (void *)md;
-	req->rem_addr = rem_addr;
-	req->rem_mr_key = mkey;
+	req->rma.loc_md = (void *)md;
+	req->rma.rem_addr = rem_addr;
+	req->rma.rem_mr_key = mkey;
 	req->len = len;
 	req->flags = flags;
 
