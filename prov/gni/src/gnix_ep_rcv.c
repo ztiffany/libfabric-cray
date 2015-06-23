@@ -64,8 +64,6 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 	uint64_t flags;
 	struct gnix_address *addr_ptr;
 
-	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
-
 	flags = (sflags & FI_REMOTE_CQ_DATA) ? FI_REMOTE_CQ_DATA : 0;
 
 	/*
