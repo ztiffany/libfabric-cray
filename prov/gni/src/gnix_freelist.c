@@ -93,7 +93,7 @@ int _gnix_sfl_init(int elem_size, int offset, int init_size,
 		   int max_refill_size, struct gnix_s_freelist *fl)
 {
 	assert(elem_size > 0);
-	assert(offset > 0);
+	assert(offset >= 0);
 	assert(init_size >= 0);
 	assert(refill_size >= 0);
 	assert(growth_factor >= 0);
