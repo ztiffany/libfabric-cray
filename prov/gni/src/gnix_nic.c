@@ -583,6 +583,18 @@ int _gnix_nic_free(struct gnix_nic *nic)
 				  "_gnix_mbox_allocator_destroy returned %d\n",
 				  ret);
 
+		ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_mbox_allocator_destroy returned %d\n",
+				  ret);
+
+		ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_mbox_allocator_destroy returned %d\n",
+				  ret);
+
 		/*
 		 * remove the nic from the linked lists
 		 * for the domain and the global nic list
@@ -824,6 +836,10 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 		}
 
+		/*
+		 * set up mailbox allocator for SMSG mailboxes
+		 */
+
 		ret = _gnix_mbox_allocator_create(nic,
 						  nic->rx_cq,
 						  GNIX_PAGE_2MB,
@@ -836,6 +852,45 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 		}
 
+		/*
+		 * use the mailbox allocator system to set up an
+		 * pre-pinned RDMA bounce buffers for longer eager
+		 * messages and other cases where zero-copy
+		 * can't be safely used.
+		 *
+		 * One set of blocks is used for the send side.
+		 * A second set of blocks is used for the receive
+		 * side.  Both sets of blocks are registered against
+		 * the blocking RX CQ for this nic.
+		 *
+		 * TODO: hardwired constants, uff
+		 * TODO: better to use a buddy allocator or some other
+		 * allocator
+		 */
+
+		ret = _gnix_mbox_allocator_create(nic,
+						  nic->rx_cq_blk,
+						  GNIX_PAGE_2MB,
+						  65536,
+						  512,
+						  &nic->s_rdma_buf_hndl);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_mbox_alloc returned %d\n", ret);
+			goto err1;
+		}
+
+		ret = _gnix_mbox_allocator_create(nic,
+						  nic->rx_cq_blk,
+						  GNIX_PAGE_2MB,
+						  65536,
+						  512,
+						  &nic->r_rdma_buf_hndl);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_mbox_alloc returned %d\n", ret);
+			goto err1;
+		}
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
 
@@ -852,6 +907,12 @@ err1:
 	atomic_dec(&gnix_id_counter);
 err:
 	if (nic != NULL) {
+		if (nic->r_rdma_buf_hndl != NULL)
+			_gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
+		if (nic->s_rdma_buf_hndl != NULL)
+			_gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
+		if (nic->mbox_hndl != NULL)
+			_gnix_mbox_allocator_destroy(nic->mbox_hndl);
 		if (nic->rx_cq_blk != NULL)
 			GNI_CqDestroy(nic->rx_cq_blk);
 		if (nic->rx_cq != NULL)

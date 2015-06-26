@@ -109,6 +109,8 @@ typedef int (*smsg_completer_fn_t)(void  *desc);
  * @var mem_per_mbox         number of bytes consumed per GNI SMSG mailbox associated
  *                           with this nic's vd_id_table
  * @var mbox_hndl            handle for the mailbox allocator bound to this nic
+ * @var s_rdma_buf_hndl      handle for send side rdma buffer allocator bound to this nic
+ * @var r_rdma_buf_hndl      handle for recv side rdma buffer allocator bound to this nic
  * @var ref_cnt              ref cnt for this nid
  * @var smsg_callbacks       pointer to table of GNI SMSG callback functions used
  *                           by this nic for processing incoming GNI SMS
@@ -142,6 +144,8 @@ struct gnix_nic {
 	gnix_bitmap_t vc_id_bitmap;
 	uint32_t mem_per_mbox;
 	struct gnix_mbox_alloc_handle *mbox_hndl;
+	struct gnix_mbox_alloc_handle *s_rdma_buf_hndl;
+	struct gnix_mbox_alloc_handle *r_rdma_buf_hndl;
 	atomic_t ref_cnt;
 	smsg_callback_fn_t const *smsg_callbacks;
 };
