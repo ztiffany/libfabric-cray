@@ -69,6 +69,9 @@ Test(gnix_freelist, freelist_init_destroy)
 	struct gnix_s_freelist fls[n];
 	int i, ret;
 
+	/* non-optimized code may not zero structures */
+	memset(fls, 0x0, n * sizeof(struct gnix_s_freelist));
+
 	for (i = 0; i < n; i++) {
 		ret = _gnix_sfl_init(sizeof(struct slist_entry), 0,
 				     2*n, n, n, 3*n, &fls[i]);
@@ -87,6 +90,9 @@ Test(gnix_freelist, freelist_refill_test)
 	struct slist_entry *elems[num_elems];
 	const int refill_size = 47;
 	struct slist_entry *refill_elems[refill_size];
+
+	/* non-optimized code may not zero structures */
+	memset(&fl, 0x0, sizeof(struct gnix_s_freelist));
 
 	ret = _gnix_sfl_init(sizeof(struct slist_entry), 0,
 			     num_elems, refill_size, 0, 0, &fl);
@@ -136,6 +142,9 @@ Test(gnix_freelist, freelist_random_alloc_free)
 		perm[i] = i;
 
 	generate_perm(perm, n);
+
+	/* non-optimized code may not zero structures */
+	memset(&fl, 0x0, sizeof(struct gnix_s_freelist));
 
 	ret = _gnix_sfl_init(sizeof(struct slist_ts),
 			     offsetof(struct slist_ts, e),
