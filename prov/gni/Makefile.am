@@ -18,6 +18,7 @@ _gni_files = \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_ep.c \
 	prov/gni/src/gnix_ep_rcv.c \
+	prov/gni/src/gnix_cntr.c \
 	prov/gni/src/gnix_cq.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_eq.c \
@@ -57,7 +58,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/mr.c \
 	prov/gni/test/vc.c \
 	prov/gni/test/rdm_rma.c \
-	prov/gni/test/rdm_sr.c
+	prov/gni/test/rdm_sr.c \
+	prov/gni/test/cntr.c
 
 prov_gni_test_gnitest_LDFLAGS = -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS)

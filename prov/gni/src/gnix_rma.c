@@ -42,6 +42,8 @@
 #include "gnix_mr.h"
 #include "gnix_cm_nic.h"
 #include "gnix_mbox_allocator.h"
+#include "gnix_cntr.h"
+
 #include <gni_pub.h>
 
 static int __gnix_rma_fab_req_complete(void *arg)
@@ -49,6 +51,7 @@ static int __gnix_rma_fab_req_complete(void *arg)
 	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
 	struct gnix_fid_ep *ep = req->gnix_ep;
 	int rc;
+	struct gnix_fid_cntr *cntr = NULL;
 
 	/* more transaction needed for request? */
 
@@ -61,6 +64,23 @@ static int __gnix_rma_fab_req_complete(void *arg)
 			GNIX_WARN(FI_LOG_CQ,
 				  "_gnix_cq_add_event() failed: %d\n", rc);
 		}
+
+	}
+
+	if ((req->type == GNIX_FAB_RQ_RDMA_WRITE) &&
+	    ep->write_cntr)
+		cntr = ep->write_cntr;
+
+	if ((req->type == GNIX_FAB_RQ_RDMA_READ) &&
+	    ep->read_cntr)
+		cntr = ep->read_cntr;
+
+
+	if (cntr) {
+		rc = _gnix_cntr_inc(cntr);
+		if (rc)
+			GNIX_WARN(FI_LOG_CQ,
+				  "_gnix_cntr_inc() failed: %d\n", rc);
 	}
 
 	/* We could have requests waiting for TXDs or FI_FENCE operations.  Try

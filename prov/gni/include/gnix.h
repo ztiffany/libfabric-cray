@@ -280,6 +280,10 @@ struct gnix_fid_ep {
 	uint64_t op_flags;
 	struct gnix_fid_cq *send_cq;
 	struct gnix_fid_cq *recv_cq;
+	struct gnix_fid_cntr *send_cntr;
+	struct gnix_fid_cntr *recv_cntr;
+	struct gnix_fid_cntr *read_cntr;
+	struct gnix_fid_cntr *write_cntr;
 	struct gnix_fid_av *av;
 	/* cm nic bound to this ep (FID_EP_RDM only) */
 	struct gnix_cm_nic *cm_nic;
@@ -470,6 +474,8 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context);
+int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
+		 struct fid_cntr **cntr, void *context);
 
 #ifdef __cplusplus
 } /* extern "C" */
