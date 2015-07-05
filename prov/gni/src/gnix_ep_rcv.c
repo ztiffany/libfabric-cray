@@ -183,6 +183,7 @@ int _gnix_ep_vc_dequeue_smsg(struct gnix_vc *vc)
 	nic = vc->ep->nic;
 	assert(nic != NULL);
 
+	fastlock_acquire(&nic->lock);
 	do {
 		status = GNI_SmsgGetNextWTag(vc->gni_ep,
 					     &msg_ptr,
@@ -204,6 +205,7 @@ int _gnix_ep_vc_dequeue_smsg(struct gnix_vc *vc)
 	} while (status != GNI_RC_NOT_DONE);
 out:
 err:
+	fastlock_release(&nic->lock);
 	vc->modes &= ~GNIX_VC_MODE_PENDING_MSGS;
 	return ret;
 }

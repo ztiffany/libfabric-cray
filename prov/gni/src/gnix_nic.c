@@ -86,6 +86,11 @@ static inline int __process_smsg(struct gnix_vc *vc)
 	uint8_t tag = GNI_SMSG_ANY_TAG;
 	void *msg_ptr;
 
+	/*
+	 * the nic lock is already held when this
+	 * function is invoked
+	 */
+
 	do {
 		status = GNI_SmsgGetNextWTag(vc->gni_ep,
 					     &msg_ptr,

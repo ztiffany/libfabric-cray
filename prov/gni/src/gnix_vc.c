@@ -275,6 +275,9 @@ static int __gnix_vc_hndl_con_match_con(struct gnix_datagram *dgram,
 	/*
 	 *  now build the SMSG connection
 	 */
+
+	fastlock_acquire(&ep->nic->lock);
+
 	status = GNI_EpCreate(ep->nic->gni_nic_hndl,
 			     ep->nic->tx_cq,
 			     &vc->gni_ep);
@@ -316,6 +319,8 @@ static int __gnix_vc_hndl_con_match_con(struct gnix_datagram *dgram,
 		goto err1;
 	}
 
+	fastlock_release(&ep->nic->lock);
+
 	/*
 	 * transition the VC to connected
 	 * put in to the nic's work queue for
@@ -337,6 +342,7 @@ static int __gnix_vc_hndl_con_match_con(struct gnix_datagram *dgram,
 err1:
 	GNI_EpDestroy(vc->gni_ep);
 err:
+	fastlock_release(&ep->nic->lock);
 	vc->conn_state = GNIX_VC_CONN_ERROR;
 	return ret;
 }
@@ -458,6 +464,8 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 	 *  now build the SMSG connection
 	 */
 
+	fastlock_acquire(&ep->nic->lock);
+
 	status = GNI_EpCreate(ep->nic->gni_nic_hndl,
 			     ep->nic->tx_cq,
 			     &vc->gni_ep);
@@ -498,6 +506,8 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 		ret = gnixu_to_fi_errno(status);
 		goto err1;
 	}
+
+	fastlock_release(&ep->nic->lock);
 
 	/*
 	 * transition the VC to connected
@@ -550,6 +560,7 @@ err1:
 	GNI_EpDestroy(vc->gni_ep);
 err:
 out:
+	fastlock_release(&ep->nic->lock);
 	return ret;
 }
 
@@ -968,13 +979,16 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 	}
 
 	if (vc->gni_ep != NULL) {
+		fastlock_acquire(&nic->lock);
 		status = GNI_EpDestroy(vc->gni_ep);
 		if (status != GNI_RC_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_EpDestroy returned %s\n",
 				  gni_err_str[status]);
 			ret = gnixu_to_fi_errno(status);
+			fastlock_release(&nic->lock);
 			return ret;
 		}
+		fastlock_release(&nic->lock);
 	}
 
 	if (vc->smsg_mbox != NULL) {
