@@ -402,9 +402,11 @@ static int __gnix_vc_hndl_wc_match_con(struct gnix_datagram *dgram,
 		assert(vc != NULL);
 		ret = _gnix_ht_remove(ep->vc_ht, key);
 		assert(ret == FI_SUCCESS);
+		fastlock_acquire(&vc->tx_queue_lock);
 		if (!slist_empty(&vc->tx_queue))
 			slist_insert_head(vc->tx_queue.head,
 					  &wc_vc->tx_queue);
+		fastlock_release(&vc->tx_queue_lock);
 		fastlock_acquire(&ep->vc_list_lock);
 		dlist_remove(&vc->entry);
 		fastlock_release(&ep->vc_list_lock);
@@ -852,9 +854,13 @@ static int __gnix_vc_prog_fn(void *data, int *complete_ptr)
 		goto err;
 	}
 
+	fastlock_acquire(&vc->tx_queue_lock);
+
 	if (slist_empty(&vc->tx_queue) &&
 	    !(vc->modes & GNIX_VC_MODE_PENDING_MSGS))
 		*complete_ptr = 1;
+
+	fastlock_release(&vc->tx_queue_lock);
 #if 0
 		if ((ret == -FI_ENOSPC) || (ret == -FI_EOPBADSTATE))
 			ret = FI_SUCCESS;  /* FI_ENOSPC is not an error */
@@ -917,6 +923,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 	vc_ptr->ep = ep_priv;
 	atomic_inc(&ep_priv->ref_cnt);
 	slist_init(&vc_ptr->tx_queue);
+	fastlock_init&vc_ptr->tx_queue_lock);
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
 
 	/*
@@ -977,6 +984,8 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_CTRL, "vc sendqueue not empty\n");
 		return -FI_EBUSY;
 	}
+
+	fastlock_destroy(&vc->tx_queue_lock);
 
 	if (vc->gni_ep != NULL) {
 		fastlock_acquire(&nic->lock);
@@ -1241,16 +1250,18 @@ int _gnix_vc_add_to_wq(struct gnix_vc *vc)
 
 int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 {
+	int rc, add_vc_to_wq = 0;
 	struct gnix_vc *vc = req->vc;
-	int rc;
 
-	/* TODO lock VC */
+	fastlock_acquire(&vc->tx_queue_lock);
 
 	if ((req->flags & FI_FENCE) && atomic_get(&vc->outstanding_tx_reqs)) {
 		/* Fence request must be queued until all outstanding TX
 		 * requests are completed.  Subsequent requests will be queued
 		 * due to non-empty tx_queue. */
+		req->modes |= GNIX_FAB_RQ_M_IN_SEND_QUEUE;
 		slist_insert_tail(&req->slist, &vc->tx_queue);
+		add_vc_to_wq = 1;
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Queued FI_FENCE request (%p) on VC\n",
 			  req);
@@ -1259,18 +1270,27 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 		/* try to initiate request */
 		rc = req->send_fn(req);
 		if (rc) {
+			req->modes |= GNIX_FAB_RQ_M_IN_SEND_QUEUE;
 			slist_insert_tail(&req->slist, &vc->tx_queue);
 			GNIX_INFO(FI_LOG_EP_DATA,
 				  "Queued request (%p) on full VC\n",
 				  req);
+			add_vc_to_wq = 1;
 		}
 		atomic_inc(&vc->outstanding_tx_reqs);
 	} else {
+		req->modes |= GNIX_FAB_RQ_M_IN_SEND_QUEUE;
 		slist_insert_tail(&req->slist, &vc->tx_queue);
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Queued request (%p) on busy VC\n",
 			  req);
+		add_vc_to_wq = 1;
 	}
+
+	fastlock_release(&vc->tx_queue_lock);
+
+	if (add_vc_to_wq)
+		ret = _gnix_vc_add_to_wq(vc);
 
 	/* TODO unlock VC */
 
@@ -1295,9 +1315,7 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	if (vc->conn_state != GNIX_VC_CONNECTED)
 		return -FI_EAGAIN;
 
-	/*
-	 * TODO: Quick return if no TXDs
-	 */
+	fastlock_acquire(&vc->tx_queue_lock);
 
 	list = &vc->tx_queue;
 	item = list->head;
@@ -1332,12 +1350,11 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 		}
 
 		slist_remove_head(&vc->tx_queue);
+		req->modes &= ~GNIX_FAB_RQ_M_IN_SEND_QUEUE;
 		item = list->head;
 	}
 
-	/*
-	 * TODO: unlock VC
-	 */
+	fastlock_release(&vc->tx_queue_lock);
 
 	return ret;
 }

@@ -334,7 +334,7 @@ struct gnix_fid_av {
  *  enums, defines, for gni provider internal fab requests.
  */
 
-#define GNIX_FAB_RQ_M_IN_ACTIVE_LIST          0x00000001
+#define GNIX_FAB_RQ_M_IN_SEND_QUEUE           0x00000001
 #define GNIX_FAB_RQ_M_REPLAYABLE              0x00000002
 #define GNIX_FAB_RQ_M_UNEXPECTED              0x00000004
 #define GNIX_FAB_RQ_M_MATCHED                 0x00000008

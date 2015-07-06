@@ -72,8 +72,9 @@ enum gnix_vc_conn_req_type {
 /**
  * Virual Connection (VC) struct
  *
- * @var send_queue           linked list of pending send requests to be
+ * @var tx_queue             linked list of pending send requests to be
  *                           delivered to peer_address
+ * @var tx_queue_lock        lock for serializing access to vc's tx_queue
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
  * @var peer_addr            address of peer with which this VC is connected
@@ -94,6 +95,7 @@ enum gnix_vc_conn_req_type {
  */
 struct gnix_vc {
 	struct slist tx_queue;
+	fastlock_t tx_queue_lock;
 	struct dlist_entry entry;
 	struct gnix_address peer_addr;
 	struct gnix_fid_ep *ep;
