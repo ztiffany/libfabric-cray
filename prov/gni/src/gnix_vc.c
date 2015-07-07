@@ -923,7 +923,7 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 	vc_ptr->ep = ep_priv;
 	atomic_inc(&ep_priv->ref_cnt);
 	slist_init(&vc_ptr->tx_queue);
-	fastlock_init&vc_ptr->tx_queue_lock);
+	fastlock_init(&vc_ptr->tx_queue_lock);
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
 
 	/*
@@ -1290,7 +1290,7 @@ int _gnix_vc_queue_tx_req(struct gnix_fab_req *req)
 	fastlock_release(&vc->tx_queue_lock);
 
 	if (add_vc_to_wq)
-		ret = _gnix_vc_add_to_wq(vc);
+		rc = _gnix_vc_add_to_wq(vc);
 
 	/* TODO unlock VC */
 
