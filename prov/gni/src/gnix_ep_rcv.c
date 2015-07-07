@@ -127,8 +127,8 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 			_gnix_fr_free(ep, req);
 
 		} else
-			slist_insert_tail(&req->slist,
-					&ep->pending_recv_comp_queue);
+			gnix_slist_insert_tail(&req->slist,
+					       &ep->pending_recv_comp_queue);
 
 	} else {
 
@@ -153,8 +153,8 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 		req->modes = GNIX_FAB_RQ_M_UNEXPECTED | GNIX_FAB_RQ_M_COMPLETE;
 		req->type = GNIX_FAB_RQ_RECV;
 
-		slist_insert_tail(&req->slist,
-				  &ep->unexp_recv_queue);
+		gnix_slist_insert_tail(&req->slist,
+					&ep->unexp_recv_queue);
 	}
 
 err:

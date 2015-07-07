@@ -72,7 +72,7 @@ int _gnix_wait_set_add(struct fid_wait *wait, struct fid *wait_obj)
 
 	wait_entry->wait_obj = wait_obj;
 
-	slist_insert_tail(&wait_entry->entry, &wait_priv->set);
+	gnix_slist_insert_tail(&wait_entry->entry, &wait_priv->set);
 
 	return FI_SUCCESS;
 }

@@ -379,7 +379,7 @@ static int __create_slab(struct gnix_mbox_alloc_handle *handle)
 
 	slab->allocator = handle;
 
-	slist_insert_tail(&slab->list_entry, &handle->slab_list);
+	gnix_slist_insert_tail(&slab->list_entry, &handle->slab_list);
 
 	handle->last_offset += total_size;
 

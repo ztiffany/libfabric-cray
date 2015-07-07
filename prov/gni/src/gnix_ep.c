@@ -401,7 +401,7 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 
 			_gnix_fr_free(ep_priv, req);
 		} else {
-			slist_insert_tail(&req->slist,
+			gnix_slist_insert_tail(&req->slist,
 					&ep_priv->pending_recv_comp_queue);
 			sched_req = 1;
 		}
@@ -419,8 +419,8 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 		req->loc_addr = (uint64_t)buf;
 		req->type = GNIX_FAB_RQ_RECV;
 		req->user_context = context;
-		slist_insert_tail(&req->slist,
-				  &ep_priv->posted_recv_queue);
+		gnix_slist_insert_tail(&req->slist,
+				       &ep_priv->posted_recv_queue);
 	}
 
 err:
