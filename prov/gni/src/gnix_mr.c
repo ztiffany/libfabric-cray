@@ -302,6 +302,7 @@ void _gnix_convert_key_to_mhdl(
 	GNI_MEMHNDL_SET_NPAGES((*mhdl), GNI_MEMHNDL_NPGS_MASK);
 	GNI_MEMHNDL_SET_FLAGS((*mhdl), flags);
 	GNI_MEMHNDL_SET_PAGESIZE((*mhdl), GNIX_MR_PAGE_SHIFT);
+	compiler_barrier();
 	GNI_MEMHNDL_SET_CRC((*mhdl));
 }
 
