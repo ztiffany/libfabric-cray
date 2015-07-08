@@ -155,6 +155,10 @@ err:
 	return NULL;
 }
 
+/* Temporarily mark as unused to avoid build warnings. */
+static ssize_t gnix_eq_write_error(struct fid_eq*, fid_t, void*, uint64_t, int,
+				   int, void*, size_t) __attribute__((unused));
+
 static ssize_t gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
 				   void *context, uint64_t index, int err,
 				   int prov_errno, void *err_data,
@@ -198,7 +202,7 @@ static ssize_t gnix_eq_write_error(struct fid_eq *eq, fid_t fid,
 err:
 	fastlock_release(&eq_priv->lock);
 
-	return FI_SUCCESS;
+	return ret;
 }
 
 
