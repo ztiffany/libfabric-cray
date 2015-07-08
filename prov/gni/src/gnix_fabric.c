@@ -441,8 +441,5 @@ GNI_INI
 	if (getenv("GNIX_MAX_NICS") != NULL)
 		gnix_max_nics_per_ptag = atoi(getenv("GNIX_MAX_NICS"));
 
-	fprintf(stderr, "gnix_max_nics_per_ptag = %d\n",
-		gnix_max_nics_per_ptag);
-
 	return (provider);
 }
