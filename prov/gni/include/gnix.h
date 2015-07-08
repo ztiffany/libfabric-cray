@@ -102,6 +102,10 @@ extern "C" {
 #define INOUT
 #endif
 
+#ifndef compiler_barrier
+#define compiler_barrier() asm volatile ("" ::: "memory")
+#endif
+
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
  * refining (see fi_getinfo.3 man page)
