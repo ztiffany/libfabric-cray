@@ -31,6 +31,7 @@
  */
 
 #include <stdlib.h>
+#include "gnix.h"
 #include "gnix_queue.h"
 
 int _gnix_queue_create(struct gnix_queue **queue, alloc_func alloc_item,
@@ -122,11 +123,11 @@ struct slist_entry *_gnix_queue_dequeue_free(struct gnix_queue *queue)
 
 void _gnix_queue_enqueue(struct gnix_queue *queue, struct slist_entry *item)
 {
-	slist_insert_tail(item, &queue->item_list);
+	gnix_slist_insert_tail(item, &queue->item_list);
 }
 
 void _gnix_queue_enqueue_free(struct gnix_queue *queue,
 			      struct slist_entry *item)
 {
-	slist_insert_tail(item, &queue->free_list);
+	gnix_slist_insert_tail(item, &queue->free_list);
 }

@@ -182,6 +182,7 @@ _gnix_fr_alloc(struct gnix_fid_ep *ep)
 	if (ret == FI_SUCCESS) {
 		fr = container_of(se, struct gnix_fab_req, slist);
 		fr->gnix_ep = ep;
+		fr->slist.next = NULL;  /* slist stuff isn't too smart */
 	}
 
 	return fr;

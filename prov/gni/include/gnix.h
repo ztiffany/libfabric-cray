@@ -446,6 +446,13 @@ static inline void gnix_list_del_init(struct list_node *node)
 	node->prev = node->next = node;
 }
 
+static inline void gnix_slist_insert_tail(struct slist_entry *item,
+					  struct slist *list)
+{
+	item->next = NULL;
+	slist_insert_tail(item, list);
+}
+
 /*
  * prototypes for fi ops methods
  */
