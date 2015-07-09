@@ -569,6 +569,7 @@ static ssize_t gnix_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->len = len;
 	req->user_context = context;
 	req->vc = vc;
+	req->flags = ep_priv->op_flags;
 
 	return _gnix_vc_queue_tx_req(req);
 }
