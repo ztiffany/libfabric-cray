@@ -189,6 +189,7 @@ typedef struct gnix_mr_cache {
 	atomic_t inuse_elements;
 	atomic_t stale_elements;
 	struct dlist_entry lru_head;
+	fastlock_t lock;
 } gnix_mr_cache_t;
 
 /**

@@ -377,8 +377,12 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	}
 
 	/* call cache register op to retrieve the right entry */
+	fastlock_acquire(&domain->mr_cache.lock);
 	rc = __mr_cache_register(&domain->mr_cache, mr, domain, (uint64_t) buf,
 			len, NULL, fi_gnix_access, -1, &mr->mem_hndl);
+	fastlock_release(&domain->mr_cache.lock);
+
+	/* check retcode */
 	if (unlikely(rc != FI_SUCCESS))
 		goto err;
 
@@ -429,7 +433,11 @@ static int fi_gnix_mr_close(fid_t fid)
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	/* call cache deregister op */
+	fastlock_acquire(&mr->domain->mr_cache.lock);
 	ret = __mr_cache_deregister(&mr->domain->mr_cache, mr);
+	fastlock_release(&mr->domain->mr_cache.lock);
+
+	/* check retcode */
 	if (likely(ret == FI_SUCCESS)) {
 		/* release references to the domain and nic */
 		atomic_dec(&mr->domain->ref_cnt);
@@ -512,6 +520,8 @@ int _gnix_mr_cache_init(
 	if (cache->state == GNIX_MRC_STATE_UNINITIALIZED) {
 		atomic_initialize(&cache->inuse_elements, 0);
 		atomic_initialize(&cache->stale_elements, 0);
+
+		fastlock_init(&cache->lock);
 	}
 
 	cache->state = GNIX_MRC_STATE_READY;
