@@ -227,8 +227,6 @@ static int __comp_eager_msg_w_data(void *data)
 		ret = (int)cq_len; /* ugh */
 	}
 
-	ret = _gnix_nic_tx_free(ep->nic, tdesc);
-
 	return ret;
 
 }
