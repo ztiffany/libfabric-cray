@@ -227,8 +227,6 @@ static int __comp_eager_msg_w_data(void *data)
 		ret = (int)cq_len; /* ugh */
 	}
 
-	ret = _gnix_nic_tx_free(ep->nic, tdesc);
-
 	return ret;
 
 }
@@ -571,6 +569,7 @@ static ssize_t gnix_ep_send(struct fid_ep *ep, const void *buf, size_t len,
 	req->len = len;
 	req->user_context = context;
 	req->vc = vc;
+	req->flags = ep_priv->op_flags;
 
 	return _gnix_vc_queue_tx_req(req);
 }
