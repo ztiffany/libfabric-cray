@@ -77,6 +77,7 @@ struct gnix_fid_wait {
 int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 		   struct fid_wait **waitset);
 int gnix_wait_close(struct fid *wait);
+int gnix_wait_wait(struct fid_wait *wait, int timeout);
 
 /*
  * Exposed internal functions.

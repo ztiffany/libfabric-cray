@@ -208,9 +208,56 @@ int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic)
  ******************************************************************************/
 
 static int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
-			  int timeout)
+			int timeout)
 {
-	return -FI_ENOSYS;
+	struct gnix_fid_cntr *cntr_priv;
+	struct timespec ts0, ts;
+	int msec_passed = 0;
+	int ret = 0;
+
+	cntr_priv = container_of(cntr, struct gnix_fid_cntr, cntr_fid);
+
+	clock_gettime(CLOCK_REALTIME, &ts0);
+
+	while (atomic_get(&cntr_priv->cnt) < threshold) {
+		if (cntr_priv->wait) {
+			ret = gnix_wait_wait((struct fid_wait *)cntr_priv->wait,
+					     timeout - msec_passed);
+			if (ret == -FI_ETIMEDOUT)
+				break;
+			if (ret) {
+				GNIX_WARN(FI_LOG_CQ,
+					" gnix_wait_wait returned %d.\n",
+					  ret);
+				break;
+			}
+		} else {
+			ret = __gnix_cntr_progress(cntr_priv);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_CQ,
+					" __gnix_cntr_progress returned %d.\n",
+					  ret);
+				break;
+			}
+		}
+
+		if (atomic_get(&cntr_priv->cnt) >= threshold)
+			break;
+
+		if (timeout < 0)
+			continue;
+
+		clock_gettime(CLOCK_REALTIME, &ts);
+		msec_passed = (ts.tv_sec - ts0.tv_sec) * 1000 +
+			      (ts.tv_nsec - ts0.tv_nsec) / 1000000;
+
+		if (msec_passed >= timeout) {
+			ret = -FI_ETIMEDOUT;
+			break;
+		}
+	}
+
+	return ret;
 }
 
 static int gnix_cntr_close(fid_t fid)
@@ -219,7 +266,7 @@ static int gnix_cntr_close(fid_t fid)
 
 	GNIX_TRACE(FI_LOG_CQ, "\n");
 
-	cntr = container_of(fid, struct gnix_fid_cntr, cntr_fid);
+	cntr = container_of(fid, struct gnix_fid_cntr, cntr_fid.fid);
 	if (atomic_get(&cntr->ref_cnt) != 0) {
 		GNIX_INFO(FI_LOG_CQ, "CNTR ref count: %d, not closing.\n",
 			  cntr->ref_cnt);
