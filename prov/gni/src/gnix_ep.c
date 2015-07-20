@@ -199,8 +199,10 @@ static int __comp_eager_msg_w_data(void *data)
 	struct gnix_fid_cq *cq;
 	struct fi_context *user_context;
 	ssize_t cq_len;
+	struct gnix_fab_req *req;
 
 	tdesc = (struct gnix_tx_descriptor *)data;
+	req = tdesc->desc.req;
 
 	ep = tdesc->desc.ep;
 	assert(ep != NULL);
@@ -208,8 +210,8 @@ static int __comp_eager_msg_w_data(void *data)
 	cq = ep->send_cq;
 	assert(cq != NULL);
 
-	if (tdesc->desc.req != NULL)
-		user_context = tdesc->desc.req->user_context;
+	if (req != NULL)
+		user_context = req->user_context;
 	else
 		user_context = tdesc->desc.context;
 
@@ -226,6 +228,13 @@ static int __comp_eager_msg_w_data(void *data)
 			   cq_len);
 		ret = (int)cq_len; /* ugh */
 	}
+
+	/* We could have requests waiting for TXDs or FI_FENCE operations.  Try
+	 * to push the queue now. */
+	atomic_dec(&req->vc->outstanding_tx_reqs);
+	_gnix_vc_push_tx_reqs(req->vc);
+
+	_gnix_fr_free(ep, req);
 
 	return ret;
 
