@@ -48,6 +48,7 @@
 #include "gnix_hashtable.h"
 #include "gnix_vc.h"
 #include "gnix_rma.h"
+#include "gnix_cntr.h"
 
 
 /*******************************************************************************
@@ -229,6 +230,14 @@ static int __comp_eager_msg_w_data(void *data)
 		ret = (int)cq_len; /* ugh */
 	}
 
+	if (ep->send_cntr) {
+		ret = _gnix_cntr_inc(ep->send_cntr);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_CQ,
+			  "_gnix_cntr_inc returned %d\n",
+			   ret);
+	}
+
 	/* We could have requests waiting for TXDs or FI_FENCE operations.  Try
 	 * to push the queue now. */
 	atomic_dec(&req->vc->outstanding_tx_reqs);
@@ -404,6 +413,13 @@ static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 					  "_gnix_cq_add_event returned %d\n",
 					   cq_len);
 				ret = (int)cq_len; /* ugh */
+			}
+
+			if (ep_priv->recv_cntr) {
+				ret = _gnix_cntr_inc(ep_priv->recv_cntr);
+				if (ret != FI_SUCCESS)
+					GNIX_WARN(FI_LOG_CQ,
+					  "_gnix_cntr_inc() failed: %d\n", ret);
 			}
 
 			_gnix_fr_free(ep_priv, req);
@@ -1083,6 +1099,26 @@ static int gnix_ep_close(fid_t fid)
 		atomic_dec(&ep->recv_cq->ref_cnt);
 	}
 
+	if (ep->send_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->send_cntr, ep->nic);
+		atomic_dec(&ep->send_cntr->ref_cnt);
+	}
+
+	if (ep->recv_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->recv_cntr, ep->nic);
+		atomic_dec(&ep->recv_cntr->ref_cnt);
+	}
+
+	if (ep->read_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->read_cntr, ep->nic);
+		atomic_dec(&ep->read_cntr->ref_cnt);
+	}
+
+	if (ep->write_cntr) {
+		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
+		atomic_dec(&ep->write_cntr->ref_cnt);
+	}
+
 	domain = ep->domain;
 	assert(domain != NULL);
 	atomic_dec(&domain->ref_cnt);
@@ -1168,6 +1204,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_ep  *ep;
 	struct gnix_fid_av  *av;
 	struct gnix_fid_cq  *cq;
+	struct gnix_fid_cntr *cntr;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1227,8 +1264,69 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		ep->av = av;
 		atomic_inc(&av->ref_cnt);
 		break;
-	case FI_CLASS_MR:/*TODO: got to figure this one out */
 	case FI_CLASS_CNTR: /* TODO: need to support cntrs someday */
+		cntr = container_of(bfid, struct gnix_fid_cntr, cntr_fid.fid);
+		if (ep->domain != cntr->domain) {
+			ret = -FI_EINVAL;
+			break;
+		}
+
+		if (flags & FI_SEND) {
+			/* don't allow rebinding */
+			if (ep->send_cntr) {
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->send_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			atomic_inc(&cntr->ref_cnt);
+		}
+
+		if (flags & FI_RECV) {
+			/* don't allow rebinding */
+			if (ep->recv_cntr) {
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->recv_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			atomic_inc(&cntr->ref_cnt);
+		}
+
+		if (flags & FI_READ) {
+			/* don't allow rebinding */
+			if (ep->read_cntr) {
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->read_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			atomic_inc(&cntr->ref_cnt);
+		}
+
+		if (flags & FI_WRITE) {
+			/* don't allow rebinding */
+			if (ep->write_cntr) {
+				ret = -FI_EINVAL;
+				break;
+			}
+			ep->write_cntr = cntr;
+			_gnix_cntr_poll_nic_add(cntr, ep->nic);
+			atomic_inc(&cntr->ref_cnt);
+		}
+
+		/* TODO: don't support this option right now,
+		   never should have gotten here since gni provider
+		   doesn't claim cap FI_RMA_EVENT.  This
+		   option could be supported via Aries atomics
+		   or using SMSG cntrl messages */
+
+		if ((flags & FI_REMOTE_WRITE) ||
+			(flags & FI_REMOTE_READ))
+			ret = -FI_ENOSYS;
+		break;
+
+	case FI_CLASS_MR:/*TODO: got to figure this one out */
 	default:
 		ret = -FI_ENOSYS;
 		break;

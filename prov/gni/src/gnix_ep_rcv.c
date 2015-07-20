@@ -45,6 +45,7 @@
 #include "gnix_vc.h"
 #include "gnix_ep.h"
 #include "gnix_hashtable.h"
+#include "gnix_cntr.h"
 
 /*******************************************************************************
  * Helper functions used for handling receipt of messages on GNIX EPs
@@ -124,6 +125,14 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 					   cq_len);
 				ret = (int)cq_len; /* ugh */
 			}
+
+			if (ep->recv_cntr) {
+				ret = _gnix_cntr_inc(ep->recv_cntr);
+				if (ret != FI_SUCCESS)
+					GNIX_WARN(FI_LOG_CQ,
+					  "_gnix_cntr_inc() failed: %d\n", ret);
+			}
+
 			_gnix_fr_free(ep, req);
 
 		} else

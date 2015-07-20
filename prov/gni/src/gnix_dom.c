@@ -278,8 +278,7 @@ static struct fi_ops_domain gnix_domain_ops = {
 	.av_open = gnix_av_open,
 	.cq_open = gnix_cq_open,
 	.endpoint = gnix_ep_open,
-	/* TODO: no cntrs for now in gnix */
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = gnix_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context
