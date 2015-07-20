@@ -1115,7 +1115,7 @@ static int gnix_ep_close(fid_t fid)
 	}
 
 	if (ep->write_cntr) {
-		_gnix_cntr_poll_nic_rem(ep->read_cntr, ep->nic);
+		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
 		atomic_dec(&ep->write_cntr->ref_cnt);
 	}
 

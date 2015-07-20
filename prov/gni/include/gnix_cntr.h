@@ -42,7 +42,7 @@ extern "C" {
 #include "gnix.h"
 #include "gnix_wait.h"
 
-/* many to many relationship between CQs and polled NICs */
+/* many to many relationship between counters and polled NICs */
 struct gnix_cntr_poll_nic {
 	struct dlist_entry list;
 	int ref_cnt;
