@@ -206,11 +206,9 @@ void _gnix_convert_key_to_mhdl(
  * @brief Converts a gni memory handle to a libfabric key
  *
  * @param[in]     mhdl  gni memory handle
- * @param[in,out] key   libfabric memory region key
+ * @return              fi_mr_key to be used by remote EPs.
  */
-void _gnix_convert_mhdl_to_key(
-		gni_mem_handle_t *mhdl,
-		gnix_mr_key_t    *key);
+uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl);
 
 /**
  * @brief Initializes a gnix memory registration cache
