@@ -243,7 +243,7 @@ static int gnix_wait_control(struct fid *wait, int command, void *arg)
 	}
 }
 
-static int gnix_wait_wait(struct fid_wait *wait, int timeout)
+int gnix_wait_wait(struct fid_wait *wait, int timeout)
 {
 	return -FI_ENOSYS;
 }

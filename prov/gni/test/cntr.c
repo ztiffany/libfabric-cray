@@ -353,6 +353,50 @@ Test(cntr, write)
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
+static void do_write_wait(int len)
+{
+	uint64_t old_w_cnt, new_w_cnt;
+	uint64_t old_r_cnt, new_r_cnt;
+	ssize_t sz;
+	const int iters = 1;
+	int i;
+
+	init_data(source, len, 0xab);
+	init_data(target, len, 0);
+
+	old_w_cnt = fi_cntr_read(write_cntr);
+	cr_assert(old_w_cnt >= 0);
+
+	old_r_cnt = fi_cntr_read(read_cntr);
+	cr_assert(old_r_cnt >= 0);
+
+	for (i = 0; i < iters; i++) {
+		sz = fi_write(ep[0], source, len,
+			      loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			      target);
+		cr_assert_eq(sz, 0);
+	}
+
+	fi_cntr_wait(write_cntr, old_w_cnt+iters, -1);
+	new_w_cnt = fi_cntr_read(write_cntr);
+	cr_assert(old_w_cnt + iters == new_w_cnt);
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+
+	new_r_cnt = fi_cntr_read(read_cntr);
+	cr_assert(new_r_cnt >= 0);
+
+	/*
+	 * no fi_read called so old and new read cnts should be equal
+	 */
+	cr_assert(new_r_cnt == old_r_cnt);
+}
+
+Test(cntr, write_wait)
+{
+	xfer_for_each_size(do_write_wait, 8, BUF_SZ);
+}
+
 static void do_read(int len)
 {
 	ssize_t sz;
@@ -393,10 +437,53 @@ static void do_read(int len)
 	cr_assert(new_w_cnt == old_w_cnt);
 }
 
+static void do_read_wait(int len)
+{
+	int i, iters = 10;
+	ssize_t sz;
+	uint64_t old_w_cnt, new_w_cnt;
+	uint64_t old_r_cnt;
+
+#define READ_CTX 0x4e3dda1aULL
+	init_data(source, len, 0);
+	init_data(target, len, 0xad);
+
+	old_w_cnt = fi_cntr_read(write_cntr);
+	cr_assert(old_w_cnt >= 0);
+
+	old_r_cnt = fi_cntr_read(read_cntr);
+	cr_assert(old_r_cnt >= 0);
+
+	for (i = 0; i < iters; i++) {
+		sz = fi_read(ep[0], source, len,
+				loc_mr, gni_addr[1], (uint64_t)target,
+				mr_key, (void *)READ_CTX);
+		cr_assert_eq(sz, 0);
+	}
+
+	fi_cntr_wait(read_cntr, old_r_cnt + iters, -1);
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+
+	new_w_cnt = fi_cntr_read(write_cntr);
+	cr_assert(new_w_cnt >= 0);
+
+	/*
+	 * no fi_read called so old and new read cnts should be equal
+	 */
+	cr_assert(new_w_cnt == old_w_cnt);
+}
+
 Test(cntr, read)
 {
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
+
+Test(cntr, read_wait)
+{
+	xfer_for_each_size(do_read_wait, 8, BUF_SZ);
+}
+
 
 Test(cntr, send_recv)
 {
