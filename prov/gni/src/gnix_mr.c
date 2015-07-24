@@ -310,17 +310,18 @@ void _gnix_convert_key_to_mhdl(
 	GNI_MEMHNDL_SET_CRC((*mhdl));
 }
 
-void _gnix_convert_mhdl_to_key(
-		gni_mem_handle_t *mhdl,
-		gnix_mr_key_t *key)
+uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl)
 {
-	key->pfn = GNI_MEMHNDL_GET_VA((*mhdl)) >> GNIX_MR_PAGE_SHIFT;
-	key->mdd = GNI_MEMHNDL_GET_MDH((*mhdl));
+	gnix_mr_key_t key = {{{{0}}}};
+	key.pfn = GNI_MEMHNDL_GET_VA((*mhdl)) >> GNIX_MR_PAGE_SHIFT;
+	key.mdd = GNI_MEMHNDL_GET_MDH((*mhdl));
 	//key->format = GNI_MEMHNDL_NEW_FRMT((*mhdl));
-	key->flags = 0;
+	key.flags = 0;
 
 	if (GNI_MEMHNDL_GET_FLAGS((*mhdl)) & GNI_MEMHNDL_FLAG_READONLY)
-		key->flags |= GNIX_MR_FLAG_READONLY;
+		key.flags |= GNIX_MR_FLAG_READONLY;
+
+	return key.value;
 }
 
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
@@ -332,6 +333,8 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	int rc;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	/* Flags are reserved for future use and must be 0. */
 	if (unlikely(flags))
@@ -399,8 +402,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	atomic_inc(&mr->nic->ref_cnt); /* take reference on nic */
 
 	/* setup internal key structure */
-	_gnix_convert_mhdl_to_key(&mr->mem_hndl,
-			(gnix_mr_key_t *) &mr->mr_fid.key);
+	mr->mr_fid.key = _gnix_convert_mhdl_to_key(&mr->mem_hndl);
 
 	/* set up mr_o out pointer */
 	*mr_o = &mr->mr_fid;
@@ -426,6 +428,8 @@ static int fi_gnix_mr_close(fid_t fid)
 {
 	struct gnix_fid_mem_desc *mr;
 	gni_return_t ret;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	if (unlikely(fid->fclass != FI_CLASS_MR))
 		return -FI_EINVAL;
@@ -475,6 +479,8 @@ int _gnix_mr_cache_init(
 		gnix_mr_cache_attr_t *attr)
 {
 	gnix_mr_cache_attr_t *cache_attr = &__default_mr_cache_attr;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	/* ensure we have a relatively clean pointer */
 	if (!cache || cache->state == GNIX_MRC_STATE_READY ||
@@ -534,6 +540,8 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 	if (cache->state != GNIX_MRC_STATE_READY)
 		return -FI_EINVAL;
 
+	GNIX_TRACE(FI_LOG_MR, "\n");
+
 	/*
 	 * Remove all of the stale entries from the cache
 	 */
@@ -568,6 +576,8 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 	RbtIterator iter;
 	gnix_mr_cache_entry_t *entry;
 	int destroyed = 0;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	GNIX_INFO(FI_LOG_MR, "starting flush on memory registration cache\n");
 
@@ -661,6 +671,8 @@ static int __mr_cache_register(
 	gnix_mr_cache_entry_t *entry;
 	struct gnix_nic *nic;
 	gni_return_t grc = GNI_RC_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	/* build key for searching */
 	key.address = address;
@@ -814,6 +826,8 @@ static int __mr_cache_deregister(
 	gnix_mr_cache_key_t *e_key;
 	gnix_mr_cache_entry_t *entry;
 	gni_return_t grc;
+
+	GNIX_TRACE(FI_LOG_MR, "\n");
 
 	/* check to see if we can find the entry so that we can drop the
 	 *   held reference
