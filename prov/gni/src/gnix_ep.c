@@ -204,143 +204,17 @@ struct fi_ops_tagged gnix_ep_tagged_ops;
 static ssize_t gnix_ep_recv(struct fid_ep *ep, void *buf, size_t len,
 			    void *desc, fi_addr_t src_addr, void *context)
 {
-	int ret = FI_SUCCESS;
-	int sched_req = 0;
 	struct gnix_fid_ep *ep_priv;
-	struct gnix_fid_cq *cq;
-	struct gnix_fid_av *av;
-	struct slist_entry *item;
-	struct slist *list;
-	struct gnix_fab_req *req = NULL;
-	int matched = 0;
-	ssize_t cq_len;
-	struct gnix_address *addr_ptr = NULL;
+
+	if (!ep) {
+		return -FI_EINVAL;
+	}
 
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
-	if (unlikely((ep_priv->type != FI_EP_RDM) &&
-				(ep_priv->type != FI_EP_MSG)))
-		return -FI_EINVAL;
+	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
 
-	if (ep_priv->type == FI_EP_RDM) {
-		av = ep_priv->av;
-		assert(av != NULL);
-		if (av->type == FI_AV_TABLE) {
-			/*
-			 * TODO: look up gni address -
-			 *        just return no support for now
-			 */
-			return -FI_ENOSYS;
-		} else
-			addr_ptr = (struct gnix_address *)&src_addr;
-	} else {
-		addr_ptr = (struct gnix_address *)&src_addr;
-	}
-
-	assert(addr_ptr != NULL);
-
-	/*
-	 * if type FI_EP_RDM, search unexpected on this ep to see if we
-	 * already have a match. For FI_EP_MSG, just take first element
-	 * of the unexpected list.
-	 */
-
-	list = &ep_priv->unexp_recv_queue;
-	fastlock_acquire(&ep_priv->recv_queue_lock);
-
-	if (ep_priv->type == FI_EP_RDM) {
-
-		item = slist_remove_first_match(&ep_priv->unexp_recv_queue,
-						__msg_match_fab_req,
-						(const void *)addr_ptr);
-		if (item != NULL) {
-			req = container_of(item, struct gnix_fab_req, slist);
-			req->modes |= GNIX_FAB_RQ_M_MATCHED;
-			matched = 1;
-		}
-
-	} else if (ep_priv->type == FI_EP_MSG) {
-
-		item = slist_remove_head(list);
-		if (item) {
-			req = container_of(item, struct gnix_fab_req, slist);
-			req->modes |= GNIX_FAB_RQ_M_MATCHED;
-			matched = 1;
-		}
-	}
-
-	if (matched) {
-
-		if (req->modes & GNIX_FAB_RQ_M_COMPLETE) {
-			memcpy(buf, (void *)req->loc_addr, MIN(req->len, len));
-			free((void *)req->loc_addr);
-			req->loc_addr = 0UL;
-		}
-
-		cq = ep_priv->recv_cq;
-		assert(cq != NULL);
-
-		if (slist_empty(&ep_priv->pending_recv_comp_queue) &&
-			(req->modes & GNIX_FAB_RQ_M_COMPLETE)) {
-
-			/*
-			 * TODO: eventually need to deal with
-			 * FI_SELECTIVE_COMPLETION
-			 */
-			cq_len = _gnix_cq_add_event(cq,
-						    context,
-						    req->cq_flags |
-							FI_RECV | FI_MSG,
-						    MIN(req->len, len),
-						    buf,
-						    req->imm,
-						    0);
-			if (cq_len != FI_SUCCESS)  {
-				GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
-					  "_gnix_cq_add_event returned %d\n",
-					   cq_len);
-				ret = (int)cq_len; /* ugh */
-			}
-
-			if (ep_priv->recv_cntr) {
-				ret = _gnix_cntr_inc(ep_priv->recv_cntr);
-				if (ret != FI_SUCCESS)
-					GNIX_WARN(FI_LOG_CQ,
-					  "_gnix_cntr_inc() failed: %d\n", ret);
-			}
-
-			_gnix_fr_free(ep_priv, req);
-		} else {
-			gnix_slist_insert_tail(&req->slist,
-					&ep_priv->pending_recv_comp_queue);
-			sched_req = 1;
-		}
-
-	} else {
-
-		req = _gnix_fr_alloc(ep_priv);
-		if (req == NULL) {
-			ret = -FI_EAGAIN;
-			goto err;
-		}
-
-		req->addr = *addr_ptr;
-		req->len = len;
-		req->loc_addr = (uint64_t)buf;
-		req->type = GNIX_FAB_RQ_RECV;
-		req->user_context = context;
-		gnix_slist_insert_tail(&req->slist,
-				       &ep_priv->posted_recv_queue);
-	}
-
-err:
-	fastlock_release(&ep_priv->recv_queue_lock);
-	if (sched_req) {
-		/*
-		 * TODO: schedule completion of req if not completed
-		 */
-	}
-
-	return ret;
+	return _gnix_recv(ep_priv, (uint64_t)buf, len, desc, src_addr, context,
+			  ep_priv->op_flags, 0, 0);
 }
 
 static ssize_t gnix_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
@@ -349,10 +223,16 @@ static ssize_t gnix_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 {
 	struct gnix_fid_ep *ep_priv;
 
+	if (!ep || !iov || count != 1) {
+		return -FI_EINVAL;
+	}
+
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
 
-	return -FI_ENOSYS;
+	return _gnix_recv(ep_priv, (uint64_t)iov[0].iov_base, iov[0].iov_len,
+			  desc ? desc[0] : NULL, src_addr, context,
+			  ep_priv->op_flags, 0, 0);
 }
 
 static ssize_t gnix_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
@@ -360,10 +240,17 @@ static ssize_t gnix_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 {
 	struct gnix_fid_ep *ep_priv;
 
+	if (!ep || !msg || !msg->msg_iov || msg->iov_count != 1) {
+		return -FI_EINVAL;
+	}
+
 	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((ep_priv->type == FI_EP_RDM) || (ep_priv->type == FI_EP_MSG));
 
-	return -FI_ENOSYS;
+	return _gnix_recv(ep_priv, (uint64_t)msg->msg_iov[0].iov_base,
+			  msg->msg_iov[0].iov_len,
+			  msg->desc ? msg->desc[0] : NULL,
+			  msg->addr, msg->context, flags, 0, 0);
 }
 
 ssize_t gnix_ep_send(struct fid_ep *ep, const void *buf, size_t len,
@@ -437,8 +324,9 @@ static ssize_t gnix_ep_msg_inject(struct fid_ep *ep, const void *buf,
 			  NULL, flags, 0);
 }
 
-ssize_t gnix_ep_senddata(struct fid_ep *ep, void *buf, size_t len, void *desc,
-			 uint64_t data, fi_addr_t dest_addr, void *context)
+ssize_t gnix_ep_senddata(struct fid_ep *ep, const void *buf, size_t len,
+			 void *desc, uint64_t data, fi_addr_t dest_addr,
+			 void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
 	uint64_t flags;

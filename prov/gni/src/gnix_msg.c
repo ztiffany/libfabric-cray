@@ -94,15 +94,15 @@ static int __comp_eager_msg_w_data(void *data)
 			   ret);
 	}
 
-	/* We could have requests waiting for TXDs or FI_FENCE operations.  Try
-	 * to push the queue now. */
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-	_gnix_vc_push_tx_reqs(req->vc);
+
+	/* We could have requests waiting for TXDs or FI_FENCE operations.
+	 * Schedule this VC to push any such TXs. */
+	_gnix_vc_schedule_tx(req->vc);
 
 	_gnix_fr_free(ep, req);
 
 	return ret;
-
 }
 
 static int __comp_eager_msg_w_data_ack(void *data)
@@ -157,6 +157,274 @@ smsg_completer_fn_t gnix_ep_smsg_completers[] = {
 	[GNIX_SMSG_T_RNDZV_RDONE] = __comp_rndzv_msg_recv_done
 };
 
+/*******************************************************************************
+ * Generic EP recv handling
+ ******************************************************************************/
+
+/* TODO: this function is somewhat of a placeholder till all of the
+ * message pathways are coded. */
+int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
+				   struct gnix_address addr, size_t len,
+				   uint64_t imm, uint64_t sflags)
+{
+	int matched = 0, ret = FI_SUCCESS;
+	struct slist_entry *item = NULL;
+	struct gnix_fab_req *req;
+	struct gnix_fid_cq *cq;
+	ssize_t cq_len;
+	uint64_t flags;
+	struct gnix_address *addr_ptr;
+
+	flags = (sflags & FI_REMOTE_CQ_DATA) ? FI_REMOTE_CQ_DATA : 0;
+
+	/*
+	 * we have to keep this lock till either we find a match
+	 * or we add the request to the tail of the unexpected queue
+	 */
+
+	addr_ptr = (struct gnix_address *)&addr;
+	fastlock_acquire(&ep->recv_queue_lock);
+
+	item = slist_remove_first_match(&ep->posted_recv_queue,
+					__msg_match_fab_req,
+					(const void *)addr_ptr);
+	if (item) {
+		req = container_of(item, struct gnix_fab_req, slist);
+		memcpy((void *)req->loc_addr, msg, MIN(req->len, len));
+		req->addr = addr;
+		req->imm = imm;
+		req->len = MIN(req->len, len);
+		req->modes |= (GNIX_FAB_RQ_M_MATCHED |
+					GNIX_FAB_RQ_M_COMPLETE);
+		matched = 1;
+	}
+
+	/*
+	 * post to cq and free fab req, otherwise put on unexpected queue
+	 */
+
+	if (matched) {
+
+		cq = ep->recv_cq;
+		assert(cq != NULL);
+
+		/*
+		 * if no previously posted receives that are pending
+		 * completion, we can go ahead and post CQ to
+		 * libfabric cq for this ep.  This check is required
+		 * to make sure the SAS ordering GNI provider promises
+		 * actually is obeyed on the receiving end.
+		 */
+
+		if (slist_empty(&ep->pending_recv_comp_queue)) {
+
+			/*
+			 * TODO: eventually need to deal with
+			 * FI_SELECTIVE_COMPLETION
+			 */
+			cq_len = _gnix_cq_add_event(cq,
+						    req->user_context,
+						    flags | FI_RECV | FI_MSG,
+						    req->len,
+						    (void *)req->loc_addr,
+						    req->imm,
+						    0);
+			if (cq_len != FI_SUCCESS)  {
+				GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+					  "_gnix_cq_add_event returned %d\n",
+					   cq_len);
+				ret = (int)cq_len; /* ugh */
+			}
+
+			if (ep->recv_cntr) {
+				ret = _gnix_cntr_inc(ep->recv_cntr);
+				if (ret != FI_SUCCESS)
+					GNIX_WARN(FI_LOG_CQ,
+					  "_gnix_cntr_inc() failed: %d\n", ret);
+			}
+
+			_gnix_fr_free(ep, req);
+
+		} else
+			gnix_slist_insert_tail(&req->slist,
+					       &ep->pending_recv_comp_queue);
+
+	} else {
+
+		req = _gnix_fr_alloc(ep);
+		if (req == NULL) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		req->loc_addr = (uint64_t)malloc(len);
+		if (req->loc_addr == 0UL) {
+			_gnix_fr_free(ep, req);
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		memcpy((void *)req->loc_addr, msg, len);
+		req->addr = addr;
+		req->imm = imm;
+		req->len = len;
+		req->cq_flags = flags;
+		req->modes = GNIX_FAB_RQ_M_UNEXPECTED | GNIX_FAB_RQ_M_COMPLETE;
+		req->type = GNIX_FAB_RQ_RECV;
+
+		gnix_slist_insert_tail(&req->slist,
+					&ep->unexp_recv_queue);
+	}
+
+err:
+	fastlock_release(&ep->recv_queue_lock);
+	return ret;
+}
+
+static struct gnix_fab_req *__gnix_recv_match(struct gnix_fid_ep *ep,
+					      struct gnix_address *addr,
+					      uint64_t flags, uint64_t tag,
+					      uint64_t ignore)
+{
+	struct gnix_fab_req *req = NULL;
+	struct slist_entry *item;
+
+	if (flags & GNIX_MSG_TAGGED) {
+		/* TODO */
+		assert(0);
+	} else if (ep->type == FI_EP_RDM) {
+		/* Search the EP's unexpected list for a match. */
+		item = slist_remove_first_match(&ep->unexp_recv_queue,
+						__msg_match_fab_req,
+						addr);
+		if (item) {
+			req = container_of(item, struct gnix_fab_req, slist);
+			req->modes |= GNIX_FAB_RQ_M_MATCHED;
+		}
+	} else if (ep->type == FI_EP_MSG) {
+		/* Take the first element off of the unexpected list. */
+		item = slist_remove_head(&ep->unexp_recv_queue);
+		if (item) {
+			req = container_of(item, struct gnix_fab_req, slist);
+			req->modes |= GNIX_FAB_RQ_M_MATCHED;
+		}
+	}
+
+	return req;
+}
+
+ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
+		   uint64_t src_addr, void *context, uint64_t flags,
+		   uint64_t tag, uint64_t ignore)
+{
+	int ret = FI_SUCCESS;
+	int sched_req = 0;
+	struct gnix_fid_cq *cq;
+	struct gnix_fid_av *av;
+	struct gnix_fab_req *req = NULL;
+	ssize_t cq_len;
+	struct gnix_address *addr_ptr = NULL;
+
+	/* TODO make generic address lookup function */
+	/* TODO ignore src_addr unless FI_DIRECT_RECV */
+	if (ep->type == FI_EP_RDM) {
+		av = ep->av;
+		assert(av != NULL);
+		if (av->type == FI_AV_TABLE) {
+			/*
+			 * TODO: look up gni address -
+			 *        just return no support for now
+			 */
+			return -FI_ENOSYS;
+		} else
+			addr_ptr = (struct gnix_address *)&src_addr;
+	} else {
+		addr_ptr = (struct gnix_address *)&src_addr;
+	}
+	assert(addr_ptr != NULL);
+
+	fastlock_acquire(&ep->recv_queue_lock);
+	req = __gnix_recv_match(ep, addr_ptr, flags, tag, ignore);
+
+	if (req) {
+		if (req->modes & GNIX_FAB_RQ_M_COMPLETE) {
+			memcpy((void *)buf, (void *)req->loc_addr,
+			       MIN(req->len, len));
+			free((void *)req->loc_addr);
+			req->loc_addr = 0UL;
+		}
+
+		cq = ep->recv_cq;
+		assert(cq != NULL);
+
+		if (slist_empty(&ep->pending_recv_comp_queue) &&
+			(req->modes & GNIX_FAB_RQ_M_COMPLETE)) {
+
+			/*
+			 * TODO: eventually need to deal with
+			 * FI_SELECTIVE_COMPLETION
+			 */
+			cq_len = _gnix_cq_add_event(cq,
+						    context,
+						    req->cq_flags |
+							FI_RECV | FI_MSG,
+						    MIN(req->len, len),
+						    (void *)buf,
+						    req->imm,
+						    0);
+			if (cq_len != FI_SUCCESS)  {
+				GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+					  "_gnix_cq_add_event returned %d\n",
+					   cq_len);
+				ret = (int)cq_len; /* ugh */
+			}
+
+			if (ep->recv_cntr) {
+				ret = _gnix_cntr_inc(ep->recv_cntr);
+				if (ret != FI_SUCCESS)
+					GNIX_WARN(FI_LOG_CQ,
+					  "_gnix_cntr_inc() failed: %d\n", ret);
+			}
+
+			_gnix_fr_free(ep, req);
+		} else {
+			gnix_slist_insert_tail(&req->slist,
+					&ep->pending_recv_comp_queue);
+			sched_req = 1;
+		}
+
+	} else {
+
+		req = _gnix_fr_alloc(ep);
+		if (req == NULL) {
+			ret = -FI_EAGAIN;
+			goto err;
+		}
+
+		req->addr = *addr_ptr;
+		req->len = len;
+		req->loc_addr = (uint64_t)buf;
+		req->type = GNIX_FAB_RQ_RECV;
+		req->user_context = context;
+		gnix_slist_insert_tail(&req->slist,
+				       &ep->posted_recv_queue);
+	}
+
+err:
+	fastlock_release(&ep->recv_queue_lock);
+	if (sched_req) {
+		/*
+		 * TODO: schedule completion of req if not completed
+		 */
+	}
+
+	return ret;
+}
+
+/*******************************************************************************
+ * Generic EP send handling
+ ******************************************************************************/
+
 static int _gnix_send_req(void *data)
 {
 	struct gnix_fab_req *req = (struct gnix_fab_req *)data;
@@ -165,7 +433,7 @@ static int _gnix_send_req(void *data)
 	struct gnix_tx_descriptor *tdesc;
 	gni_return_t status;
 	int rc;
-	int rendevous = !!(req->flags & GNIX_MSG_RENDEVOUS);
+	int rendezvous = !!(req->flags & GNIX_MSG_RENDEZVOUS);
 	int len;
 
 	ep = req->gnix_ep;
@@ -187,7 +455,7 @@ static int _gnix_send_req(void *data)
 	tdesc->desc.completer_fn =
 			gnix_ep_smsg_completers[GNIX_SMSG_T_EGR_W_DATA];
 
-	if (rendevous) {
+	if (rendezvous) {
 		/* Fill SMSG header with local buffer info. */
 
 		len = 0;
@@ -225,7 +493,7 @@ static int _gnix_send_req(void *data)
 	return gnixu_to_fi_errno(status);
 }
 
-#define GNIX_MSG_RENDEVOUS_THRESH (16*1024)
+#define GNIX_MSG_RENDEZVOUS_THRESH (16*1024)
 
 ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		   void *mdesc, uint64_t dest_addr, void *context,
@@ -235,7 +503,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	struct gnix_vc *vc = NULL;
 	struct gnix_fab_req *req;
 	struct gnix_fid_mem_desc *md = NULL;
-	int rendevous;
+	int rendezvous;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -248,10 +516,10 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		return -FI_EINVAL;
 	}
 
-	rendevous = len >= GNIX_MSG_RENDEVOUS_THRESH;
+	rendezvous = len >= GNIX_MSG_RENDEZVOUS_THRESH;
 
 	/* need a memory descriptor for large sends */
-	if (rendevous && !mdesc) {
+	if (rendezvous && !mdesc) {
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "Send of length %d requires memory descriptor\n",
 			  len);
@@ -288,8 +556,8 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		req->loc_addr = loc_addr;
 	}
 
-	if (rendevous) {
-		req->flags |= GNIX_MSG_RENDEVOUS;
+	if (rendezvous) {
+		req->flags |= GNIX_MSG_RENDEZVOUS;
 	}
 
 	return _gnix_vc_queue_tx_req(req);

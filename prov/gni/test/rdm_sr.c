@@ -276,10 +276,10 @@ void do_send(int len)
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_send(ep[0], source, len, NULL, gni_addr[1], target);
+	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -325,10 +325,10 @@ void do_sendv(int len)
 	rdm_sr_init_data(source, len, 0x25);
 	rdm_sr_init_data(target, len, 0);
 
-	sz = fi_sendv(ep[0], &iov, NULL, 1, gni_addr[1], target);
+	sz = fi_sendv(ep[0], &iov, (void **)&loc_mr, 1, gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -385,7 +385,7 @@ void do_sendmsg(int len)
 	sz = fi_sendmsg(ep[0], &msg, 0);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -431,7 +431,7 @@ void do_inject(int len)
 	sz = fi_inject(ep[0], source, len, gni_addr[1]);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
@@ -468,7 +468,7 @@ void do_senddata(int len)
 			 gni_addr[1], target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -514,7 +514,7 @@ void do_injectdata(int len)
 	sz = fi_injectdata(ep[0], source, len, (uint64_t)source, gni_addr[1]);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
 	cr_assert_eq(sz, 0);
 
 	/* TODO get REMOTE_CQ_DATA */
@@ -533,4 +533,110 @@ void do_injectdata(int len)
 Test(rdm_sr, injectdata)
 {
 	rdm_sr_xfer_for_each_size(do_injectdata, 1, INJECT_SIZE);
+}
+
+/*
+ssize_t (*recvv)(struct fid_ep *ep, const struct iovec *iov, void **desc,
+		size_t count, fi_addr_t src_addr, void *context);
+ */
+void do_recvv(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+	struct iovec iov;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	cr_assert_eq(sz, 0);
+
+	iov.iov_base = target;
+	iov.iov_len = len;
+
+	sz = fi_recvv(ep[1], &iov, (void **)&rem_mr, 1, gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+
+	dbg_printf("got send context event!\n");
+
+	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)source);
+
+	dbg_printf("got recv context event!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr, recvv)
+{
+	rdm_sr_xfer_for_each_size(do_recvv, 1, BUF_SZ);
+}
+
+/*
+ssize_t (*recvmsg)(struct fid_ep *ep, const struct fi_msg *msg,
+		uint64_t flags);
+ */
+void do_recvmsg(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+	struct fi_msg msg;
+	struct iovec iov;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_send(ep[0], source, len, loc_mr, gni_addr[1], target);
+	cr_assert_eq(sz, 0);
+
+	iov.iov_base = target;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)&rem_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[0];
+	msg.context = source;
+	msg.data = (uint64_t)source;
+
+	sz = fi_recvmsg(ep[1], &msg, 0);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(msg_cq[0], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+
+	dbg_printf("got send context event!\n");
+
+	while ((ret = fi_cq_read(msg_cq[1], &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)source);
+
+	dbg_printf("got recv context event!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr, recvmsg)
+{
+	rdm_sr_xfer_for_each_size(do_recvmsg, 1, BUF_SZ);
 }

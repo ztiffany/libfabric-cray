@@ -34,6 +34,9 @@
 #ifndef _GNIX_MSG_H_
 #define _GNIX_MSG_H_
 
+ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
+		   uint64_t src_addr, void *context, uint64_t flags,
+		   uint64_t tag, uint64_t ignore);
 ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		   void *mdesc, uint64_t dest_addr, void *context,
 		   uint64_t flags, uint64_t data);
