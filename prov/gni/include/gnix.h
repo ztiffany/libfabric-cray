@@ -68,6 +68,7 @@ extern "C" {
 #include "gnix_mr.h"
 #include "gnix_cq.h"
 #include "fi_ext_gni.h"
+#include "gnix_tags.h"
 
 #define GNI_MAJOR_VERSION 0
 #define GNI_MINOR_VERSION 5
@@ -381,7 +382,7 @@ struct gnix_fab_req_msg {
 struct gnix_fab_req {
 	struct slist_entry        slist;
 	uint64_t tag;
-	uint64_t mask_bits;
+	uint64_t ignore_bits;
 	struct gnix_address addr;
 	enum gnix_fab_req_type    type;
 	struct gnix_fid_ep        *gnix_ep;
@@ -404,6 +405,7 @@ struct gnix_fab_req {
 	uint64_t imm;
 	size_t len;
 	uint64_t flags;
+	struct gnix_tag_list_element tle;
 	union {
 		struct gnix_fab_req_rma rma;
 		struct gnix_fab_req_msg msg;

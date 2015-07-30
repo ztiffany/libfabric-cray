@@ -35,7 +35,8 @@ _gni_files = \
 	prov/gni/src/gnix_hashtable.c \
 	prov/gni/src/gnix_mbox_allocator.c \
 	prov/gni/src/gnix_rma.c \
-	prov/gni/src/gnix_msg.c
+	prov/gni/src/gnix_msg.c \
+	prov/gni/src/gnix_tags.c
 
 if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
@@ -59,7 +60,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/rdm_rma.c \
 	prov/gni/test/rdm_sr.c \
 	prov/gni/test/cntr.c \
-	prov/gni/test/dom.c
+	prov/gni/test/dom.c \
+	prov/gni/test/tags.c
 
 prov_gni_test_gnitest_LDFLAGS = -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS)
