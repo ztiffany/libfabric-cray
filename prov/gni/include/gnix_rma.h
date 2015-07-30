@@ -34,7 +34,6 @@
 #ifndef _GNIX_RMA_H_
 #define _GNIX_RMA_H_
 
-int _gnix_post_req(struct gnix_fab_req *fab_req);
 ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		  uint64_t loc_addr, size_t len, void *mdesc,
 		  uint64_t dest_addr, uint64_t rem_addr, uint64_t mkey,

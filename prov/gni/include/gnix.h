@@ -116,6 +116,8 @@ extern "C" {
 
 #define GNIX_SUPPRESS_COMPLETION	(1ULL << 60)	/* TX only flag */
 #define GNIX_RMA_RDMA			(1ULL << 61)	/* RMA only flag */
+#define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
+#define GNIX_MSG_TAGGED			(1ULL << 62)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -359,7 +361,6 @@ enum gnix_fab_req_type {
 };
 
 struct gnix_fab_req_rma {
-	void *loc_md;
 	uint64_t rem_addr;
 	uint64_t rem_mr_key;
 };
@@ -397,6 +398,7 @@ struct gnix_fab_req {
 	int retries;
 	/* common to rma/amo/msg */
 	uint64_t loc_addr;
+	void *loc_md;
 	uint64_t imm;
 	size_t len;
 	uint64_t flags;

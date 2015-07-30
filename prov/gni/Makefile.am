@@ -17,7 +17,6 @@ _gni_files = \
 	prov/gni/src/gnix_dom.c \
 	prov/gni/src/gnix_queue.c \
 	prov/gni/src/gnix_ep.c \
-	prov/gni/src/gnix_ep_rcv.c \
 	prov/gni/src/gnix_cntr.c \
 	prov/gni/src/gnix_cq.c \
 	prov/gni/src/gnix_av.c \
@@ -25,7 +24,6 @@ _gni_files = \
 	prov/gni/src/gnix_mr.c \
 	prov/gni/src/gnix_cm.c \
 	prov/gni/src/gnix_wait.c \
-	prov/gni/src/gnix_ep_rdm.c \
 	prov/gni/src/gnix_nameserver.c \
 	prov/gni/src/gnix_datagram.c \
 	prov/gni/src/gnix_cm_nic.c \
@@ -36,7 +34,8 @@ _gni_files = \
 	prov/gni/src/gnix_bitmap.c \
 	prov/gni/src/gnix_hashtable.c \
 	prov/gni/src/gnix_mbox_allocator.c \
-	prov/gni/src/gnix_rma.c
+	prov/gni/src/gnix_rma.c \
+	prov/gni/src/gnix_msg.c
 
 if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
