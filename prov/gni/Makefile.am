@@ -58,7 +58,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/vc.c \
 	prov/gni/test/rdm_rma.c \
 	prov/gni/test/rdm_sr.c \
-	prov/gni/test/cntr.c
+	prov/gni/test/cntr.c \
+	prov/gni/test/dom.c
 
 prov_gni_test_gnitest_LDFLAGS = -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS)
@@ -76,3 +77,6 @@ else !HAVE_GNI_DL
 src_libfabric_la_SOURCES += $(_gni_files)
 endif !HAVE_GNI_DL
 endif
+
+rdmainclude_HEADERS += \
+	prov/gni/include/fi_ext_gni.h

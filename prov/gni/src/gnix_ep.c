@@ -1037,9 +1037,9 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (ret != FI_SUCCESS)
 			goto err;
 
-		gnix_ht_attr.ht_initial_size = 64;     /* TODO: get from domain */
-		gnix_ht_attr.ht_maximum_size = 16384;  /* TODO: from domain */
-		gnix_ht_attr.ht_increase_step = 2;
+		gnix_ht_attr.ht_initial_size = domain_priv->params.ct_init_size;
+		gnix_ht_attr.ht_maximum_size = domain_priv->params.ct_max_size;
+		gnix_ht_attr.ht_increase_step = domain_priv->params.ct_step;
 		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
 		gnix_ht_attr.ht_collision_thresh = 500;
 		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;

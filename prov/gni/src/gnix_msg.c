@@ -493,8 +493,6 @@ static int _gnix_send_req(void *data)
 	return gnixu_to_fi_errno(status);
 }
 
-#define GNIX_MSG_RENDEZVOUS_THRESH (16*1024)
-
 ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		   void *mdesc, uint64_t dest_addr, void *context,
 		   uint64_t flags, uint64_t data)
@@ -516,7 +514,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		return -FI_EINVAL;
 	}
 
-	rendezvous = len >= GNIX_MSG_RENDEZVOUS_THRESH;
+	rendezvous = len >= ep->domain->params.msg_rendezvous_thresh;
 
 	/* need a memory descriptor for large sends */
 	if (rendezvous && !mdesc) {

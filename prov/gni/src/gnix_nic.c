@@ -748,12 +748,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		nic->ptag = domain->ptag;
 		nic->cookie = domain->cookie;
 
-		/*
-		 * TODO: initial vc_id_table capacity should be
-		 * adjustable via a fabric ops_open method
-		 */
-
-		nic->vc_id_table_capacity = 128;
+		nic->vc_id_table_capacity = domain->params.vc_id_table_capacity;
 		nic->vc_id_table = malloc(sizeof(void *) *
 					       nic->vc_id_table_capacity);
 		if (nic->vc_id_table == NULL) {
@@ -782,14 +777,9 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 		fastlock_init(&nic->vc_id_lock);
 
-		/*
-		 * TODOs: need a way to specify mboxes/slab via
-		 * some domain param.
-		 */
-
 		smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
-		smsg_mbox_attr.mbox_maxcredit = 64; /* TODO: fix this */
-		smsg_mbox_attr.msg_maxsize =  16384;  /* TODO: definite fix */
+		smsg_mbox_attr.mbox_maxcredit = domain->params.mbox_maxcredit;
+		smsg_mbox_attr.msg_maxsize =  domain->params.mbox_msg_maxsize;
 
 		status = GNI_SmsgBufferSizeNeeded(&smsg_mbox_attr,
 						  &nic->mem_per_mbox);
@@ -806,11 +796,11 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		 */
 
 		ret = _gnix_mbox_allocator_create(nic,
-						  nic->rx_cq,
-						  GNIX_PAGE_2MB,
-						  (size_t)nic->mem_per_mbox,
-						  2048,
-						  &nic->mbox_hndl);
+					  nic->rx_cq,
+					  domain->params.mbox_page_size,
+					  (size_t)nic->mem_per_mbox,
+					  domain->params.mbox_num_per_slab,
+					  &nic->mbox_hndl);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "_gnix_mbox_alloc returned %d\n", ret);
