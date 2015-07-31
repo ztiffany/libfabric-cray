@@ -212,7 +212,8 @@ static inline int __mr_cache_entry_destroy(
 	fastlock_release(&entry->nic->lock);
 	if (ret == GNI_RC_SUCCESS) {
 		atomic_dec(&entry->domain->ref_cnt);
-		atomic_dec(&entry->nic->ref_cnt);
+		/* This may be last ref to nic, so must call _gnix_nic_free */
+		_gnix_nic_free(entry->nic);
 
 		free(entry);
 	} else {
@@ -750,7 +751,8 @@ static int __mr_cache_register(
 		return -FI_ENOMEM;
 
 	/* TODO: should we just try the first nic we find? */
-	dlist_for_each(&domain->nic_list, nic, list)
+	/* NOTE: Can we assume thie list is safe for access without a lock? */
+	dlist_for_each(&domain->nic_list, nic, dom_nic_list)
 	{
 		fastlock_acquire(&nic->lock);
 		grc = GNI_MemRegister(nic->gni_nic_hndl, address, length,

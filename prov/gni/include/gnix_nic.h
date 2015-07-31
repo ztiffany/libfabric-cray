@@ -67,8 +67,8 @@ typedef int (*smsg_completer_fn_t)(void  *desc);
 /**
  * GNIX nic struct
  *
- * @var list                 list element used for global NIC list
- * @var gnix_nic_list        list element used for nic linked list associated
+ * @var gnix_nic_list        list element used for global NIC list
+ * @var dom_nic_list         list element used for nic linked list associated
  *                           with a given gnix_fid_domain
  * @var lock                 lock used for serializing access to
  *                           gni_nic_hndl, rx_cq, and tx_cq
@@ -117,8 +117,8 @@ typedef int (*smsg_completer_fn_t)(void  *desc);
  *                           messages
  */
 struct gnix_nic {
-	struct dlist_entry list;          /* global NIC list */
-	struct dlist_entry gnix_nic_list; /* domain list */
+	struct dlist_entry gnix_nic_list; /* global NIC list */
+	struct dlist_entry dom_nic_list;  /* domain NIC list */
 	fastlock_t lock;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
