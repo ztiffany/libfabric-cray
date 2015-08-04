@@ -41,6 +41,7 @@ if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
 dist_bin_SCRIPTS = prov/gni/test/run_gnitest
 prov_gni_test_gnitest_SOURCES = \
+	prov/gni/test/pmi_utils.c \
 	prov/gni/test/cq.c \
 	prov/gni/test/ep.c \
 	prov/gni/test/nic.c \
@@ -61,8 +62,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/cntr.c \
 	prov/gni/test/dom.c
 
-prov_gni_test_gnitest_LDFLAGS = -static
-prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS)
+prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
+prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)
 prov_gni_test_gnitest_LDADD = -lcriterion \
 		$(linkback)
 endif

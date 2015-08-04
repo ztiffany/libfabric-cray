@@ -142,6 +142,9 @@ m4_include([config/pkg.m4])
 			else
 				have_criterion=false
 			fi
+			PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
+					   [],
+					   [have_criterion=false])
 		else
 			AC_MSG_RESULT([no])
 			AC_MSG_ERROR([criterion requested but invalid path given])
