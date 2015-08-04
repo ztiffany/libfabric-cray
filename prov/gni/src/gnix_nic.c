@@ -570,7 +570,7 @@ err:
 
 		dlist_remove(&nic->gnix_nic_list);
 		--gnix_nics_per_ptag[nic->ptag];
-		dlist_remove(&nic->list);
+		dlist_remove(&nic->dom_nic_list);
 
 		pthread_mutex_unlock(&gnix_nic_list_lock);
 
@@ -621,9 +621,9 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		assert(!dlist_empty(&domain->nic_list));
 
 		nic = dlist_first_entry(&domain->nic_list, struct gnix_nic,
-					list);
-		dlist_remove(&nic->list);
-		dlist_insert_tail(&nic->list, &domain->nic_list);
+					dom_nic_list);
+		dlist_remove(&nic->dom_nic_list);
+		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
 		atomic_inc(&nic->ref_cnt);
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
@@ -859,7 +859,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
 
-		dlist_insert_tail(&nic->list, &domain->nic_list);
+		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
 		++gnix_nics_per_ptag[domain->ptag];
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);

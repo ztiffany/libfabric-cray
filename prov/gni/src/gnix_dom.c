@@ -108,9 +108,9 @@ static int gnix_domain_close(fid_t fid)
 	 *  drops to 0, destroy the cdm, remove from
 	 *  the global nic list.
 	 */
-	dlist_for_each_safe(&domain->nic_list, p, next, list)
+	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list)
 	{
-		dlist_remove(&p->list);
+		dlist_remove(&p->dom_nic_list);
 		v = atomic_dec(&p->ref_cnt);
 		assert(v >= 0);
 		if (v == 0) {
