@@ -141,30 +141,141 @@ err:
 }
 
 /*
- * gnix_domain_ops will provide means for an application to
- * better control allocation of underlying aries resources associated
- * with the domain.  Examples will include controlling size of underlying
+ * gnix_domain_ops provides a means for an application to better
+ * control allocation of underlying aries resources associated with
+ * the domain.  Examples will include controlling size of underlying
  * hardware CQ sizes, max size of RX ring buffers, etc.
- *
- * Currently this function is not implemented, so just return -FI_ENOSYS
  */
+
+static const uint32_t default_msg_rendezvous_thresh = 16*1024;
+static const uint32_t default_ct_init_size = 64;
+static const uint32_t default_ct_max_size = 16384;
+static const uint32_t default_ct_step = 2;
+static const uint32_t default_vc_id_table_capacity = 128;
+static const uint32_t default_mbox_page_size = GNIX_PAGE_2MB;
+static const uint32_t default_mbox_num_per_slab = 2048;
+static const uint32_t default_mbox_maxcredit = 64;
+static const uint32_t default_mbox_msg_maxsize = 16384;
+
+static int
+__gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
+{
+	struct gnix_fid_domain *domain;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	assert(val);
+
+	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid domain\n"));
+		return -FI_EINVAL;
+	}
+
+	switch (t) {
+	case GNI_MSG_RENDEZVOUS_THRESHOLD:
+		*(uint32_t *)val = domain->params.msg_rendezvous_thresh;
+		break;
+	case GNI_CONN_TABLE_INITIAL_SIZE:
+		*(uint32_t *)val = domain->params.ct_init_size;
+		break;
+	case GNI_CONN_TABLE_MAX_SIZE:
+		*(uint32_t *)val = domain->params.ct_max_size;
+		break;
+	case GNI_CONN_TABLE_STEP_SIZE:
+		*(uint32_t *)val = domain->params.ct_step;
+		break;
+	case GNI_VC_ID_TABLE_CAPACITY:
+		*(uint32_t *)val = domain->params.vc_id_table_capacity;
+		break;
+	case GNI_MBOX_PAGE_SIZE:
+		*(uint32_t *)val = domain->params.mbox_page_size;
+		break;
+	case GNI_MBOX_NUM_PER_SLAB:
+		*(uint32_t *)val = domain->params.mbox_num_per_slab;
+		break;
+	case GNI_MBOX_MAX_CREDIT:
+		*(uint32_t *)val = domain->params.mbox_maxcredit;
+		break;
+	case GNI_MBOX_MSG_MAX_SIZE:
+		*(uint32_t *)val = domain->params.mbox_msg_maxsize;
+		break;
+	default:
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+static int
+__gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
+{
+	struct gnix_fid_domain *domain;
+
+	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
+
+	assert(val);
+
+	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
+	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid domain\n"));
+		return -FI_EINVAL;
+	}
+
+	switch (t) {
+	case GNI_MSG_RENDEZVOUS_THRESHOLD:
+		domain->params.msg_rendezvous_thresh = *(uint32_t *)val;
+		break;
+	case GNI_CONN_TABLE_INITIAL_SIZE:
+		domain->params.ct_init_size = *(uint32_t *)val;
+		break;
+	case GNI_CONN_TABLE_MAX_SIZE:
+		domain->params.ct_max_size = *(uint32_t *)val;
+		break;
+	case GNI_CONN_TABLE_STEP_SIZE:
+		domain->params.ct_step = *(uint32_t *)val;
+		break;
+	case GNI_VC_ID_TABLE_CAPACITY:
+		domain->params.vc_id_table_capacity = *(uint32_t *)val;
+		break;
+	case GNI_MBOX_PAGE_SIZE:
+		domain->params.mbox_page_size = *(uint32_t *)val;
+		break;
+	case GNI_MBOX_NUM_PER_SLAB:
+		domain->params.mbox_num_per_slab = *(uint32_t *)val;
+		break;
+	case GNI_MBOX_MAX_CREDIT:
+		domain->params.mbox_maxcredit = *(uint32_t *)val;
+		break;
+	case GNI_MBOX_MSG_MAX_SIZE:
+		domain->params.mbox_msg_maxsize = *(uint32_t *)val;
+		break;
+	default:
+		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
+		return -FI_EINVAL;
+	}
+
+	return FI_SUCCESS;
+}
+
+
+static struct fi_gni_ops_domain gnix_ops_domain = {
+	.set_val = __gnix_dom_ops_set_val,
+	.get_val = __gnix_dom_ops_get_val
+};
 
 static int
 gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 			void **ops, void *context)
 {
-	int ret = -FI_ENOSYS;
-	struct gnix_fid_domain *domain;
+	int ret = FI_SUCCESS;
 
-	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
-
-	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
-	if (domain->domain_fid.fid.fclass != FI_CLASS_DOMAIN) {
+	if (strcmp(ops_name, FI_GNI_DOMAIN_OPS) == 0)
+		*ops = &gnix_ops_domain;
+	else
 		ret = -FI_EINVAL;
-		goto err;
-	}
 
-err:
 	return ret;
 }
 
@@ -232,6 +343,19 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->ptag = ptag;
 	domain->cookie = cookie;
 	domain->cdm_id_seed = getpid();  /*TODO: direct syscall better */
+
+	/* user tunables */
+	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
+	domain->params.ct_init_size = default_ct_init_size;
+	domain->params.ct_max_size = default_ct_max_size;
+	domain->params.ct_step = default_ct_step;
+	domain->params.vc_id_table_capacity = default_vc_id_table_capacity;
+	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
+	domain->params.mbox_page_size = default_mbox_page_size;
+	domain->params.mbox_num_per_slab = default_mbox_num_per_slab;
+	domain->params.mbox_maxcredit = default_mbox_maxcredit;
+	domain->params.mbox_msg_maxsize = default_mbox_msg_maxsize;
+
 	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
 	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;

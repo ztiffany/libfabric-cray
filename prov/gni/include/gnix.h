@@ -66,8 +66,8 @@ extern "C" {
 #include "gnix_util.h"
 #include "gnix_freelist.h"
 #include "gnix_mr.h"
-
 #include "gnix_cq.h"
+#include "fi_ext_gni.h"
 
 #define GNI_MAJOR_VERSION 0
 #define GNI_MINOR_VERSION 5
@@ -251,6 +251,8 @@ struct gnix_fid_domain {
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id_seed;
+	/* user tunable parameters accessed via open_ops functions */
+	struct gnix_ops_domain params;
 	/* work queue for domain */
 	struct list_head domain_wq;
 	/* size of gni tx cqs for this domain */

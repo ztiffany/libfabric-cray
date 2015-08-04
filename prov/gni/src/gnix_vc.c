@@ -657,6 +657,7 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 	struct gnix_mbox *mbox = NULL;
 	gni_smsg_attr_t smsg_mbox_attr;
 	struct gnix_fid_ep *ep = NULL;
+	struct gnix_fid_domain *dom = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
 	struct gnix_datagram *dgram = NULL;
 	enum gnix_vc_conn_req_type rtype = GNIX_VC_CONN_REQ_CONN;
@@ -666,6 +667,10 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 
 	ep = vc->ep;
 	if (ep == NULL)
+		return -FI_EINVAL;
+
+	dom = ep->domain;
+	if (dom == NULL)
 		return -FI_EINVAL;
 
 	cm_nic = ep->cm_nic;
@@ -739,8 +744,8 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 	smsg_mbox_attr.buff_size =  vc->ep->nic->mem_per_mbox;
 	smsg_mbox_attr.mem_hndl = *mbox->memory_handle;
 	smsg_mbox_attr.mbox_offset = (uint64_t)mbox->offset;
-	smsg_mbox_attr.mbox_maxcredit = 64; /* TODO: fix this */
-	smsg_mbox_attr.msg_maxsize =  16384;  /* TODO: definite fix */
+	smsg_mbox_attr.mbox_maxcredit = dom->params.mbox_maxcredit;
+	smsg_mbox_attr.msg_maxsize = dom->params.mbox_msg_maxsize;
 
 	/*
 	 * pack the things we need into the datagram in_box:
@@ -1026,6 +1031,7 @@ int _gnix_vc_accept(struct gnix_vc *vc)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep = NULL;
+	struct gnix_fid_domain *dom = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
 	struct gnix_nic *nic = NULL;
 	struct gnix_mbox *mbox = NULL;
@@ -1038,6 +1044,10 @@ int _gnix_vc_accept(struct gnix_vc *vc)
 
 	ep = vc->ep;
 	if (ep == NULL)
+		return -FI_EINVAL;
+
+	dom = ep->domain;
+	if (dom == NULL)
 		return -FI_EINVAL;
 
 	cm_nic = ep->cm_nic;
@@ -1103,8 +1113,8 @@ int _gnix_vc_accept(struct gnix_vc *vc)
 	smsg_mbox_attr.buff_size =  nic->mem_per_mbox;
 	smsg_mbox_attr.mem_hndl = *mbox->memory_handle;
 	smsg_mbox_attr.mbox_offset = (uint64_t)mbox->offset;
-	smsg_mbox_attr.mbox_maxcredit = 64; /* TODO: fix this */
-	smsg_mbox_attr.msg_maxsize =  16384;  /* TODO: definite fix */
+	smsg_mbox_attr.mbox_maxcredit = dom->params.mbox_maxcredit;
+	smsg_mbox_attr.msg_maxsize =  dom->params.mbox_msg_maxsize;
 
 	/*
 	 * pack the things we need into the datagram in_box:
