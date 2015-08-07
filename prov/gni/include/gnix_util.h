@@ -43,16 +43,54 @@
 
 extern struct fi_provider gnix_prov;
 
+/*
+ * For debug logging (#undef NDEBUG)
+ * Q: should this just always be available?
+ */
+#ifdef NDEBUG
+
+#define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
+	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
+
+#else
+
+/* defined in gnix_init.c */
+#include <fi.h> /* for atomic_t */
+extern __thread pid_t gnix_debug_pid;
+extern __thread uint32_t gnix_debug_tid;
+extern atomic_t gnix_debug_next_tid;
+
+/* These macros are used to prepend the log message with the pid and
+ * unique thread id.  Do not use them directly.  Rather use the normal
+ * GNIX_* macros.
+ */
+#define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
+	do {							\
+		const int fmt_len = 256;			\
+		char new_fmt[fmt_len];				\
+		if (gnix_debug_tid  == ~(uint32_t) 0) {		\
+			gnix_debug_tid = atomic_inc(&gnix_debug_next_tid); \
+		}						\
+		if (gnix_debug_pid == ~(uint32_t) 0) {		\
+			gnix_debug_pid = getpid();		\
+		}						\
+		snprintf(new_fmt, fmt_len, "[%%d:%%d] %s", fmt);	\
+		FI_LOG_FN(&gnix_prov, subsystem, new_fmt,		\
+			  gnix_debug_pid, gnix_debug_tid, ##__VA_ARGS__); \
+	} while (0)
+
+#endif
+
 #define GNIX_WARN(subsystem, ...)                                              \
-	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_WARN, subsystem, __VA_ARGS__)
 #define GNIX_TRACE(subsystem, ...)                                             \
-	FI_TRACE(&gnix_prov, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_TRACE, subsystem, __VA_ARGS__)
 #define GNIX_INFO(subsystem, ...)                                              \
-	FI_INFO(&gnix_prov, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_INFO, subsystem, __VA_ARGS__)
 #define GNIX_DEBUG(subsystem, ...)                                             \
-	FI_DBG(&gnix_prov, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_DBG, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
-	FI_WARN(&gnix_prov, subsystem, __VA_ARGS__)
+	GNIX_LOG_INTERNAL(FI_WARN, subsystem, __VA_ARGS__)
 
 /* dlist utilities */
 #include "fi_list.h"
