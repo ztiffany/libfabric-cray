@@ -544,6 +544,17 @@ err:
 	return ret;
 }
 
+int _gnix_av_addr_retrieve(struct fid_av *av, fi_addr_t fi_addr,
+			  fi_addr_t *real_addr)
+{
+	size_t size = sizeof(fi_addr_t);
+	int ret = FI_SUCCESS;
+
+	ret = gnix_av_lookup(av, fi_addr, real_addr, &size);
+	if (ret == -FI_ETOOSMALL)
+		ret = FI_SUCCESS;
+	return ret;
+}
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
