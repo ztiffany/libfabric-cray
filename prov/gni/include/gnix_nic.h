@@ -159,11 +159,13 @@ struct gnix_nic {
  * @var flags      flag bits from send side that are needed at
  *                 rcv side (e.g. FI_REMOTE_CQ_DATA)
  * @var imm        immediate data associated with this message
+ * @var msg_tag    libfabric tag associated with this message
  */
 struct gnix_smsg_hdr {
 	size_t len;
 	uint64_t flags;
 	uint64_t imm;
+	uint64_t msg_tag;
 };
 
 /**

@@ -62,7 +62,8 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/rdm_sr.c \
 	prov/gni/test/cntr.c \
 	prov/gni/test/dom.c \
-	prov/gni/test/tags.c
+	prov/gni/test/tags.c \
+	prov/gni/test/rdm_tagged_sr.c
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)

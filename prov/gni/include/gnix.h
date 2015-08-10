@@ -300,12 +300,19 @@ struct gnix_fid_ep {
 	};
 	fastlock_t vc_list_lock;
 	struct dlist_entry wc_vc_list;
-	/* used for unexpected receives */
-	struct slist unexp_recv_queue;
-	/* used for posted receives */
-	struct slist posted_recv_queue;
 	/* lock for unexp and posted recv queue */
 	fastlock_t recv_queue_lock;
+	/* used for unexpected receives */
+	struct gnix_tag_storage unexp_recv_queue;
+	/* used for posted receives */
+	struct gnix_tag_storage posted_recv_queue;
+
+	fastlock_t tagged_queue_lock;
+	struct gnix_tag_storage tagged_unexp_recv_queue;
+	struct gnix_tag_storage tagged_posted_recv_queue;
+
+
+	fastlock_t recv_comp_lock;
 	struct slist pending_recv_comp_queue;
 	/* pointer to tag matching engine */
 	void *tag_matcher;
