@@ -35,6 +35,7 @@
 #include <stdlib.h>
 #include <gni_pub.h>
 #include "gnix.h"
+#include "gnix_util.h"
 #include "fi.h"
 #include "prov.h"
 
@@ -47,6 +48,12 @@
 
 atomic_t gnix_id_counter;
 atomic_t file_id_counter;
+#ifndef NDEBUG
+/* don't think this needs to be in tls */
+__thread pid_t gnix_debug_pid = ~(uint32_t) 0;
+__thread uint32_t gnix_debug_tid = ~(uint32_t) 0;
+atomic_t gnix_debug_next_tid;
+#endif
 
 /**
  * Initialization function for performing global setup
@@ -56,4 +63,7 @@ void gnix_init(void)
 {
 	atomic_initialize(&gnix_id_counter, 0);
 	atomic_initialize(&file_id_counter, 0);
+#ifndef NDEBUG
+	atomic_initialize(&gnix_debug_next_tid, 0);
+#endif
 }
