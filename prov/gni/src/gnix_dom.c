@@ -57,15 +57,89 @@ static struct fi_ops gnix_domain_fi_ops;
 static struct fi_ops_mr gnix_domain_mr_ops;
 static struct fi_ops_domain gnix_domain_ops;
 
+static void __domain_destruct(struct gnix_fid_domain *domain)
+{
+	int ret = FI_SUCCESS, v;
+	struct gnix_nic *p, *next;
+	gni_return_t status;
+
+	/* if the domain isn't being destructed by close, we need to check the
+	 * cache again. This isn't a likely case. Both the flush and destroy
+	 * must succeed since we are in the destruct path */
+	ret = _gnix_mr_cache_flush(&domain->mr_cache);
+	if (ret != FI_SUCCESS)
+		GNIX_ERR(FI_LOG_DOMAIN, "failed to flush mr cache "
+				"during domain destruct, dom=%p", domain);
+	assert(ret == FI_SUCCESS);
+
+	ret = _gnix_mr_cache_destroy(&domain->mr_cache);
+	if (ret != FI_SUCCESS)
+		GNIX_ERR(FI_LOG_DOMAIN, "failed to destroy mr cache "
+				"during domain destruct, dom=%p", domain);
+	assert(ret == FI_SUCCESS);
+
+	/*
+	 *  remove nics from the domain's nic list,
+	 *  decrement ref_cnt on each nic.  If ref_cnt
+	 *  drops to 0, destroy the cdm, remove from
+	 *  the global nic list.
+	 */
+	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list)
+	{
+		dlist_remove(&p->dom_nic_list);
+		v = _gnix_nic_put(p);
+		if (v == 0) {
+			dlist_remove(&p->gnix_nic_list);
+			status = GNI_CdmDestroy(p->gni_cdm_hndl);
+			if (status != GNI_RC_SUCCESS)
+				GNIX_ERR(FI_LOG_DOMAIN,
+					 "oops, cdm destroy failed\n");
+			free(p);
+		}
+	}
+
+	_gnix_fabric_put(domain->fabric);
+
+	/*
+	 * remove from the list of cdms attached to fabric
+	 */
+	gnix_list_del_init(&domain->list);
+
+	memset(domain, 0, sizeof *domain);
+	free(domain);
+
+}
+
+int _gnix_domain_put(struct gnix_fid_domain *domain)
+{
+	int references_held = atomic_dec(&domain->ref_cnt);
+
+	assert(references_held >= 0);
+
+	if (!references_held)
+		__domain_destruct(domain);
+
+	return references_held;
+}
+
+int _gnix_domain_get(struct gnix_fid_domain *domain)
+{
+	int references_held = atomic_inc(&domain->ref_cnt);
+
+	assert(references_held > 0);
+
+	return references_held;
+}
+
+
+
 /*******************************************************************************
  * API function implementations.
  ******************************************************************************/
 static int gnix_domain_close(fid_t fid)
 {
-	int ret = FI_SUCCESS, v;
+	int ret = FI_SUCCESS, references_held;
 	struct gnix_fid_domain *domain;
-	struct gnix_nic *p, *next;
-	gni_return_t status;
 
 	GNIX_TRACE(FI_LOG_DOMAIN, "\n");
 
@@ -88,51 +162,13 @@ static int gnix_domain_close(fid_t fid)
 	 * with this domain which have not been closed.
 	 */
 
-	if (atomic_get(&domain->ref_cnt) != 0) {
-		GNIX_WARN(FI_LOG_DOMAIN, "non zero refcnt %d\n",
-			  atomic_get(&domain->ref_cnt));
-		ret = -FI_EBUSY;
-		goto err;
+	references_held = _gnix_domain_put(domain);
+
+	if (references_held) {
+		GNIX_WARN(FI_LOG_DOMAIN, "failed to fully close domain due to "
+				"lingering references. references=%i dom=%p\n",
+			  references_held, domain);
 	}
-
-	ret = _gnix_mr_cache_destroy(&domain->mr_cache);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_DOMAIN,
-			  "failed to destroy memory cache on domain close\n");
-		goto err;
-	}
-
-	/*
-	 *  remove nics from the domain's nic list,
-	 *  decrement ref_cnt on each nic.  If ref_cnt
-	 *  drops to 0, destroy the cdm, remove from
-	 *  the global nic list.
-	 */
-	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list)
-	{
-		dlist_remove(&p->dom_nic_list);
-		v = atomic_dec(&p->ref_cnt);
-		assert(v >= 0);
-		if (v == 0) {
-			dlist_remove(&p->gnix_nic_list);
-			status = GNI_CdmDestroy(p->gni_cdm_hndl);
-			if (status != GNI_RC_SUCCESS)
-				GNIX_ERR(FI_LOG_DOMAIN,
-					 "oops, cdm destroy failed\n");
-			free(p);
-		}
-	}
-
-	v = atomic_dec(&domain->fabric->ref_cnt);
-	assert(v >= 0);
-
-	/*
-	 * remove from the list of cdms attached to fabric
-	 */
-	gnix_list_del_init(&domain->list);
-
-	memset(domain, 0, sizeof *domain);
-	free(domain);
 
 	GNIX_INFO(FI_LOG_DOMAIN, "gnix_domain_close invoked returning %d\n",
 		  ret);
@@ -338,7 +374,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	list_head_init(&domain->domain_wq);
 
 	domain->fabric = fabric_priv;
-	atomic_inc(&fabric_priv->ref_cnt);
+	_gnix_fabric_get(domain->fabric);
 
 	domain->ptag = ptag;
 	domain->cookie = cookie;
@@ -359,7 +395,7 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
 	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
-	atomic_initialize(&domain->ref_cnt, 0);
+	atomic_initialize(&domain->ref_cnt, 1);
 
 	domain->domain_fid.fid.fclass = FI_CLASS_DOMAIN;
 	domain->domain_fid.fid.context = context;

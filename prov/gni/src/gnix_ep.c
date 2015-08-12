@@ -754,10 +754,9 @@ err:
 	return ret;
 }
 
-static int gnix_ep_close(fid_t fid)
+static void __ep_destruct(struct gnix_fid_ep *ep)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_fid_ep *ep;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	struct gnix_vc *vc;
@@ -765,45 +764,39 @@ static int gnix_ep_close(fid_t fid)
 	struct gnix_cm_nic *cm_nic;
 	struct dlist_entry *p, *head;
 
-
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
-	/* TODO: lots more stuff to do here */
-
 	if (ep->send_cq) {
 		_gnix_cq_poll_nic_rem(ep->send_cq, ep->nic);
-		atomic_dec(&ep->send_cq->ref_cnt);
+		_gnix_cq_put(ep->send_cq);
 	}
 
 	if (ep->recv_cq) {
 		_gnix_cq_poll_nic_rem(ep->recv_cq, ep->nic);
-		atomic_dec(&ep->recv_cq->ref_cnt);
+		_gnix_cq_put(ep->recv_cq);
 	}
 
 	if (ep->send_cntr) {
 		_gnix_cntr_poll_nic_rem(ep->send_cntr, ep->nic);
-		atomic_dec(&ep->send_cntr->ref_cnt);
+		_gnix_cntr_put(ep->send_cntr);
 	}
 
 	if (ep->recv_cntr) {
 		_gnix_cntr_poll_nic_rem(ep->recv_cntr, ep->nic);
-		atomic_dec(&ep->recv_cntr->ref_cnt);
+		_gnix_cntr_put(ep->recv_cntr);
 	}
 
 	if (ep->read_cntr) {
 		_gnix_cntr_poll_nic_rem(ep->read_cntr, ep->nic);
-		atomic_dec(&ep->read_cntr->ref_cnt);
+		_gnix_cntr_put(ep->read_cntr);
 	}
 
 	if (ep->write_cntr) {
 		_gnix_cntr_poll_nic_rem(ep->write_cntr, ep->nic);
-		atomic_dec(&ep->write_cntr->ref_cnt);
+		_gnix_cntr_put(ep->write_cntr);
 	}
 
 	domain = ep->domain;
 	assert(domain != NULL);
-	atomic_dec(&domain->ref_cnt);
+	_gnix_domain_put(domain);
 
 	cm_nic = ep->cm_nic;
 	assert(cm_nic != NULL);
@@ -814,7 +807,7 @@ static int gnix_ep_close(fid_t fid)
 
 	av = ep->av;
 	if (av != NULL)
-		atomic_dec(&av->ref_cnt);
+		_gnix_av_put(av);
 
 	/*
 	 * destroy any vc's being used by this EP.
@@ -828,17 +821,28 @@ static int gnix_ep_close(fid_t fid)
 			ret = _gnix_vc_disconnect(vc);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
-				    "_gnix_vc_disconnect returned %d\n",
-				     ret);
-				goto err;
+					"_gnix_vc_disconnect returned %d\n",
+					 ret);
+
+				/* TODO: previously, this just returned from the
+				 * close function with the vc disconnect error code. Since
+				 * there are no references to this ep left but
+				 * an error was encountered, what is the appropriate action?
+				 */
+				continue;
 			}
 		}
 		ret = _gnix_vc_destroy(vc);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			    "_gnix_vc_destroy returned %d\n",
-			     ret);
-			goto err;
+				"_gnix_vc_destroy returned %d\n",
+				 ret);
+			/* TODO: previously, this just returned from the
+			 * close function with the vc destroy error code. Since
+			 * there are no references to this ep left but
+			 * an error was encountered, what is the appropriate action?
+			 */
+			continue;
 		}
 	}
 
@@ -857,9 +861,8 @@ static int gnix_ep_close(fid_t fid)
 	ret = _gnix_nic_free(nic);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
-		    "_gnix_vc_destroy call returned %d\n",
-		     ret);
-		goto err;
+			"_gnix_nic_free call returned %d\n",
+			 ret);
 	}
 
 	ep->nic = NULL;
@@ -875,9 +878,46 @@ static int gnix_ep_close(fid_t fid)
 	__fr_freelist_destroy(ep);
 
 	free(ep);
+}
 
-err:
-	return ret;
+int _gnix_ep_get(struct gnix_fid_ep *ep)
+{
+	int references_held = atomic_inc(&ep->ref_cnt);
+
+	assert(references_held > 0);
+
+	return references_held;
+}
+
+int _gnix_ep_put(struct gnix_fid_ep *ep)
+{
+	int references_held = atomic_dec(&ep->ref_cnt);
+
+	assert(references_held >= 0);
+
+	if (!references_held)
+		__ep_destruct(ep);
+
+	return references_held;
+}
+
+static int gnix_ep_close(fid_t fid)
+{
+	struct gnix_fid_ep *ep;
+	int references_held;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+	/* TODO: lots more stuff to do here */
+
+	references_held = _gnix_ep_put(ep);
+	if (references_held)
+		GNIX_INFO(FI_LOG_EP_CTRL, "failed to fully close ep due "
+				"to lingering references. references=%i ep=%p\n",
+				references_held, ep);
+
+	return FI_SUCCESS;
 }
 
 static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
@@ -919,7 +959,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 
 			_gnix_cq_poll_nic_add(cq, ep->nic);
-			atomic_inc(&cq->ref_cnt);
+			_gnix_cq_get(cq);
 		}
 		if (flags & FI_RECV) {
 			/* don't allow rebinding */
@@ -934,7 +974,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 
 			_gnix_cq_poll_nic_add(cq, ep->nic);
-			atomic_inc(&cq->ref_cnt);
+			_gnix_cq_get(cq);
 		}
 		break;
 	case FI_CLASS_AV:
@@ -944,7 +984,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			break;
 		}
 		ep->av = av;
-		atomic_inc(&av->ref_cnt);
+		_gnix_av_get(ep->av);
 		break;
 	case FI_CLASS_CNTR: /* TODO: need to support cntrs someday */
 		cntr = container_of(bfid, struct gnix_fid_cntr, cntr_fid.fid);
@@ -961,7 +1001,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 			ep->send_cntr = cntr;
 			_gnix_cntr_poll_nic_add(cntr, ep->nic);
-			atomic_inc(&cntr->ref_cnt);
+			_gnix_cntr_get(cntr);
 		}
 
 		if (flags & FI_RECV) {
@@ -972,7 +1012,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 			ep->recv_cntr = cntr;
 			_gnix_cntr_poll_nic_add(cntr, ep->nic);
-			atomic_inc(&cntr->ref_cnt);
+			_gnix_cntr_get(cntr);
 		}
 
 		if (flags & FI_READ) {
@@ -983,7 +1023,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 			ep->read_cntr = cntr;
 			_gnix_cntr_poll_nic_add(cntr, ep->nic);
-			atomic_inc(&cntr->ref_cnt);
+			_gnix_cntr_get(cntr);
 		}
 
 		if (flags & FI_WRITE) {
@@ -994,7 +1034,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			}
 			ep->write_cntr = cntr;
 			_gnix_cntr_poll_nic_add(cntr, ep->nic);
-			atomic_inc(&cntr->ref_cnt);
+			_gnix_cntr_get(cntr);
 		}
 
 		/* TODO: don't support this option right now,
@@ -1078,7 +1118,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&ep_priv->vc_list_lock);
 	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
-	atomic_initialize(&ep_priv->ref_cnt, 0);
+	atomic_initialize(&ep_priv->ref_cnt, 1);
 
 	fastlock_init(&ep_priv->recv_comp_lock);
 	fastlock_init(&ep_priv->recv_queue_lock);
@@ -1156,7 +1196,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	if (ep_priv->nic->smsg_callbacks == NULL)
 		ep_priv->nic->smsg_callbacks = gnix_ep_smsg_callbacks;
 
-	atomic_inc(&domain_priv->ref_cnt);
+	_gnix_domain_get(ep_priv->domain);
 	*ep = &ep_priv->ep_fid;
 	return ret;
 
