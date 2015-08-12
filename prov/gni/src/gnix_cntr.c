@@ -425,7 +425,11 @@ int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->attr = *attr;
+	/* initialize atomics */
 	atomic_initialize(&cntr_priv->ref_cnt, 0);
+	atomic_initialize(&cntr_priv->cnt, 0);
+	atomic_initialize(&cntr_priv->cnt_err, 0);
+
 	atomic_inc(&cntr_priv->domain->ref_cnt);
 	dlist_init(&cntr_priv->poll_nics);
 	rwlock_init(&cntr_priv->nic_lock);
