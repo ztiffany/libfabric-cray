@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,7 @@ extern "C" {
 
 #include "gnix.h"
 #include "gnix_wait.h"
+#include "gnix_util.h"
 
 /* many to many relationship between counters and polled NICs */
 struct gnix_cntr_poll_nic {
@@ -58,7 +60,7 @@ struct gnix_fid_cntr {
 	struct dlist_entry poll_nics;
 	atomic_t cnt;
 	atomic_t cnt_err;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 };
 
 /**

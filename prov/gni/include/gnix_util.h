@@ -153,4 +153,45 @@ int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit);
 int _gnix_pes_on_node(uint32_t *num_pes);
 int _gnix_nics_per_rank(uint32_t *nics_per_rank);
 
+struct gnix_reference {
+	atomic_t references;
+	void (*destruct)(void *obj);
+};
+
+/* Should not be used unless the reference counting variable has a
+ * non-standard name
+ */
+#define __ref_get(ptr, var) \
+	({ \
+		struct gnix_reference *ref = &ptr->var; \
+		int references_held = atomic_inc(&ref->references); \
+		assert(references_held > 0); \
+		references_held; })
+
+#define __ref_put(ptr, var) \
+	({ \
+		struct gnix_reference *ref = &ptr->var; \
+		int references_held = atomic_dec(&ref->references); \
+		assert(references_held >= 0); \
+		if (references_held == 0) \
+			ref->destruct((void *) (ptr)); \
+		references_held; })
+
+/* by default, all of the gnix reference counting variables are
+ *   named 'ref_cnt'. The macros provided below will autofill the var arg.
+ */
+#define _gnix_ref_get(ptr) __ref_get(ptr, ref_cnt)
+#define _gnix_ref_put(ptr) __ref_put(ptr, ref_cnt)
+
+static inline void _gnix_ref_init(
+		struct gnix_reference *ref,
+		int initial_value,
+		void (*destruct)(void *))
+{
+	atomic_initialize(&ref->references, initial_value);
+	ref->destruct = destruct;
+}
+
+
+
 #endif

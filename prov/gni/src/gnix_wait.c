@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -267,7 +268,7 @@ int gnix_wait_close(struct fid *wait)
 		close(wait_priv->fd[WAIT_WRITE]);
 	}
 
-	atomic_dec(&wait_priv->fabric->ref_cnt);
+	_gnix_ref_put(wait_priv->fabric);
 
 	free(wait_priv);
 
@@ -309,7 +310,7 @@ int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 	wait_priv->fabric = fab_priv;
 
-	atomic_inc(&fab_priv->ref_cnt);
+	_gnix_ref_get(fab_priv);
 	*waitset = &wait_priv->wait;
 
 	return ret;

@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -73,7 +74,7 @@ struct gnix_fid_cq {
 	struct fid_wait *wait;
 
 	fastlock_t lock;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 
 	struct dlist_entry poll_nics;
 	rwlock_t nic_lock;
