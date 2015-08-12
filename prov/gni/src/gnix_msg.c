@@ -166,15 +166,17 @@ smsg_completer_fn_t gnix_ep_smsg_completers[] = {
  * message pathways are coded. */
 int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 				   struct gnix_address addr, size_t len,
-				   uint64_t imm, uint64_t sflags)
+				   uint64_t imm, uint64_t sflags, uint64_t tag)
 {
 	int matched = 0, ret = FI_SUCCESS;
-	struct slist_entry *item = NULL;
 	struct gnix_fab_req *req;
 	struct gnix_fid_cq *cq;
 	ssize_t cq_len;
 	uint64_t flags;
 	struct gnix_address *addr_ptr;
+	struct gnix_tag_storage *unexp_queue;
+	struct gnix_tag_storage *posted_queue;
+	fastlock_t *queue_lock;
 
 	flags = (sflags & FI_REMOTE_CQ_DATA) ? FI_REMOTE_CQ_DATA : 0;
 
@@ -183,14 +185,24 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 	 * or we add the request to the tail of the unexpected queue
 	 */
 
-	addr_ptr = (struct gnix_address *)&addr;
-	fastlock_acquire(&ep->recv_queue_lock);
+	if (likely(sflags & GNIX_MSG_TAGGED)) {
+		queue_lock = &ep->tagged_queue_lock;
+		unexp_queue = &ep->tagged_unexp_recv_queue;
+		posted_queue = &ep->tagged_posted_recv_queue;
+	} else {
+		queue_lock = &ep->recv_queue_lock;
+		unexp_queue = &ep->unexp_recv_queue;
+		posted_queue = &ep->posted_recv_queue;
+	}
 
-	item = slist_remove_first_match(&ep->posted_recv_queue,
-					__msg_match_fab_req,
-					(const void *)addr_ptr);
-	if (item) {
-		req = container_of(item, struct gnix_fab_req, slist);
+	addr_ptr = (struct gnix_address *)&addr;
+	fastlock_acquire(queue_lock);
+
+	/* context param is null here because there wouldn't be any context
+	 * associated with it yet
+	 */
+	req = _gnix_match_tag(posted_queue, tag, 0, 0, NULL, addr_ptr);
+	if (req) {
 		memcpy((void *)req->loc_addr, msg, MIN(req->len, len));
 		req->addr = addr;
 		req->imm = imm;
@@ -216,7 +228,7 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 		 * to make sure the SAS ordering GNI provider promises
 		 * actually is obeyed on the receiving end.
 		 */
-
+		fastlock_acquire(&ep->recv_comp_lock);
 		if (slist_empty(&ep->pending_recv_comp_queue)) {
 
 			/*
@@ -249,7 +261,7 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 		} else
 			gnix_slist_insert_tail(&req->slist,
 					       &ep->pending_recv_comp_queue);
-
+		fastlock_release(&ep->recv_comp_lock);
 	} else {
 
 		req = _gnix_fr_alloc(ep);
@@ -273,42 +285,36 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 		req->modes = GNIX_FAB_RQ_M_UNEXPECTED | GNIX_FAB_RQ_M_COMPLETE;
 		req->type = GNIX_FAB_RQ_RECV;
 
-		gnix_slist_insert_tail(&req->slist,
-					&ep->unexp_recv_queue);
+		/* ignore bits don't matter in the unexpected queue,
+		 * so it doesn't matter what is passed in
+		 */
+		_gnix_insert_tag(unexp_queue, tag, req, ~0);
 	}
 
 err:
-	fastlock_release(&ep->recv_queue_lock);
+	fastlock_release(queue_lock);
 	return ret;
 }
 
 static struct gnix_fab_req *__gnix_recv_match(struct gnix_fid_ep *ep,
-					      struct gnix_address *addr,
-					      uint64_t flags, uint64_t tag,
-					      uint64_t ignore)
+		struct gnix_address *addr,
+		uint64_t flags, uint64_t tag,
+		uint64_t ignore, void *context,
+		struct gnix_tag_storage *unexp_queue)
 {
 	struct gnix_fab_req *req = NULL;
-	struct slist_entry *item;
+	uint64_t match_flags = flags & (FI_CLAIM | FI_PEEK | FI_DISCARD);
+	/* Search the EP's unexpected list for a match. */
+	uint64_t match_ignore = ignore;
 
-	if (flags & GNIX_MSG_TAGGED) {
-		/* TODO */
-		assert(0);
-	} else if (ep->type == FI_EP_RDM) {
-		/* Search the EP's unexpected list for a match. */
-		item = slist_remove_first_match(&ep->unexp_recv_queue,
-						__msg_match_fab_req,
-						addr);
-		if (item) {
-			req = container_of(item, struct gnix_fab_req, slist);
-			req->modes |= GNIX_FAB_RQ_M_MATCHED;
-		}
-	} else if (ep->type == FI_EP_MSG) {
-		/* Take the first element off of the unexpected list. */
-		item = slist_remove_head(&ep->unexp_recv_queue);
-		if (item) {
-			req = container_of(item, struct gnix_fab_req, slist);
-			req->modes |= GNIX_FAB_RQ_M_MATCHED;
-		}
+	/* if FI_EP_MSG, take the first element off of the unexpected list. */
+	if (ep->type == FI_EP_MSG)
+		match_ignore = ~0;
+
+	req = _gnix_match_tag(unexp_queue, tag, match_ignore,
+			match_flags, context, addr);
+	if (req) {
+		req->modes |= GNIX_FAB_RQ_M_MATCHED;
 	}
 
 	return req;
@@ -326,6 +332,12 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
 	ssize_t cq_len;
 	struct gnix_address *addr_ptr = NULL;
 	fi_addr_t real_addr;
+	fastlock_t *queue_lock = NULL;
+	struct gnix_tag_storage *posted_queue = NULL;
+	struct gnix_tag_storage *unexp_queue = NULL;
+	uint64_t r_tag = tag, r_ignore = ignore, r_flags;
+
+	r_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
 
 	/* TODO make generic address lookup function */
 	/* TODO ignore src_addr unless FI_DIRECT_RECV */
@@ -345,8 +357,37 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
 	}
 	assert(addr_ptr != NULL);
 
-	fastlock_acquire(&ep->recv_queue_lock);
-	req = __gnix_recv_match(ep, addr_ptr, flags, tag, ignore);
+
+	if (likely(flags & GNIX_MSG_TAGGED)) {
+		queue_lock = &ep->tagged_queue_lock;
+		posted_queue = &ep->tagged_posted_recv_queue;
+		unexp_queue = &ep->tagged_unexp_recv_queue;
+	} else {
+		queue_lock = &ep->recv_queue_lock;
+		posted_queue = &ep->posted_recv_queue;
+		unexp_queue = &ep->unexp_recv_queue;
+		r_tag = 0;
+		r_ignore = ~0;
+	}
+
+	fastlock_acquire(queue_lock);
+	req = __gnix_recv_match(ep, addr_ptr, r_flags,
+			r_tag, r_ignore, context, unexp_queue);
+
+	/* special case for fi_recvmsg */
+	if ((flags & GNIX_MSG_TAGGED) &&
+			(flags & (FI_PEEK | FI_CLAIM | FI_DISCARD))) {
+
+		ret = -FI_EOPNOTSUPP;
+		goto err;
+
+		/* if there is no message and we are peeking, exit */
+		if (!req && (flags & FI_PEEK)) {
+			ret = -FI_ENOMSG;
+			goto err;
+		}
+	}
+
 
 	if (req) {
 		if (req->modes & GNIX_FAB_RQ_M_COMPLETE) {
@@ -359,6 +400,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
 		cq = ep->recv_cq;
 		assert(cq != NULL);
 
+		fastlock_acquire(&ep->recv_comp_lock);
 		if (slist_empty(&ep->pending_recv_comp_queue) &&
 			(req->modes & GNIX_FAB_RQ_M_COMPLETE)) {
 
@@ -394,6 +436,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
 					&ep->pending_recv_comp_queue);
 			sched_req = 1;
 		}
+		fastlock_release(&ep->recv_comp_lock);
 
 	} else {
 
@@ -408,12 +451,12 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len, void *desc,
 		req->loc_addr = (uint64_t)buf;
 		req->type = GNIX_FAB_RQ_RECV;
 		req->user_context = context;
-		gnix_slist_insert_tail(&req->slist,
-				       &ep->posted_recv_queue);
+
+		_gnix_insert_tag(posted_queue, r_tag, req, r_ignore);
 	}
 
 err:
-	fastlock_release(&ep->recv_queue_lock);
+	fastlock_release(queue_lock);
 	if (sched_req) {
 		/*
 		 * TODO: schedule completion of req if not completed
@@ -469,6 +512,14 @@ static int _gnix_send_req(void *data)
 		len = req->len;
 	}
 
+	/*
+	 * Fill in tag information if necessary
+	 */
+	if (req->flags & GNIX_MSG_TAGGED) {
+		tdesc->desc.smsg_desc.hdr.msg_tag = req->tag;
+		tdesc->desc.smsg_desc.hdr.flags |= GNIX_MSG_TAGGED;
+	}
+
 	fastlock_acquire(&nic->lock);
 
 	status = GNI_SmsgSendWTag(req->vc->gni_ep,
@@ -497,7 +548,7 @@ static int _gnix_send_req(void *data)
 
 ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		   void *mdesc, uint64_t dest_addr, void *context,
-		   uint64_t flags, uint64_t data)
+		   uint64_t flags, uint64_t data, uint64_t tag)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_vc *vc = NULL;
@@ -540,6 +591,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->vc = vc;
 	req->user_context = context;
 	req->send_fn = _gnix_send_req;
+	req->tag = tag;
 
 	if (mdesc) {
 		md = container_of(mdesc, struct gnix_fid_mem_desc, mr_fid);

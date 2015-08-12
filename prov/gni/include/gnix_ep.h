@@ -72,14 +72,15 @@ extern smsg_completer_fn_t gnix_ep_smsg_completers[];
  * @param[in] addr      address of the sender of the message
  * @param[in] len       length of the message
  * @param[in] imm       immediate data
- * @param[in] sflags    flags used on sender side to indicate presence
- *                      of immediate data - FI_REMOTE_CQ_DATA
+ * @param[in] sflags    flags used on sender side
+ * @param[in] tag       tag associated with message, if any
  * @return              FI_SUCCESS on success, -FI_ENOMEM insufficient
  *                      memory to create unexpected request structure
  */
 int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 				    struct gnix_address addr, size_t len,
-				    uint64_t imm, uint64_t sflags);
+				    uint64_t imm, uint64_t sflags,
+					uint64_t tag);
 /*
  * typedefs for function vectors used to steer send/receive/rma/amo requests,
  * i.e. fi_send, fi_recv, etc. to ep type specific methods
