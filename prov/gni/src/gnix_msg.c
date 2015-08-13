@@ -46,6 +46,77 @@
 #include "gnix_av.h"
 
 /*******************************************************************************
+ * helper functions
+ ******************************************************************************/
+
+/*
+ * search the posted receive queue to find a match
+ * against an incoming SMSG message hdr.  If no
+ * match found, add to the end of the unexpected queue.
+ */
+static int __gnix_smsg_hdr_match(struct gnix_fid_ep *ep,
+				 struct gnix_address addr,
+				 uint64_t sflags, uint64_t tag,
+				 struct gnix_fab_req **req_ptr,
+				 int *matched)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_fab_req *req;
+	struct gnix_address *addr_ptr;
+	struct gnix_tag_storage *unexp_queue;
+	struct gnix_tag_storage *posted_queue;
+	fastlock_t *queue_lock;
+
+	/*
+	 * we have to keep this lock till either we find a match
+	 * or we add the request to the tail of the unexpected queue
+	 */
+
+	if (likely(sflags & GNIX_MSG_TAGGED)) {
+		queue_lock = &ep->tagged_queue_lock;
+		unexp_queue = &ep->tagged_unexp_recv_queue;
+		posted_queue = &ep->tagged_posted_recv_queue;
+	} else {
+		queue_lock = &ep->recv_queue_lock;
+		unexp_queue = &ep->unexp_recv_queue;
+		posted_queue = &ep->posted_recv_queue;
+	}
+
+	addr_ptr = (struct gnix_address *)&addr;
+	fastlock_acquire(queue_lock);
+
+	/* context param is null here because there wouldn't be any context
+	 * associated with it yet
+	 */
+	req = _gnix_match_tag(posted_queue, tag, 0, 0, NULL, addr_ptr);
+	if (req) {
+		req->modes |= GNIX_FAB_RQ_M_MATCHED;
+		*req_ptr = req;
+		*matched = 1;
+	} else {
+		req = _gnix_fr_alloc(ep);
+		if (req == NULL) {
+			ret = -FI_ENOMEM;
+			goto err;
+		}
+
+		req->modes = GNIX_FAB_RQ_M_UNEXPECTED;
+		req->type = GNIX_FAB_RQ_RECV;
+		*matched = 0;
+		*req_ptr = req;
+
+		/* ignore bits don't matter in the unexpected queue,
+		 * so it doesn't matter what is passed in
+		 */
+		_gnix_insert_tag(unexp_queue, tag, req, ~0);
+	}
+
+err:
+	fastlock_release(queue_lock);
+	return ret;
+}
+
+/*******************************************************************************
  * GNI SMSG callbacks invoked upon completion of an SMSG message at the sender.
  ******************************************************************************/
 
@@ -55,7 +126,6 @@ static int __comp_eager_msg_w_data(void *data)
 	struct gnix_tx_descriptor *tdesc;
 	struct gnix_fid_ep *ep;
 	struct gnix_fid_cq *cq;
-	struct fi_context *user_context;
 	ssize_t cq_len;
 	struct gnix_fab_req *req;
 
@@ -68,13 +138,8 @@ static int __comp_eager_msg_w_data(void *data)
 	cq = ep->send_cq;
 	assert(cq != NULL);
 
-	if (req != NULL)
-		user_context = req->user_context;
-	else
-		user_context = tdesc->desc.context;
-
 	cq_len = _gnix_cq_add_event(cq,
-				    user_context,
+				    req->user_context,
 				    FI_SEND | FI_MSG,
 				    0,
 				    0,
@@ -158,68 +223,72 @@ smsg_completer_fn_t gnix_ep_smsg_completers[] = {
 	[GNIX_SMSG_T_RNDZV_RDONE] = __comp_rndzv_msg_recv_done
 };
 
+
 /*******************************************************************************
- * Generic EP recv handling
+ * GNI SMSG callbacks invoked upon receipt of an SMSG message.
+ * These callback functions are invoked with the lock for the nic
+ * associated with the vc already held.
  ******************************************************************************/
 
-/* TODO: this function is somewhat of a placeholder till all of the
- * message pathways are coded. */
-int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
-				   struct gnix_address addr, size_t len,
-				   uint64_t imm, uint64_t sflags, uint64_t tag)
+/*
+ * Handle SMSG message with tag GNIX_SMSG_T_EGR_W_DATA
+ */
+
+static int __smsg_eager_msg_w_data(void *data, void *msg)
 {
-	int matched = 0, ret = FI_SUCCESS;
-	struct gnix_fab_req *req;
+	int ret = FI_SUCCESS;
+	int matched = 0;
+	gni_return_t status;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_hdr *hdr = (struct gnix_smsg_hdr *)msg;
+	struct gnix_fid_ep *ep;
 	struct gnix_fid_cq *cq;
+	struct gnix_fab_req *req = NULL;
 	ssize_t cq_len;
-	uint64_t flags;
-	struct gnix_address *addr_ptr;
-	struct gnix_tag_storage *unexp_queue;
-	struct gnix_tag_storage *posted_queue;
-	fastlock_t *queue_lock;
+	void *data_ptr;
 
-	flags = (sflags & FI_REMOTE_CQ_DATA) ? FI_REMOTE_CQ_DATA : 0;
+	ep = vc->ep;
+	assert(ep);
 
-	/*
-	 * we have to keep this lock till either we find a match
-	 * or we add the request to the tail of the unexpected queue
-	 */
-
-	if (likely(sflags & GNIX_MSG_TAGGED)) {
-		queue_lock = &ep->tagged_queue_lock;
-		unexp_queue = &ep->tagged_unexp_recv_queue;
-		posted_queue = &ep->tagged_posted_recv_queue;
-	} else {
-		queue_lock = &ep->recv_queue_lock;
-		unexp_queue = &ep->unexp_recv_queue;
-		posted_queue = &ep->posted_recv_queue;
-	}
-
-	addr_ptr = (struct gnix_address *)&addr;
-	fastlock_acquire(queue_lock);
-
-	/* context param is null here because there wouldn't be any context
-	 * associated with it yet
-	 */
-	req = _gnix_match_tag(posted_queue, tag, 0, 0, NULL, addr_ptr);
-	if (req) {
-		memcpy((void *)req->loc_addr, msg, MIN(req->len, len));
-		req->addr = addr;
-		req->imm = imm;
-		req->len = MIN(req->len, len);
-		req->modes |= (GNIX_FAB_RQ_M_MATCHED |
-					GNIX_FAB_RQ_M_COMPLETE);
-		matched = 1;
-	}
+	cq = ep->recv_cq;
+	assert(cq != NULL);
 
 	/*
-	 * post to cq and free fab req, otherwise put on unexpected queue
+	 * where the sender data is
 	 */
+	data_ptr = (void *)((char *)msg + sizeof(*hdr));
+
+	/*
+	 * the msg data must be consumed either by matching
+	 * a message or allocating a buffer and putting
+	 * on unexpected queue.
+	 */
+
+	ret = __gnix_smsg_hdr_match(ep,
+				    vc->peer_addr,
+				    hdr->flags,
+				    hdr->msg_tag,
+				    &req,
+				    &matched);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"__gnix_smsg_hdr_match returned %d\n",
+				ret);
 
 	if (matched) {
+		/*
+		 * very exciting, a match, copy the user data (which is behind
+		 * the hdr) into the receive buffer.
+		 *
+		 * TODO: handle -FI_ETRUNC error
+		 */
 
-		cq = ep->recv_cq;
-		assert(cq != NULL);
+		memcpy((void *)req->loc_addr, data_ptr,
+			MIN(req->len, hdr->len));
+		req->addr = vc->peer_addr;
+		req->imm = hdr->imm;
+		req->len = MIN(req->len, hdr->len);
+		req->modes |= GNIX_FAB_RQ_M_COMPLETE;
 
 		/*
 		 * if no previously posted receives that are pending
@@ -237,7 +306,8 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 			 */
 			cq_len = _gnix_cq_add_event(cq,
 						    req->user_context,
-						    flags | FI_RECV | FI_MSG,
+						    hdr->flags |
+							FI_RECV | FI_MSG,
 						    req->len,
 						    (void *)req->loc_addr,
 						    req->imm,
@@ -262,39 +332,103 @@ int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
 			gnix_slist_insert_tail(&req->slist,
 					       &ep->pending_recv_comp_queue);
 		fastlock_release(&ep->recv_comp_lock);
+
 	} else {
 
-		req = _gnix_fr_alloc(ep);
-		if (req == NULL) {
-			ret = -FI_ENOMEM;
-			goto err;
-		}
-
-		req->loc_addr = (uint64_t)malloc(len);
-		if (req->loc_addr == 0UL) {
+		req->loc_addr = (uint64_t)malloc(hdr->len);
+		if (unlikely(req->loc_addr == 0UL)) {
 			_gnix_fr_free(ep, req);
 			ret = -FI_ENOMEM;
-			goto err;
+			GNIX_WARN(FI_LOG_EP_DATA,
+				"malloc returned NULL\n");
+		} else {
+			memcpy((void *)req->loc_addr, data_ptr, hdr->len);
+			req->addr = vc->peer_addr;
+			req->imm = hdr->imm;
+			req->len = hdr->len;
+			req->cq_flags = hdr->flags;
+			req->modes |= GNIX_FAB_RQ_M_COMPLETE;
 		}
-
-		memcpy((void *)req->loc_addr, msg, len);
-		req->addr = addr;
-		req->imm = imm;
-		req->len = len;
-		req->cq_flags = flags;
-		req->modes = GNIX_FAB_RQ_M_UNEXPECTED | GNIX_FAB_RQ_M_COMPLETE;
-		req->type = GNIX_FAB_RQ_RECV;
-
-		/* ignore bits don't matter in the unexpected queue,
-		 * so it doesn't matter what is passed in
-		 */
-		_gnix_insert_tag(unexp_queue, tag, req, ~0);
 	}
 
-err:
-	fastlock_release(queue_lock);
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"GNI_SmsgRelease returned %s\n",
+				gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
 	return ret;
 }
+
+/*
+ * this function will probably not be used unless we need
+ * some kind of explicit flow control to handle unexpected
+ * receives
+ */
+
+static int __smsg_eager_msg_w_data_ack(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+/*
+ * Handle SMSG message with tag GNIX_SMSG_T_EGR_GET
+ */
+static int __smsg_eager_msg_data_at_src(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+/*
+ * Handle SMSG message with tag GNIX_SMSG_T_EGR_GET_ACK
+ */
+static int  __smsg_eager_msg_data_at_src_ack(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_rts(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_rtr(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_cookie(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_send_done(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+static int __smsg_rndzv_msg_recv_done(void *data, void *msg)
+{
+	return -FI_ENOSYS;
+}
+
+smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
+	[GNIX_SMSG_T_EGR_W_DATA] = __smsg_eager_msg_w_data,
+	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __smsg_eager_msg_w_data_ack,
+	[GNIX_SMSG_T_EGR_GET] = __smsg_eager_msg_data_at_src,
+	[GNIX_SMSG_T_EGR_GET_ACK] = __smsg_eager_msg_data_at_src_ack,
+	[GNIX_SMSG_T_RNDZV_RTS] = __smsg_rndzv_msg_rts,
+	[GNIX_SMSG_T_RNDZV_RTR] = __smsg_rndzv_msg_rtr,
+	[GNIX_SMSG_T_RNDZV_COOKIE] = __smsg_rndzv_msg_cookie,
+	[GNIX_SMSG_T_RNDZV_SDONE] = __smsg_rndzv_msg_send_done,
+	[GNIX_SMSG_T_RNDZV_RDONE] = __smsg_rndzv_msg_recv_done
+};
+
+/*******************************************************************************
+ * Generic EP recv handling
+ ******************************************************************************/
 
 static struct gnix_fab_req *__gnix_recv_match(struct gnix_fid_ep *ep,
 		struct gnix_address *addr,

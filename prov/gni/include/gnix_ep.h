@@ -56,31 +56,8 @@ enum {
 };
 
 extern smsg_completer_fn_t gnix_ep_smsg_completers[];
+extern smsg_callback_fn_t gnix_ep_smsg_callbacks[];
 
-/*
- * prototypes for GNI EP helper functions for managing
- * transactions: send/recv, etc.
- */
-
-/**
- * @brief  match an incoming SMSG eager message that includes all
- *         message data with posted receive buffer, or if none present,
- *         add to unexpected receive queue.
- *
- * @param[in] ep        pointer to a previously allocated endpoint
- * @param[in] msg       pointer to msg data in SMSG mailbox buffer
- * @param[in] addr      address of the sender of the message
- * @param[in] len       length of the message
- * @param[in] imm       immediate data
- * @param[in] sflags    flags used on sender side
- * @param[in] tag       tag associated with message, if any
- * @return              FI_SUCCESS on success, -FI_ENOMEM insufficient
- *                      memory to create unexpected request structure
- */
-int _gnix_ep_eager_msg_w_data_match(struct gnix_fid_ep *ep, void *msg,
-				    struct gnix_address addr, size_t len,
-				    uint64_t imm, uint64_t sflags,
-					uint64_t tag);
 /*
  * typedefs for function vectors used to steer send/receive/rma/amo requests,
  * i.e. fi_send, fi_recv, etc. to ep type specific methods
