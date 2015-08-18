@@ -185,7 +185,7 @@ static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
  * 1.) Error check return of container_of.
  */
 static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
-			void *addr, size_t *addrlen)
+			void *addr, size_t *addrlen, size_t struct_copy_size)
 {
 	struct gnix_address *found = NULL;
 	struct gnix_ep_name *out = NULL;
@@ -194,7 +194,7 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 	size_t copy_size;
 	size_t index;
 
-	copy_size = sizeof(*out);
+	copy_size = struct_copy_size;
 
 	if (*addrlen < copy_size) {
 		copy_size = *addrlen;
@@ -271,7 +271,7 @@ static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
  * 2.) Do error checking on return of container_of.
  */
 static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
-		      size_t *addrlen)
+		      size_t *addrlen, size_t struct_copy_size)
 {
 	struct gnix_address *given = NULL;
 	struct gnix_ep_name out = {{0}};
@@ -280,7 +280,7 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 
 	GNIX_TRACE(FI_LOG_AV, "\n");
 
-	copy_size = sizeof(out);
+	copy_size = struct_copy_size;
 
 	if (*addrlen < copy_size) {
 		copy_size = *addrlen;
@@ -311,8 +311,8 @@ err:
 /*******************************************************************************
  * FI_AV API implementations.
  ******************************************************************************/
-static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
-			  size_t *addrlen)
+static int _gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			  size_t *addrlen, size_t struct_copy_size)
 {
 	struct gnix_fid_av *int_av = NULL;
 	int ret = FI_SUCCESS;
@@ -331,10 +331,12 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 	switch (int_av->type) {
 	case FI_AV_TABLE:
-		ret = table_lookup(int_av, fi_addr, addr, addrlen);
+		ret = table_lookup(int_av, fi_addr, addr, addrlen,
+				   struct_copy_size);
 		break;
 	case FI_AV_MAP:
-		ret = map_lookup(int_av, fi_addr, addr, addrlen);
+		ret = map_lookup(int_av, fi_addr, addr, addrlen,
+				 struct_copy_size);
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -343,6 +345,13 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 
 err:
 	return ret;
+}
+
+static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
+			 size_t *addrlen)
+{
+	return _gnix_av_lookup(av, fi_addr, addr, addrlen,
+			       sizeof(struct gnix_ep_name));
 }
 
 /*
@@ -475,6 +484,7 @@ err:
 	return ret;
 }
 
+
 /*
  * TODO: Support shared named AVs.
  */
@@ -550,9 +560,7 @@ int _gnix_av_addr_retrieve(struct fid_av *av, fi_addr_t fi_addr,
 	size_t size = sizeof(fi_addr_t);
 	int ret = FI_SUCCESS;
 
-	ret = gnix_av_lookup(av, fi_addr, real_addr, &size);
-	if (ret == -FI_ETOOSMALL)
-		ret = FI_SUCCESS;
+	ret = _gnix_av_lookup(av, fi_addr, real_addr, &size, size);
 	return ret;
 }
 /*******************************************************************************
