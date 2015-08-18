@@ -335,12 +335,20 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 	} else {
 
+		/*
+		 * TODO: if the malloc fails to allocate space for the
+		 * unexpected message this probably means the endpoint is
+		 * getting flooded with messages.  We should eventually add
+		 * either a flow control method or else at least fail with a
+		 * more useful error message.
+		 */
 		req->loc_addr = (uint64_t)malloc(hdr->len);
 		if (unlikely(req->loc_addr == 0UL)) {
 			_gnix_fr_free(ep, req);
 			ret = -FI_ENOMEM;
 			GNIX_WARN(FI_LOG_EP_DATA,
-				"malloc returned NULL\n");
+				"malloc returned NULL while handling"
+				" an unexpected message\n");
 		} else {
 			memcpy((void *)req->loc_addr, data_ptr, hdr->len);
 			req->addr = vc->peer_addr;
