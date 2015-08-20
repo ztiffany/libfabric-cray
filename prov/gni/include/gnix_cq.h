@@ -92,6 +92,10 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 int _gnix_cq_poll_nic_add(struct gnix_fid_cq *cq, struct gnix_nic *nic);
 int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic);
 
+int _gnix_cq_get(struct gnix_fid_cq *cq);
+
+int _gnix_cq_put(struct gnix_fid_cq *cq);
+
 #ifdef __cplusplus
 }
 #endif

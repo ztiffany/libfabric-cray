@@ -490,6 +490,23 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 		 struct fid_cntr **cntr, void *context);
 
+int _gnix_av_get(struct gnix_fid_av *av);
+
+int _gnix_av_put(struct gnix_fid_av *av);
+
+int _gnix_domain_get(struct gnix_fid_domain *domain);
+
+int _gnix_domain_put(struct gnix_fid_domain *domain);
+
+int _gnix_fabric_get(struct gnix_fid_fabric *fab);
+
+int _gnix_fabric_put(struct gnix_fid_fabric *fab);
+
+int _gnix_ep_get(struct gnix_fid_ep *ep);
+
+int _gnix_ep_put(struct gnix_fid_ep *ep);
+
+
 #ifdef __cplusplus
 } /* extern "C" */
 #endif
