@@ -197,24 +197,18 @@ static int __comp_eager_msg_w_data(void *data)
 	struct gnix_tx_descriptor *tdesc;
 	struct gnix_fid_ep *ep;
 	struct gnix_fid_cq *cq;
-	struct fi_context *user_context;
 	ssize_t cq_len;
 
 	tdesc = (struct gnix_tx_descriptor *)data;
 
-	ep = tdesc->desc.ep;
+	ep = tdesc->req->gnix_ep;
 	assert(ep != NULL);
 
 	cq = ep->send_cq;
 	assert(cq != NULL);
 
-	if (tdesc->desc.req != NULL)
-		user_context = tdesc->desc.req->user_context;
-	else
-		user_context = tdesc->desc.context;
-
 	cq_len = _gnix_cq_add_event(cq,
-				    user_context,
+				    tdesc->req->user_context,
 				    FI_SEND | FI_MSG,
 				    0,
 				    0,
@@ -497,20 +491,19 @@ int _gnix_send_req(void *data)
 			return ret;
 		assert(ret == FI_SUCCESS);
 
-		tdesc->desc.smsg_desc.hdr.len = req->len;
-		tdesc->desc.smsg_desc.hdr.flags = 0;
-		tdesc->desc.smsg_desc.buf = (void *)req->loc_addr;
-		tdesc->desc.req = req;
-		tdesc->desc.ep = ep;
-		tdesc->desc.completer_fn =
+		tdesc->smsg_desc.hdr.len = req->len;
+		tdesc->smsg_desc.hdr.flags = 0;
+		tdesc->smsg_desc.buf = (void *)req->loc_addr;
+		tdesc->req = req;
+		tdesc->completer_fn =
 				gnix_ep_smsg_completers[GNIX_SMSG_T_EGR_W_DATA];
 		fastlock_acquire(&nic->lock);
 		status = GNI_SmsgSendWTag(req->vc->gni_ep,
-					  &tdesc->desc.smsg_desc.hdr,
+					  &tdesc->smsg_desc.hdr,
 					  sizeof(struct gnix_smsg_hdr),
 					  (void *)req->loc_addr,
 					  req->len,
-					  tdesc->desc.id,
+					  tdesc->id,
 					  GNIX_SMSG_T_EGR_W_DATA);
 		fastlock_release(&nic->lock);
 		if (status == GNI_RC_NOT_DONE) {

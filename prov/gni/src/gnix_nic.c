@@ -244,7 +244,7 @@ try_again:
 			}
 			gnix_tdesc = container_of(gni_desc,
 						struct gnix_tx_descriptor,
-						desc.gni_desc);
+						gni_desc);
 		}  else if (GNI_CQ_GET_TYPE(cqe)
 			    == GNI_CQ_EVENT_TYPE_SMSG) {
 			msg_id = GNI_CQ_GET_MSG_ID(cqe);
@@ -257,9 +257,9 @@ try_again:
 
 		fastlock_release(&nic->lock);
 		if (ret == FI_SUCCESS) {
-			if (gnix_tdesc->desc.completer_fn) {
+			if (gnix_tdesc->completer_fn) {
 				ret =
-				   gnix_tdesc->desc.completer_fn(gnix_tdesc);
+				   gnix_tdesc->completer_fn(gnix_tdesc);
 				if (ret)
 					goto err;
                         }
@@ -284,7 +284,7 @@ try_again:
 		fastlock_release(&nic->lock);
 		gnix_tdesc = container_of(gni_desc,
 					struct gnix_tx_descriptor,
-					desc.gni_desc);
+					gni_desc);
 		if ((status2 != GNI_RC_SUCCESS) &&
 			(status2 != GNI_RC_TRANSACTION_ERROR)) {
 			ret = gnixu_to_fi_errno(status2);
@@ -458,7 +458,7 @@ int _gnix_nic_tx_alloc(struct gnix_nic *nic,
 	entry = nic->tx_desc_free_list.next;
 	dlist_remove_init(entry);
 	dlist_insert_head(entry, &nic->tx_desc_active_list);
-	*desc = dlist_entry(entry, struct gnix_tx_descriptor, desc.list);
+	*desc = dlist_entry(entry, struct gnix_tx_descriptor, list);
 	fastlock_release(&nic->tx_desc_lock);
 
 	return FI_SUCCESS;
@@ -473,8 +473,8 @@ int _gnix_nic_tx_free(struct gnix_nic *nic,
 		      struct gnix_tx_descriptor *desc)
 {
 	fastlock_acquire(&nic->tx_desc_lock);
-	dlist_remove_init(&desc->desc.list);
-	dlist_insert_head(&desc->desc.list, &nic->tx_desc_free_list);
+	dlist_remove_init(&desc->list);
+	dlist_insert_head(&desc->list, &nic->tx_desc_free_list);
 	fastlock_release(&nic->tx_desc_lock);
 
 	return FI_SUCCESS;
@@ -505,8 +505,8 @@ static int __gnix_nic_tx_freelist_init(struct gnix_nic *nic, int n_descs)
 	dlist_init(&nic->tx_desc_active_list);
 
 	for (i = 0, desc_ptr = desc_base; i < n_descs; i++, desc_ptr++) {
-		desc_ptr->desc.id = i;
-		dlist_insert_tail(&desc_ptr->desc.list,
+		desc_ptr->id = i;
+		dlist_insert_tail(&desc_ptr->list,
 				  &nic->tx_desc_free_list);
 	}
 
