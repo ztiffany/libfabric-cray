@@ -267,7 +267,7 @@ int gnix_wait_close(struct fid *wait)
 		close(wait_priv->fd[WAIT_WRITE]);
 	}
 
-	_gnix_fabric_put(wait_priv->fabric);
+	atomic_dec(&wait_priv->fabric->ref_cnt);
 
 	free(wait_priv);
 
@@ -309,7 +309,7 @@ int gnix_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,
 
 	wait_priv->fabric = fab_priv;
 
-	_gnix_fabric_get(fab_priv);
+	atomic_inc(&fab_priv->ref_cnt);
 	*waitset = &wait_priv->wait;
 
 	return ret;

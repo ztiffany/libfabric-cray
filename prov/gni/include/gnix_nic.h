@@ -340,11 +340,6 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 	return 0;
 }
 
-int _gnix_nic_get(struct gnix_nic *nic);
-
-int _gnix_nic_put(struct gnix_nic *nic);
-
-
 #ifdef __cplusplus
 } /* extern "C" */
 #endif

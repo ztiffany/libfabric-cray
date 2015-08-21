@@ -49,13 +49,6 @@ struct gnix_cntr_poll_nic {
 	struct gnix_nic *nic;
 };
 
-enum {
-	GNIX_CNTR_STATE_UNINITIALIZED = 0,
-	GNIX_CNTR_STATE_READY,
-	GNIX_CNTR_STATE_WAITING_ON_REFS,
-	GNIX_CNTR_STATE_DEAD,
-};
-
 struct gnix_fid_cntr {
 	struct fid_cntr cntr_fid;
 	struct gnix_fid_domain *domain;
@@ -66,7 +59,6 @@ struct gnix_fid_cntr {
 	atomic_t cnt;
 	atomic_t cnt_err;
 	atomic_t ref_cnt;
-	int state;
 };
 
 /**
@@ -102,11 +94,6 @@ int _gnix_cntr_poll_nic_add(struct gnix_fid_cntr *cntr, struct gnix_nic *nic);
  * @return             FI_SUCCESS on success, -FI_EINVAL on invalid argument
  */
 int _gnix_cntr_poll_nic_rem(struct gnix_fid_cntr *cntr, struct gnix_nic *nic);
-
-
-int _gnix_cntr_put(struct gnix_fid_cntr *cntr);
-
-int _gnix_cntr_get(struct gnix_fid_cntr *cntr);
 
 #ifdef __cplusplus
 }
