@@ -856,11 +856,8 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, fi_addr_t dest_addr,
 
 	vc_ptr->conn_state = GNIX_VC_CONN_NONE;
 	memcpy(&vc_ptr->peer_addr, &dest_addr, sizeof(dest_addr));
-
-	/* take reference on ep */
 	vc_ptr->ep = ep_priv;
-	_gnix_ep_get(vc_ptr->ep);
-
+	atomic_inc(&ep_priv->ref_cnt);
 	slist_init(&vc_ptr->tx_queue);
 	fastlock_init(&vc_ptr->tx_queue_lock);
 	atomic_initialize(&vc_ptr->outstanding_tx_reqs, 0);
@@ -962,8 +959,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_CTRL,
 		      "__gnix_vc_free_id returned %d\n", ret);
 
-	/* release reference on ep */
-	_gnix_ep_put(vc->ep);
+	atomic_dec(&vc->ep->ref_cnt);
 
 	free(vc);
 

@@ -211,9 +211,7 @@ static inline int __mr_cache_entry_destroy(
 	ret = GNI_MemDeregister(entry->nic->gni_nic_hndl, &entry->mem_hndl);
 	fastlock_release(&entry->nic->lock);
 	if (ret == GNI_RC_SUCCESS) {
-		/* release reference to domain */
-		_gnix_domain_put(entry->domain);
-
+		atomic_dec(&entry->domain->ref_cnt);
 		/* This may be last ref to nic, so must call _gnix_nic_free */
 		_gnix_nic_free(entry->nic);
 
@@ -394,7 +392,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* md.domain */
 	mr->domain = domain;
-	_gnix_domain_get(mr->domain); /* take reference on domain */
+	atomic_inc(&domain->ref_cnt); /* take reference on domain */
 
 	/* md.mr_fid */
 	mr->mr_fid.fid.fclass = FI_CLASS_MR;
@@ -402,7 +400,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 	mr->mr_fid.fid.ops = &fi_gnix_mr_ops;
 
 	/* nic */
-	_gnix_nic_get(mr->nic); /* take reference on nic */
+	atomic_inc(&mr->nic->ref_cnt); /* take reference on nic */
 
 	/* setup internal key structure */
 	mr->mr_fid.key = _gnix_convert_mhdl_to_key(&mr->mem_hndl);
@@ -447,8 +445,8 @@ static int fi_gnix_mr_close(fid_t fid)
 	/* check retcode */
 	if (likely(ret == FI_SUCCESS)) {
 		/* release references to the domain and nic */
-		_gnix_domain_put(mr->domain);
-		_gnix_nic_put(mr->nic);
+		atomic_dec(&mr->domain->ref_cnt);
+		atomic_dec(&mr->nic->ref_cnt);
 
 		free(mr);
 	} else {
@@ -800,9 +798,8 @@ static int __mr_cache_register(
 	entry->domain = domain;
 	entry->nic = nic;
 
-	/* take references on domain and nic */
-	_gnix_domain_get(entry->domain);
-	_gnix_nic_get(entry->nic);
+	atomic_inc(&entry->domain->ref_cnt);
+	atomic_inc(&entry->nic->ref_cnt);
 
 success:
 	mr->nic = entry->nic;

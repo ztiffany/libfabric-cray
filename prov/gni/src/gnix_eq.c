@@ -236,9 +236,8 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq_priv->fabric = container_of(fabric, struct gnix_fid_fabric,
 					  fab_fid);
 
-	atomic_initialize(&eq_priv->ref_cnt, 1);
-
-	_gnix_fabric_get(eq_priv->fabric);
+	atomic_initialize(&eq_priv->ref_cnt, 0);
+	atomic_inc(&eq_priv->fabric->ref_cnt);
 
 	eq_priv->eq_fid.fid.fclass = FI_CLASS_EQ;
 	eq_priv->eq_fid.fid.context = context;
@@ -269,16 +268,32 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 err2:
 	_gnix_queue_destroy(eq_priv->events);
 err1:
-	_gnix_fabric_put(eq_priv->fabric);
+	atomic_dec(&eq_priv->fabric->ref_cnt);
 	fastlock_destroy(&eq_priv->lock);
 err:
 	free(eq_priv);
 	return ret;
 }
 
-static void __eq_destruct(struct gnix_fid_eq *eq)
+static int gnix_eq_close(struct fid *fid)
 {
-	_gnix_fabric_put(eq->fabric);
+	struct gnix_fid_eq *eq;
+
+	GNIX_TRACE(FI_LOG_EQ, "\n");
+
+	if (!fid)
+		return -FI_EINVAL;
+
+	eq = container_of(fid, struct gnix_fid_eq, eq_fid);
+
+	if (atomic_get(&eq->ref_cnt) != 0) {
+		GNIX_INFO(FI_LOG_EQ, "EQ ref count: %d, not closing.\n",
+			  eq->ref_cnt);
+		return -FI_EBUSY;
+	}
+
+	atomic_dec(&eq->fabric->ref_cnt);
+	assert(atomic_get(&eq->fabric->ref_cnt) >= 0);
 
 	fastlock_destroy(&eq->lock);
 
@@ -304,47 +319,6 @@ static void __eq_destruct(struct gnix_fid_eq *eq)
 	_gnix_queue_destroy(eq->errors);
 
 	free(eq);
-}
-
-int _gnix_eq_hold(struct gnix_fid_eq *eq)
-{
-	int references_held = atomic_inc(&eq->ref_cnt);
-
-	assert(references_held > 0);
-
-	return references_held;
-}
-
-int _gnix_eq_put(struct gnix_fid_eq *eq)
-{
-	int references_held = atomic_dec(&eq->ref_cnt);
-
-	assert(references_held >= 0);
-
-	if (!references_held)
-		__eq_destruct(eq);
-
-	return references_held;
-}
-
-static int gnix_eq_close(struct fid *fid)
-{
-	struct gnix_fid_eq *eq;
-	int references_held;
-
-	GNIX_TRACE(FI_LOG_EQ, "\n");
-
-	if (!fid)
-		return -FI_EINVAL;
-
-	eq = container_of(fid, struct gnix_fid_eq, eq_fid);
-
-	references_held = _gnix_eq_put(eq);
-	if (references_held) {
-		GNIX_INFO(FI_LOG_EQ, "failed to fully close eq due "
-				"to lingering references. references=%i eq=%p\n",
-				references_held, eq);
-	}
 
 	return FI_SUCCESS;
 }

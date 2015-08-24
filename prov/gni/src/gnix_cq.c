@@ -410,9 +410,24 @@ int _gnix_cq_poll_nic_rem(struct gnix_fid_cq *cq, struct gnix_nic *nic)
 	return -FI_EINVAL;
 }
 
-static void __cq_destruct(struct gnix_fid_cq *cq)
+/*******************************************************************************
+ * API functions.
+ ******************************************************************************/
+static int gnix_cq_close(fid_t fid)
 {
-	_gnix_domain_put(cq->domain);
+	struct gnix_fid_cq *cq;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	cq = container_of(fid, struct gnix_fid_cq, cq_fid);
+	if (atomic_get(&cq->ref_cnt) != 0) {
+		GNIX_INFO(FI_LOG_CQ, "CQ ref count: %d, not closing.\n",
+			  cq->ref_cnt);
+		return -FI_EBUSY;
+	}
+
+	atomic_dec(&cq->domain->ref_cnt);
+	assert(atomic_get(&cq->domain->ref_cnt) >= 0);
 
 	switch (cq->attr.wait_obj) {
 	case FI_WAIT_NONE:
@@ -439,48 +454,6 @@ static void __cq_destruct(struct gnix_fid_cq *cq)
 	free(cq->cq_fid.ops);
 	free(cq->cq_fid.fid.ops);
 	free(cq);
-}
-
-int _gnix_cq_get(struct gnix_fid_cq *cq)
-{
-	int references_held = atomic_inc(&cq->ref_cnt);
-
-	assert(references_held > 0);
-
-	return references_held;
-}
-
-int _gnix_cq_put(struct gnix_fid_cq *cq)
-{
-	int references_held = atomic_dec(&cq->ref_cnt);
-
-	assert(references_held >= 0);
-
-	if (!references_held)
-		__cq_destruct(cq);
-
-	return references_held;
-}
-
-/*******************************************************************************
- * API functions.
- ******************************************************************************/
-static int gnix_cq_close(fid_t fid)
-{
-	struct gnix_fid_cq *cq;
-	int references_held;
-
-	GNIX_TRACE(FI_LOG_CQ, "\n");
-
-	cq = container_of(fid, struct gnix_fid_cq, cq_fid);
-
-	references_held = _gnix_cq_put(cq);
-
-	if (references_held) {
-		GNIX_INFO(FI_LOG_CQ, "failed to fully close cq due to lingering "
-				"references. references=%i cq=%p\n",
-				references_held, cq);
-	}
 
 	return FI_SUCCESS;
 }
@@ -661,8 +634,8 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	cq_priv->domain = domain_priv;
 	cq_priv->attr = *attr;
-	atomic_initialize(&cq_priv->ref_cnt, 1);
-	_gnix_domain_get(cq_priv->domain);
+	atomic_initialize(&cq_priv->ref_cnt, 0);
+	atomic_inc(&cq_priv->domain->ref_cnt);
 	dlist_init(&cq_priv->poll_nics);
 	rwlock_init(&cq_priv->nic_lock);
 
@@ -703,7 +676,7 @@ int gnix_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 err5:
 	_gnix_queue_destroy(cq_priv->events);
 err4:
-	_gnix_domain_put(cq_priv->domain);
+	atomic_dec(&cq_priv->domain->ref_cnt);
 	fastlock_destroy(&cq_priv->lock);
 err3:
 	free(cq_priv);
