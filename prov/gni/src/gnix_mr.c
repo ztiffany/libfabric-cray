@@ -289,26 +289,32 @@ static inline int __mr_cache_entry_put(
 	return grc;
 }
 
-void _gnix_convert_key_to_mhdl(
+void _gnix_convert_key_to_mhdl_no_crc(
 		gnix_mr_key_t *key,
 		gni_mem_handle_t *mhdl)
 {
 	uint64_t va = key->pfn;
 	uint8_t flags = 0;
 
-	va = (uint64_t) __sign_extend(va << GNIX_MR_PAGE_SHIFT, GNIX_MR_VA_BITS);
+	va = (uint64_t) __sign_extend(va << GNIX_MR_PAGE_SHIFT,
+				      GNIX_MR_VA_BITS);
 
 	if (key->flags & GNIX_MR_FLAG_READONLY)
 		flags |= GNI_MEMHNDL_ATTR_READONLY;
 
 	GNI_MEMHNDL_INIT((*mhdl));
-	//if (key->format)
-	//	GNI_MEMHNDL_SET_FLAGS((*mhdl), GNI_MEMHNDL_FLAG_NEW_FRMT);
 	GNI_MEMHNDL_SET_VA((*mhdl), va);
 	GNI_MEMHNDL_SET_MDH((*mhdl), key->mdd);
 	GNI_MEMHNDL_SET_NPAGES((*mhdl), GNI_MEMHNDL_NPGS_MASK);
 	GNI_MEMHNDL_SET_FLAGS((*mhdl), flags);
 	GNI_MEMHNDL_SET_PAGESIZE((*mhdl), GNIX_MR_PAGE_SHIFT);
+}
+
+void _gnix_convert_key_to_mhdl(
+		gnix_mr_key_t *key,
+		gni_mem_handle_t *mhdl)
+{
+	_gnix_convert_key_to_mhdl_no_crc(key, mhdl);
 	compiler_barrier();
 	GNI_MEMHNDL_SET_CRC((*mhdl));
 }

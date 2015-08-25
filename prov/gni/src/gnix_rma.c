@@ -143,8 +143,17 @@ int _gnix_rma_post_req(void *data)
 	txd->desc.completer_fn = __gnix_rma_txd_complete;
 	txd->desc.req = fab_req;
 
-	_gnix_convert_key_to_mhdl((gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
-				  &mdh);
+	if (rdma) {
+		_gnix_convert_key_to_mhdl(
+				(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
+				&mdh);
+	} else {
+		/* Mem handle CRC is not validated during FMA operations.  Skip
+		 * this costly calculation. */
+		_gnix_convert_key_to_mhdl_no_crc(
+				(gnix_mr_key_t *)&fab_req->rma.rem_mr_key,
+				&mdh);
+	}
 	loc_md = (struct gnix_fid_mem_desc *)fab_req->loc_md;
 
 	//txd->desc.gni_desc.post_id = (uint64_t)fab_req; /* unused */

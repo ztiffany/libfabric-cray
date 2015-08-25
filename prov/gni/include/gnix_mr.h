@@ -193,6 +193,17 @@ typedef struct gnix_mr_cache {
 } gnix_mr_cache_t;
 
 /**
+ * @brief Converts a libfabric key to a gni memory handle, skipping memory
+ *        handle CRC generation.
+ *
+ * @param[in]     key   libfabric memory region key
+ * @param[in,out] mhdl  gni memory handle
+ */
+void _gnix_convert_key_to_mhdl_no_crc(
+		gnix_mr_key_t    *key,
+		gni_mem_handle_t *mhdl);
+
+/**
  * @brief Converts a libfabric key to a gni memory handle
  *
  * @param[in]     key   libfabric memory region key
