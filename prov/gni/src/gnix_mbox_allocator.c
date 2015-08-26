@@ -144,6 +144,7 @@ static int __generate_file_name(size_t page_size, char **filename)
 	char *huge_page = NULL;
 	char *error;
 	char error_buf[256];
+	int my_file_id;
 	int size;
 	int ret;
 
@@ -160,8 +161,9 @@ static int __generate_file_name(size_t page_size, char **filename)
 		goto err_invalid;
 	}
 
-	size = snprintf(NULL, 0, "%s/%s%d", huge_page, basename,
-			atomic_get(&file_id_counter));
+	my_file_id = atomic_inc(&file_id_counter);
+	size = snprintf(NULL, 0, "%s/%s.%d.%d", huge_page, basename, getpid(),
+			my_file_id);
 	if (size < 0) {
 		error = strerror_r(errno, error_buf, sizeof(error_buf));
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -180,14 +182,12 @@ static int __generate_file_name(size_t page_size, char **filename)
 		goto err_snprintf;
 	}
 
-	sprintf(full_filename, "%s/%s%d", huge_page, basename,
-		atomic_get(&file_id_counter));
+	sprintf(full_filename, "%s/%s.%d.%d", huge_page, basename, getpid(),
+		my_file_id);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "Generated filename: %s\n", full_filename);
 
 	*filename = full_filename;
-
-	atomic_inc(&file_id_counter);
 
 err_snprintf:
 	free(huge_page);
