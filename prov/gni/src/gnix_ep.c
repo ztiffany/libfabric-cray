@@ -91,8 +91,9 @@ struct fi_ops_tagged gnix_ep_tagged_ops;
  ******************************************************************************/
 
 static inline ssize_t __ep_recv(struct fid_ep *ep, void *buf, size_t len,
-		void *desc, fi_addr_t src_addr, void *context, uint64_t flags,
-		uint64_t tag, uint64_t ignore) {
+				void *desc, fi_addr_t src_addr, void *context,
+				uint64_t flags, uint64_t tag, uint64_t ignore)
+{
 	struct gnix_fid_ep *ep_priv;
 
 	if (!ep) {
@@ -107,8 +108,8 @@ static inline ssize_t __ep_recv(struct fid_ep *ep, void *buf, size_t len,
 }
 
 static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
-			     void **desc, size_t count, fi_addr_t src_addr,
-			     void *context, uint64_t flags, uint64_t tag,
+				 void **desc, size_t count, fi_addr_t src_addr,
+				 void *context, uint64_t flags, uint64_t tag,
 				 uint64_t ignore)
 {
 	struct gnix_fid_ep *ep_priv;
@@ -126,7 +127,8 @@ static inline ssize_t __ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 }
 
 static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags, uint64_t tag, uint64_t ignore)
+				   uint64_t flags, uint64_t tag,
+				   uint64_t ignore)
 {
 	struct gnix_fid_ep *ep_priv;
 
@@ -144,8 +146,8 @@ static inline ssize_t __ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 static inline ssize_t __ep_send(struct fid_ep *ep, const void *buf, size_t len,
-	     void *desc, fi_addr_t dest_addr, void *context,
-		 uint64_t flags, uint64_t tag)
+				void *desc, fi_addr_t dest_addr, void *context,
+				uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -161,8 +163,8 @@ static inline ssize_t __ep_send(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
-	     void **desc, size_t count, fi_addr_t dest_addr,
-	     void *context, uint64_t flags, uint64_t tag)
+				 void **desc, size_t count, fi_addr_t dest_addr,
+				 void *context, uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -179,7 +181,7 @@ static inline ssize_t __ep_sendv(struct fid_ep *ep, const struct iovec *iov,
 }
 
 static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-		uint64_t flags, uint64_t tag)
+				   uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -197,8 +199,8 @@ static inline ssize_t __ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 }
 
 static inline ssize_t __ep_inject(struct fid_ep *ep, const void *buf,
-		  size_t len, fi_addr_t dest_addr, uint64_t flags,
-		  uint64_t tag)
+				  size_t len, fi_addr_t dest_addr,
+				  uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
 	uint64_t inject_flags;
@@ -217,10 +219,10 @@ static inline ssize_t __ep_inject(struct fid_ep *ep, const void *buf,
 			  NULL, inject_flags, 0, tag);
 }
 
-static inline ssize_t __ep_senddata(struct fid_ep *ep,
-		const void *buf, size_t len, void *desc, uint64_t data,
-		fi_addr_t dest_addr, void *context, uint64_t flags,
-		uint64_t tag)
+static inline ssize_t __ep_senddata(struct fid_ep *ep, const void *buf,
+				    size_t len, void *desc, uint64_t data,
+				    fi_addr_t dest_addr, void *context,
+				    uint64_t flags, uint64_t tag)
 {
 	struct gnix_fid_ep *gnix_ep;
 	uint64_t sd_flags;
@@ -256,7 +258,7 @@ static ssize_t gnix_ep_recvv(struct fid_ep *ep, const struct iovec *iov,
 }
 
 static ssize_t gnix_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
-			uint64_t flags)
+			       uint64_t flags)
 {
 	return __ep_recvmsg(ep, msg, flags, 0, 0);
 }
@@ -339,8 +341,8 @@ static ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 }
 
 static ssize_t gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov,
-				void **desc, size_t count, fi_addr_t src_addr,
-				uint64_t addr, uint64_t key, void *context)
+			     void **desc, size_t count, fi_addr_t src_addr,
+			     uint64_t addr, uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -358,7 +360,7 @@ static ssize_t gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov,
 }
 
 static ssize_t gnix_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
-				uint64_t flags)
+			       uint64_t flags)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -379,8 +381,8 @@ static ssize_t gnix_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 }
 
 static ssize_t gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len,
-				void *desc, fi_addr_t dest_addr, uint64_t addr,
-				uint64_t key, void *context)
+			     void *desc, fi_addr_t dest_addr, uint64_t addr,
+			     uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -398,8 +400,8 @@ static ssize_t gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len,
 }
 
 static ssize_t gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov,
-				void **desc, size_t count, fi_addr_t dest_addr,
-				uint64_t addr, uint64_t key, void *context)
+			      void **desc, size_t count, fi_addr_t dest_addr,
+			      uint64_t addr, uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
 
@@ -543,7 +545,7 @@ static ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
 }
 
 static ssize_t gnix_ep_tsend(struct fid_ep *ep, const void *buf, size_t len, void *desc,
-			fi_addr_t dest_addr, uint64_t tag, void *context)
+			     fi_addr_t dest_addr, uint64_t tag, void *context)
 {
 	return __ep_send(ep, buf, len, desc, dest_addr, context,
 			GNIX_MSG_TAGGED, tag);
@@ -573,14 +575,14 @@ static ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
 }
 
 static ssize_t gnix_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
-				fi_addr_t dest_addr, uint64_t tag)
+			       fi_addr_t dest_addr, uint64_t tag)
 {
 	return __ep_inject(ep, buf, len, dest_addr, GNIX_MSG_TAGGED, tag);
 }
 
 ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
-			void *desc, uint64_t data, fi_addr_t dest_addr,
-			uint64_t tag, void *context)
+			  void *desc, uint64_t data, fi_addr_t dest_addr,
+			  uint64_t tag, void *context)
 {
 	return __ep_senddata(ep, buf, len, desc, data, dest_addr, context,
 			GNIX_MSG_TAGGED, tag);
