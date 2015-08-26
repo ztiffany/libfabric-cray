@@ -183,50 +183,27 @@ struct gnix_smsg_descriptor {
 	uint8_t  tag;
 };
 
-
-/**
- * gnix_tx_descriptor0 - first part of the send side tx desciptor
- *                       used to track GNI SMSG and Post operations
- *
- * @var list             list element
- * @var gni_desc         embedded GNI post descriptor
- * @var gnix_smsg_desc   embedded gnix SMSG descriptor
- * @var req              pointer to fab request associated with this
- *                       descriptor
- * @var completer_fn     pointer to function to be invoked open
- *                       receipt of the GNI CQE associated with
- *                       the GNI Post or Smsg transaction being
- *                       tracked by this descriptor
- * @var id               the id of this descriptor - the value returned
- *                       from GNI_CQ_MSG_ID
- */
-union gnix_tx_descriptor0 {
-	struct {
-		struct dlist_entry          list;
-		gni_post_descriptor_t       gni_desc;
-		struct gnix_smsg_descriptor smsg_desc;
-		struct gnix_fab_req *req;
-		struct gnix_fid_ep *ep;
-		struct fi_context *context;
-		int  (*completer_fn)(void *);
-		int id;
-	};
-	char padding[GNIX_CACHELINE_SIZE];
-} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
-
 /**
  * gni_tx_descriptor - full tx descriptor used to to track GNI SMSG
  *                     and Post operations
  *
- * @var desc       embedded gnix_tx_descriptor0
- * @var inject_buf embedded inline injection buffer associated with
- *                 this descriptor
+ * @var list             list element
+ * @var gni_desc         embedded GNI post descriptor
+ * @var gnix_smsg_desc   embedded gnix SMSG descriptor
+ * @var req              pointer to fab request associated with this descriptor
+ * @var id               the id of this descriptor - the value returned
+ *                       from GNI_CQ_MSG_ID
  */
 struct gnix_tx_descriptor {
-	union gnix_tx_descriptor0 desc;
-	char inject_buf[GNIX_CACHELINE_SIZE];
-} __attribute__ ((aligned (GNIX_CACHELINE_SIZE)));
-
+	struct dlist_entry          list;
+	union {
+		gni_post_descriptor_t       gni_desc;
+		struct gnix_smsg_descriptor smsg_desc;
+	};
+	struct gnix_fab_req *req;
+	int  (*completer_fn)(void *);
+	int id;
+};
 
 /*
  * globals
