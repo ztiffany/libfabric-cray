@@ -135,7 +135,7 @@ extern "C" {
  */
 
 /*
- * see capabilities section in fi_getinfo.3
+ * See capabilities section in fi_getinfo.3.
  */
 #define GNIX_EP_RDM_CAPS                                                       \
 	(FI_MSG | FI_RMA | FI_TAGGED | FI_ATOMICS |                            \
@@ -146,10 +146,25 @@ extern "C" {
 /*
  * see Operations flags in fi_endpoint.3
  */
-#define GNIX_EP_OP_FLAGS                                                       \
-	(FI_MULTI_RECV | FI_COMPLETION |                                       \
-	 FI_TRANSMIT_COMPLETE | FI_READ | FI_WRITE | FI_SEND | FI_RECV |       \
-	 FI_REMOTE_READ | FI_REMOTE_WRITE)
+#define GNIX_EP_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
+				 FI_INJECT_COMPLETE | FI_TRANSMIT_COMPLETE | \
+				 FI_DELIVERY_COMPLETE)
+
+/*
+ * Valid msg transaction input flags.  See fi_msg.3.
+ */
+#define GNIX_SENDMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | \
+				 FI_MORE | FI_INJECT | FI_INJECT_COMPLETE | \
+				 FI_TRANSMIT_COMPLETE | FI_FENCE)
+#define GNIX_RECVMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_MULTI_RECV)
+
+/*
+ * Valid rma transaction input flags.  See fi_rma.3.
+ */
+#define GNIX_WRITEMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | \
+				 FI_MORE | FI_INJECT | FI_INJECT_COMPLETE | \
+				 FI_TRANSMIT_COMPLETE | FI_FENCE)
+#define GNIX_READMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
 
 /*
  * if this has to be changed, check gnix_getinfo, etc.
