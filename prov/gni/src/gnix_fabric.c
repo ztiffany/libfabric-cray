@@ -341,9 +341,10 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->tx_attr->mode = gnix_info->mode;
 
 	if (hints && hints->tx_attr && hints->tx_attr->op_flags) {
-		gnix_info->tx_attr->op_flags = hints->tx_attr->op_flags;
+		gnix_info->tx_attr->op_flags =
+				hints->tx_attr->op_flags & GNIX_EP_OP_FLAGS;
 	} else {
-		gnix_info->tx_attr->op_flags = GNIX_EP_OP_FLAGS;
+		gnix_info->tx_attr->op_flags = 0;
 	}
 
 	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
@@ -357,9 +358,10 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->rx_attr->mode = gnix_info->mode;
 
 	if (hints && hints->rx_attr && hints->rx_attr->op_flags) {
-		gnix_info->rx_attr->op_flags = hints->rx_attr->op_flags;
+		gnix_info->rx_attr->op_flags =
+				hints->rx_attr->op_flags & GNIX_EP_OP_FLAGS;
 	} else {
-		gnix_info->rx_attr->op_flags = GNIX_EP_OP_FLAGS;
+		gnix_info->rx_attr->op_flags = 0;
 	}
 
 	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
