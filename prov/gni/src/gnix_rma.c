@@ -100,7 +100,7 @@ static int __gnix_rma_txd_complete(void *arg)
 
 	/* Progress fabric operation in the fab_req completer.  Can we call
 	 * fab_req->completer_fn directly from __gnix_tx_progress? */
-	return txd->desc.req->completer_fn(txd->desc.req->completer_data);
+	return txd->req->completer_fn(txd->req->completer_data);
 }
 
 static gni_post_type_t __gnix_fr_post_type(int fr_type, int rdma)
@@ -140,8 +140,8 @@ int _gnix_rma_post_req(void *data)
 		return -FI_EAGAIN;
 	}
 
-	txd->desc.completer_fn = __gnix_rma_txd_complete;
-	txd->desc.req = fab_req;
+	txd->completer_fn = __gnix_rma_txd_complete;
+	txd->req = fab_req;
 
 	if (rdma) {
 		_gnix_convert_key_to_mhdl(
@@ -156,26 +156,25 @@ int _gnix_rma_post_req(void *data)
 	}
 	loc_md = (struct gnix_fid_mem_desc *)fab_req->loc_md;
 
-	//txd->desc.gni_desc.post_id = (uint64_t)fab_req; /* unused */
-	txd->desc.gni_desc.type = __gnix_fr_post_type(fab_req->type, rdma);
-	txd->desc.gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
-	txd->desc.gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
-	txd->desc.gni_desc.local_addr = (uint64_t)fab_req->loc_addr;
+	txd->gni_desc.type = __gnix_fr_post_type(fab_req->type, rdma);
+	txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT; /* check flags */
+	txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE; /* check flags */
+	txd->gni_desc.local_addr = (uint64_t)fab_req->loc_addr;
 	if (loc_md) {
-		txd->desc.gni_desc.local_mem_hndl = loc_md->mem_hndl;
+		txd->gni_desc.local_mem_hndl = loc_md->mem_hndl;
 	}
-	txd->desc.gni_desc.remote_addr = (uint64_t)fab_req->rma.rem_addr;
-	txd->desc.gni_desc.remote_mem_hndl = mdh;
-	txd->desc.gni_desc.length = fab_req->len;
-	txd->desc.gni_desc.rdma_mode = 0; /* check flags */
-	txd->desc.gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
+	txd->gni_desc.remote_addr = (uint64_t)fab_req->rma.rem_addr;
+	txd->gni_desc.remote_mem_hndl = mdh;
+	txd->gni_desc.length = fab_req->len;
+	txd->gni_desc.rdma_mode = 0; /* check flags */
+	txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
 
 	{
-		gni_mem_handle_t *tl_mdh = &txd->desc.gni_desc.local_mem_hndl;
-		gni_mem_handle_t *tr_mdh = &txd->desc.gni_desc.remote_mem_hndl;
+		gni_mem_handle_t *tl_mdh = &txd->gni_desc.local_mem_hndl;
+		gni_mem_handle_t *tr_mdh = &txd->gni_desc.remote_mem_hndl;
 		GNIX_INFO(FI_LOG_EP_DATA, "la: %llx ra: %llx len: %d\n",
-			  txd->desc.gni_desc.local_addr, txd->desc.gni_desc.remote_addr,
-			  txd->desc.gni_desc.length);
+			  txd->gni_desc.local_addr, txd->gni_desc.remote_addr,
+			  txd->gni_desc.length);
 		GNIX_INFO(FI_LOG_EP_DATA, "lmdh: %llx:%llx rmdh: %llx:%llx key: %llx\n",
 			  *(uint64_t *)tl_mdh, *(((uint64_t *)tl_mdh) + 1),
 			  *(uint64_t *)tr_mdh, *(((uint64_t *)tr_mdh) + 1),
@@ -185,9 +184,9 @@ int _gnix_rma_post_req(void *data)
 	fastlock_acquire(&nic->lock);
 
 	if (rdma) {
-		status = GNI_PostRdma(fab_req->vc->gni_ep, &txd->desc.gni_desc);
+		status = GNI_PostRdma(fab_req->vc->gni_ep, &txd->gni_desc);
 	} else {
-		status = GNI_PostFma(fab_req->vc->gni_ep, &txd->desc.gni_desc);
+		status = GNI_PostFma(fab_req->vc->gni_ep, &txd->gni_desc);
 	}
 
 	fastlock_release(&nic->lock);

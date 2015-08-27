@@ -130,9 +130,9 @@ static int __comp_eager_msg_w_data(void *data)
 	struct gnix_fab_req *req;
 
 	tdesc = (struct gnix_tx_descriptor *)data;
-	req = tdesc->desc.req;
+	req = tdesc->req;
 
-	ep = tdesc->desc.ep;
+	ep = req->gnix_ep;
 	assert(ep != NULL);
 
 	cq = ep->send_cq;
@@ -637,9 +637,8 @@ static int _gnix_send_req(void *data)
 	}
 	assert(rc == FI_SUCCESS);
 
-	tdesc->desc.req = req;
-	tdesc->desc.ep = ep;
-	tdesc->desc.completer_fn =
+	tdesc->req = req;
+	tdesc->completer_fn =
 			gnix_ep_smsg_completers[GNIX_SMSG_T_EGR_W_DATA];
 
 	if (rendezvous) {
@@ -648,9 +647,9 @@ static int _gnix_send_req(void *data)
 		len = 0;
 		assert(0);
 	} else {
-		tdesc->desc.smsg_desc.hdr.len = req->len;
-		tdesc->desc.smsg_desc.hdr.flags = 0;
-		tdesc->desc.smsg_desc.buf = (void *)req->loc_addr;
+		tdesc->smsg_desc.hdr.len = req->len;
+		tdesc->smsg_desc.hdr.flags = 0;
+		tdesc->smsg_desc.buf = (void *)req->loc_addr;
 		len = req->len;
 	}
 
@@ -658,17 +657,17 @@ static int _gnix_send_req(void *data)
 	 * Fill in tag information if necessary
 	 */
 	if (req->flags & GNIX_MSG_TAGGED) {
-		tdesc->desc.smsg_desc.hdr.msg_tag = req->tag;
-		tdesc->desc.smsg_desc.hdr.flags |= GNIX_MSG_TAGGED;
+		tdesc->smsg_desc.hdr.msg_tag = req->tag;
+		tdesc->smsg_desc.hdr.flags |= GNIX_MSG_TAGGED;
 	}
 
 	fastlock_acquire(&nic->lock);
 
 	status = GNI_SmsgSendWTag(req->vc->gni_ep,
-			&tdesc->desc.smsg_desc.hdr,
+			&tdesc->smsg_desc.hdr,
 			sizeof(struct gnix_smsg_hdr),
 			(void *)req->loc_addr, len,
-			tdesc->desc.id,
+			tdesc->id,
 			GNIX_SMSG_T_EGR_W_DATA);
 
 	fastlock_release(&nic->lock);
