@@ -454,6 +454,16 @@ static const char *gnix_av_straddr(struct fid_av *av, const void *addr,
 	return buf;
 }
 
+static void __av_destruct(void *obj)
+{
+	struct gnix_fid_av *av = (struct gnix_fid_av *) obj;
+
+	if (av->table) {
+		free(av->table);
+	}
+	free(av);
+}
+
 /*
  * TODO: Free memory for data structures when FI_AV_MAP is fully supported.
  */
@@ -461,6 +471,7 @@ static int gnix_av_close(fid_t fid)
 {
 	struct gnix_fid_av *av = NULL;
 	int ret = FI_SUCCESS;
+	int references_held;
 
 	GNIX_TRACE(FI_LOG_AV, "\n");
 
@@ -470,15 +481,12 @@ static int gnix_av_close(fid_t fid)
 	}
 	av = container_of(fid, struct gnix_fid_av, av_fid.fid);
 
-	if (atomic_get(&av->ref_cnt) != 0) {
-		ret = -FI_EBUSY;
-		goto err;
+	references_held = _gnix_ref_put(av);
+	if (references_held) {
+		GNIX_INFO(FI_LOG_AV, "failed to fully close av due to lingering "
+				"references. references=%i av=%p\n",
+				references_held, av);
 	}
-
-	if (av->table) {
-		free(av->table);
-	}
-	free(av);
 
 err:
 	return ret;
@@ -542,7 +550,7 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->av_fid.fid.context = context;
 	int_av->av_fid.fid.ops = &gnix_fi_av_ops;
 	int_av->av_fid.ops = &gnix_av_ops;
-	atomic_initialize(&int_av->ref_cnt, 0);
+	_gnix_ref_init(&int_av->ref_cnt, 1, __av_destruct);
 
 	*av = &int_av->av_fid;
 

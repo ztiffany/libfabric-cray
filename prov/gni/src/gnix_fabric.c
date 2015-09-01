@@ -89,22 +89,28 @@ static struct fi_ops_fabric gnix_fab_ops = {
 	.wait_open = gnix_wait_open
 };
 
-static int gnix_fabric_close(fid_t fid)
+static void __fabric_destruct(void *obj)
 {
-	struct gnix_fid_fabric *fab;
-	fab = container_of(fid, struct gnix_fid_fabric, fab_fid);
-
-	/*
- 	 * TODO: is this really right thing to do?
- 	 */
-
-	if (!list_empty(&fab->domain_list)) {
-		return -FI_EBUSY;
-	}
+	struct gnix_fid_fabric *fab = (struct gnix_fid_fabric *) obj;
 
 	_gnix_alps_cleanup();
 
 	free(fab);
+}
+
+static int gnix_fabric_close(fid_t fid)
+{
+	struct gnix_fid_fabric *fab;
+	int references_held;
+
+	fab = container_of(fid, struct gnix_fid_fabric, fab_fid);
+
+	references_held = _gnix_ref_put(fab);
+	if (references_held)
+		GNIX_INFO(FI_LOG_FABRIC, "failed to fully close fabric due "
+				"to lingering references. references=%i fabric=%p\n",
+				references_held, fab);
+
 	return FI_SUCCESS;
 }
 
@@ -145,7 +151,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.context = context;
 	fab->fab_fid.fid.ops = &gnix_fab_fi_ops;
 	fab->fab_fid.ops = &gnix_fab_ops;
-	atomic_initialize(&fab->ref_cnt, 0);
+	_gnix_ref_init(&fab->ref_cnt, 1, __fabric_destruct);
 	list_head_init(&fab->domain_list);
 
 	*fabric = &fab->fab_fid;

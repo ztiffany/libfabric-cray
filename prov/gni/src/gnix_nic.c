@@ -483,102 +483,117 @@ static void __gnix_nic_tx_freelist_destroy(struct gnix_nic *nic)
  * free a gnix nic and associated resources if refcnt drops to 0
  */
 
+static void __nic_destruct(void *obj)
+{
+	int ret = FI_SUCCESS;
+	gni_return_t status = GNI_RC_SUCCESS;
+	struct gnix_nic *nic = (struct gnix_nic *) obj;
+
+	if (!nic->gni_cdm_hndl) {
+		GNIX_ERR(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
+	}
+
+	assert(nic->gni_cdm_hndl != NULL);
+
+	if (nic->rx_cq_blk != NULL) {
+		status = GNI_CqDestroy(nic->rx_cq_blk);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqDestroy returned %s\n",
+				 gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
+	if (nic->rx_cq != NULL) {
+		status = GNI_CqDestroy(nic->rx_cq);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqDestroy returned %s\n",
+				 gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
+	if (nic->tx_cq_blk != NULL) {
+		status = GNI_CqDestroy(nic->tx_cq_blk);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqDestroy returned %s\n",
+				 gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
+	if (nic->tx_cq != NULL) {
+		status = GNI_CqDestroy(nic->tx_cq);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CqDestroy returned %s\n",
+				 gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
+	}
+
+	status = GNI_CdmDestroy(nic->gni_cdm_hndl);
+	if (status != GNI_RC_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "GNI_CdmDestroy returned %s\n",
+			  gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+		goto err;
+	}
+
+	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
+	ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
+	ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
+	/*
+	 * remove the nic from the linked lists
+	 * for the domain and the global nic list
+	 */
+
+err:
+	pthread_mutex_lock(&gnix_nic_list_lock);
+
+	dlist_remove(&nic->gnix_nic_list);
+	--gnix_nics_per_ptag[nic->ptag];
+	dlist_remove(&nic->dom_nic_list);
+
+	pthread_mutex_unlock(&gnix_nic_list_lock);
+
+	__gnix_nic_tx_freelist_destroy(nic);
+	free(nic);
+}
+
 int _gnix_nic_free(struct gnix_nic *nic)
 {
-	int ret = FI_SUCCESS, v;
-	gni_return_t status = GNI_RC_SUCCESS;
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (nic == NULL)
 		return -FI_EINVAL;
 
-	v = atomic_dec(&nic->ref_cnt);
-	assert(v >= 0);
+	_gnix_ref_put(nic);
 
-	if ((nic->gni_cdm_hndl != NULL) && (v == 0))  {
-		if (nic->rx_cq_blk != NULL)
-			status = GNI_CqDestroy(nic->rx_cq_blk);
-			if (status != GNI_RC_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "GNI_CqDestroy returned %s\n",
-					 gni_err_str[status]);
-				ret = gnixu_to_fi_errno(status);
-				goto err;
-			}
-		if (nic->rx_cq != NULL)
-			status = GNI_CqDestroy(nic->rx_cq);
-			if (status != GNI_RC_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "GNI_CqDestroy returned %s\n",
-					 gni_err_str[status]);
-				ret = gnixu_to_fi_errno(status);
-				goto err;
-			}
-		if (nic->tx_cq_blk != NULL)
-			status = GNI_CqDestroy(nic->tx_cq_blk);
-			if (status != GNI_RC_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "GNI_CqDestroy returned %s\n",
-					 gni_err_str[status]);
-				ret = gnixu_to_fi_errno(status);
-				goto err;
-			}
-		if (nic->tx_cq != NULL)
-			status = GNI_CqDestroy(nic->tx_cq);
-			if (status != GNI_RC_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "GNI_CqDestroy returned %s\n",
-					 gni_err_str[status]);
-				ret = gnixu_to_fi_errno(status);
-				goto err;
-			}
-		status = GNI_CdmDestroy(nic->gni_cdm_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "GNI_CdmDestroy returned %s\n",
-				  gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err;
-		}
-
-		ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
-		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_allocator_destroy returned %d\n",
-				  ret);
-
-		ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
-		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_allocator_destroy returned %d\n",
-				  ret);
-
-		ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
-		if (ret != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_mbox_allocator_destroy returned %d\n",
-				  ret);
-
-		/*
-		 * remove the nic from the linked lists
-		 * for the domain and the global nic list
-		 */
-
-err:
-		pthread_mutex_lock(&gnix_nic_list_lock);
-
-		dlist_remove(&nic->gnix_nic_list);
-		--gnix_nics_per_ptag[nic->ptag];
-		dlist_remove(&nic->dom_nic_list);
-
-		pthread_mutex_unlock(&gnix_nic_list_lock);
-
-		__gnix_nic_tx_freelist_destroy(nic);
-		free(nic);
-	}
-
-	return ret;
+	return FI_SUCCESS;
 }
 
 /*
@@ -624,7 +639,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 					dom_nic_list);
 		dlist_remove(&nic->dom_nic_list);
 		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
-		atomic_inc(&nic->ref_cnt);
+		_gnix_ref_get(nic);
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Reusing NIC:%p\n", nic);
 	}
@@ -767,7 +782,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		fastlock_init(&nic->pending_vc_lock);
 		slist_init(&nic->pending_vcs);
 
-		atomic_initialize(&nic->ref_cnt, 1);
+		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
 		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
 		ret = _gnix_alloc_bitmap(&nic->vc_id_bitmap, 1000);
 		if (ret != FI_SUCCESS) {

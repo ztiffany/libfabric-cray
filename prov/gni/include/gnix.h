@@ -246,7 +246,7 @@ struct gnix_fid_fabric {
 	/* timeout datagram completion - see
 	 * GNI_PostdataProbeWaitById in gni_pub.h */
 	uint64_t datagram_timeout;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 };
 
 extern struct fi_ops_cm gnix_cm_ops;
@@ -280,7 +280,7 @@ struct gnix_fid_domain {
 	/* additional gni cq modes to use for this domain */
 	enum fi_progress control_progress;
 	enum fi_progress data_progress;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 	gnix_mr_cache_t mr_cache;
 };
 
@@ -341,7 +341,7 @@ struct gnix_fid_ep {
 	atomic_t active_fab_reqs;
 	/* note this free list will be initialized for thread safe */
 	struct gnix_s_freelist fr_freelist;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 };
 
 struct gnix_addr_entry {
@@ -362,7 +362,7 @@ struct gnix_fid_av {
 	size_t capacity;
 	/* How many address are currently stored in AV */
 	size_t count;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 };
 
 /*

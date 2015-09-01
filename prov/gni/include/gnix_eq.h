@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,6 +42,7 @@ extern "C" {
 
 #include "gnix_queue.h"
 #include "gnix_wait.h"
+#include "gnix_util.h"
 
 #define GNIX_EQ_DEFAULT_SIZE 256
 
@@ -77,7 +79,7 @@ struct gnix_fid_eq {
 	struct fid_wait *wait;
 
 	fastlock_t lock;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 };
 
 #ifdef __cplusplus

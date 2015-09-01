@@ -205,6 +205,37 @@ err:
 	return ret;
 }
 
+static void __eq_destruct(void *obj)
+{
+	struct gnix_fid_eq *eq = (struct gnix_fid_eq *) obj;
+
+	_gnix_ref_put(eq->fabric);
+
+	fastlock_destroy(&eq->lock);
+
+	switch (eq->attr.wait_obj) {
+	case FI_WAIT_NONE:
+		break;
+	case FI_WAIT_SET:
+		_gnix_wait_set_remove(eq->wait, &eq->eq_fid.fid);
+		break;
+	case FI_WAIT_UNSPEC:
+	case FI_WAIT_FD:
+	case FI_WAIT_MUTEX_COND:
+		assert(eq->wait);
+		gnix_wait_close(&eq->wait->fid);
+		break;
+	default:
+		GNIX_WARN(FI_LOG_EQ, "format: %d unsupported\n.",
+			  eq->attr.wait_obj);
+		break;
+	}
+
+	_gnix_queue_destroy(eq->events);
+	_gnix_queue_destroy(eq->errors);
+
+	free(eq);
+}
 
 /*******************************************************************************
  * API function implementations.
@@ -236,8 +267,9 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 	eq_priv->fabric = container_of(fabric, struct gnix_fid_fabric,
 					  fab_fid);
 
-	atomic_initialize(&eq_priv->ref_cnt, 0);
-	atomic_inc(&eq_priv->fabric->ref_cnt);
+	_gnix_ref_init(&eq_priv->ref_cnt, 1, __eq_destruct);
+
+	_gnix_ref_get(eq_priv->fabric);
 
 	eq_priv->eq_fid.fid.fclass = FI_CLASS_EQ;
 	eq_priv->eq_fid.fid.context = context;
@@ -268,7 +300,7 @@ int gnix_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
 err2:
 	_gnix_queue_destroy(eq_priv->events);
 err1:
-	atomic_dec(&eq_priv->fabric->ref_cnt);
+	_gnix_ref_put(eq_priv->fabric);
 	fastlock_destroy(&eq_priv->lock);
 err:
 	free(eq_priv);
@@ -278,6 +310,7 @@ err:
 static int gnix_eq_close(struct fid *fid)
 {
 	struct gnix_fid_eq *eq;
+	int references_held;
 
 	GNIX_TRACE(FI_LOG_EQ, "\n");
 
@@ -286,39 +319,12 @@ static int gnix_eq_close(struct fid *fid)
 
 	eq = container_of(fid, struct gnix_fid_eq, eq_fid);
 
-	if (atomic_get(&eq->ref_cnt) != 0) {
-		GNIX_INFO(FI_LOG_EQ, "EQ ref count: %d, not closing.\n",
-			  eq->ref_cnt);
-		return -FI_EBUSY;
+	references_held = _gnix_ref_put(eq);
+	if (references_held) {
+		GNIX_INFO(FI_LOG_EQ, "failed to fully close eq due "
+				"to lingering references. references=%i eq=%p\n",
+				references_held, eq);
 	}
-
-	atomic_dec(&eq->fabric->ref_cnt);
-	assert(atomic_get(&eq->fabric->ref_cnt) >= 0);
-
-	fastlock_destroy(&eq->lock);
-
-	switch (eq->attr.wait_obj) {
-	case FI_WAIT_NONE:
-		break;
-	case FI_WAIT_SET:
-		_gnix_wait_set_remove(eq->wait, &eq->eq_fid.fid);
-		break;
-	case FI_WAIT_UNSPEC:
-	case FI_WAIT_FD:
-	case FI_WAIT_MUTEX_COND:
-		assert(eq->wait);
-		gnix_wait_close(&eq->wait->fid);
-		break;
-	default:
-		GNIX_WARN(FI_LOG_EQ, "format: %d unsupported\n.",
-			  eq->attr.wait_obj);
-		break;
-	}
-
-	_gnix_queue_destroy(eq->events);
-	_gnix_queue_destroy(eq->errors);
-
-	free(eq);
 
 	return FI_SUCCESS;
 }

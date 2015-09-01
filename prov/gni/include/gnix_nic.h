@@ -47,6 +47,7 @@ extern "C" {
 #include "gnix.h"
 #include "gnix_bitmap.h"
 #include "gnix_mbox_allocator.h"
+#include "gnix_util.h"
 
 #define GNIX_DEF_MAX_NICS_PER_PTAG	4
 
@@ -147,7 +148,7 @@ struct gnix_nic {
 	struct gnix_mbox_alloc_handle *mbox_hndl;
 	struct gnix_mbox_alloc_handle *s_rdma_buf_hndl;
 	struct gnix_mbox_alloc_handle *r_rdma_buf_hndl;
-	atomic_t ref_cnt;
+	struct gnix_reference ref_cnt;
 	smsg_callback_fn_t const *smsg_callbacks;
 };
 

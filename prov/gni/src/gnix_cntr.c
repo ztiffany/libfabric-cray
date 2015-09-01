@@ -260,21 +260,11 @@ static int gnix_cntr_wait(struct fid_cntr *cntr, uint64_t threshold,
 	return ret;
 }
 
-static int gnix_cntr_close(fid_t fid)
+static void __cntr_destruct(void *obj)
 {
-	struct gnix_fid_cntr *cntr;
+	struct gnix_fid_cntr *cntr = (struct gnix_fid_cntr *) obj;
 
-	GNIX_TRACE(FI_LOG_CQ, "\n");
-
-	cntr = container_of(fid, struct gnix_fid_cntr, cntr_fid.fid);
-	if (atomic_get(&cntr->ref_cnt) != 0) {
-		GNIX_INFO(FI_LOG_CQ, "CNTR ref count: %d, not closing.\n",
-			  cntr->ref_cnt);
-		return -FI_EBUSY;
-	}
-
-	atomic_dec(&cntr->domain->ref_cnt);
-	assert(atomic_get(&cntr->domain->ref_cnt) >= 0);
+	_gnix_ref_put(cntr->domain);
 
 	switch (cntr->attr.wait_obj) {
 	case FI_WAIT_NONE:
@@ -295,6 +285,24 @@ static int gnix_cntr_close(fid_t fid)
 	}
 
 	free(cntr);
+}
+
+static int gnix_cntr_close(fid_t fid)
+{
+	struct gnix_fid_cntr *cntr;
+	int references_held;
+
+	GNIX_TRACE(FI_LOG_CQ, "\n");
+
+	cntr = container_of(fid, struct gnix_fid_cntr, cntr_fid.fid);
+
+	/* applications should never call close more than once. */
+	references_held = _gnix_ref_put(cntr);
+	if (references_held) {
+		GNIX_INFO(FI_LOG_CQ, "failed to fully close cntr due to lingering "
+						"references. references=%i cntr=%p\n",
+						references_held, cntr);
+	}
 
 	return FI_SUCCESS;
 }
@@ -425,12 +433,14 @@ int gnix_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 
 	cntr_priv->domain = domain_priv;
 	cntr_priv->attr = *attr;
+	/* ref count is initialized to one to show that the counter exists */
+	_gnix_ref_init(&cntr_priv->ref_cnt, 1, __cntr_destruct);
+
 	/* initialize atomics */
-	atomic_initialize(&cntr_priv->ref_cnt, 0);
 	atomic_initialize(&cntr_priv->cnt, 0);
 	atomic_initialize(&cntr_priv->cnt_err, 0);
 
-	atomic_inc(&cntr_priv->domain->ref_cnt);
+	_gnix_ref_get(cntr_priv->domain);
 	dlist_init(&cntr_priv->poll_nics);
 	rwlock_init(&cntr_priv->nic_lock);
 
