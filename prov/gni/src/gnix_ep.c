@@ -813,7 +813,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			ret = -FI_EINVAL;
 			break;
 		}
-		if (flags & FI_SEND) {
+		if (flags & (FI_SEND | FI_WRITE)) {
 			/* don't allow rebinding */
 			if (ep->send_cq) {
 				ret = -FI_EINVAL;

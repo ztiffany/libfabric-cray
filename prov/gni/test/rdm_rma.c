@@ -123,7 +123,11 @@ void rdm_rma_setup(void)
 	ret = fi_cq_open(dom, &cq_attr, &send_cq, 0);
 	cr_assert(!ret, "fi_cq_open");
 
-	ret = fi_ep_bind(ep[0], &send_cq->fid, FI_SEND);
+	/*
+	 * imitate shmem, etc. use FI_WRITE for bind
+	 * flag
+	 */
+	ret = fi_ep_bind(ep[0], &send_cq->fid, FI_WRITE);
 	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_getname(&ep[0]->fid, NULL, &addrlen);
