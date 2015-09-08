@@ -125,15 +125,6 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 	size_t index;
 	size_t i;
 
-	/*
-	 * fi_addr may only be null in the case that the item being inserted
-	 * will be inserted at position 0. See fi_av(3).
-	 */
-	if (!fi_addr && int_av->count) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
 	if (gnix_check_capacity(int_av, count)) {
 		ret = -FI_ENOMEM;
 		goto err;
@@ -144,7 +135,8 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 		temp = &((struct gnix_ep_name *)addr)[i];
 		int_av->table[index].addr = &temp->gnix_addr;
 		int_av->table[index].valid = true;
-		fi_addr[i] = index;
+		if (fi_addr)
+			fi_addr[i] = index;
 	}
 
 	int_av->count += count;
@@ -154,7 +146,6 @@ err:
 }
 
 /*
- * TODO: Actually free memory.
  * Currently only marks as 'not valid'. Should actually free memory.
  * If any of the given address fail to be removed (are already marked removed)
  * then the return value will be -FI_EINVAL.
@@ -180,10 +171,6 @@ static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 	return ret;
 }
 
-/*
- * TODO:
- * 1.) Error check return of container_of.
- */
 static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 			void *addr, size_t *addrlen, size_t struct_copy_size)
 {
@@ -268,7 +255,6 @@ static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 /*
  * TODO:
  * 1.) Check if given item was actually inserted.
- * 2.) Do error checking on return of container_of.
  */
 static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr, void *addr,
 		      size_t *addrlen, size_t struct_copy_size)
