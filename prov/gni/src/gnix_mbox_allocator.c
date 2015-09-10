@@ -454,7 +454,7 @@ static int __check_bitmap(struct gnix_mbox_alloc_handle *handle,
 {
 	struct slist_entry *entry;
 	struct gnix_slab *temp;
-	int ret;
+	int ret = FI_SUCCESS;
 
 	*slab = NULL;
 
