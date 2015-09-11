@@ -1132,8 +1132,6 @@ static inline struct gnix_fab_req *__find_rx_req(
 
 	fastlock_acquire(&ep->recv_queue_lock);
 	req = _gnix_remove_req_by_context(&ep->posted_recv_queue, context);
-	if (!req)
-		req = _gnix_remove_req_by_context(&ep->unexp_recv_queue, context);
 	fastlock_release(&ep->recv_queue_lock);
 
 	if (req)
@@ -1142,9 +1140,6 @@ static inline struct gnix_fab_req *__find_rx_req(
 	fastlock_acquire(&ep->tagged_queue_lock);
 	req = _gnix_remove_req_by_context(&ep->tagged_posted_recv_queue,
 			context);
-	if (!req)
-		req = _gnix_remove_req_by_context(&ep->tagged_unexp_recv_queue,
-				context);
 	fastlock_release(&ep->tagged_queue_lock);
 
 	return req;
@@ -1164,7 +1159,7 @@ static ssize_t gnix_ep_cancel(fid_t fid, void *context)
 		return -FI_EDOMAIN;
 
 	/* without context, we will have to find a request that matches
-	 * a recv or send request. Try the recv requests first.
+	 * a recv or send request. Try the send requests first.
 	 */
 	GNIX_INFO(FI_LOG_EP_CTRL, "looking for event to cancel\n");
 
