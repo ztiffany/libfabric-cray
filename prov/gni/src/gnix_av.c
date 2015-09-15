@@ -257,11 +257,6 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 		goto err;
 	}
 
-	if (!gnix_av) {
-		ret = -FI_EINVAL;
-		goto err;
-	}
-
 	switch (gnix_av->type) {
 	case FI_AV_TABLE:
 		ret = table_lookup(gnix_av, fi_addr, addr, addrlen);
@@ -276,20 +271,6 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 
 err:
 	return ret;
-}
-
-int _gnix_av_addr_retrieve(struct fid_av *av, fi_addr_t fi_addr,
-			   struct gnix_address *gnix_addr)
-{
-	struct gnix_fid_av *gnix_av;
-	size_t len = sizeof(*gnix_addr);
-
-	assert(av);
-	assert(gnix_addr);
-
-	gnix_av = container_of(av, struct gnix_fid_av, av_fid);
-
-	return _gnix_av_lookup(gnix_av, fi_addr, gnix_addr, &len);
 }
 
 static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,

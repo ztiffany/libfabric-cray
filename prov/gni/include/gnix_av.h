@@ -36,24 +36,20 @@
 
 #include "gnix.h"
 
-
 /*
- * prototypes for GNI AV helper functions for managing the av
- * system.
+ * Prototypes for GNI AV helper functions for managing the AV system.
  */
-
-int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
-		    struct gnix_address *addr, size_t *addrlen);
 
 /**
  * @brief  Translate fi_addr_t to struct gnix_address.
  *
- * @param[in] av         pointer to a previously allocated fid_av
- * @param[in] fi_addr    address to be translated
- * @param[out] gnix_addr pointer to memory to copy translated address to
- * @return		 FI_SUCCESS on success, -FI_EINVAL on error
+ * @param[in]     gnix_av   pointer to a previously allocated gnix_fid_av
+ * @param[in]     fi_addr   address to be translated
+ * @param[out]    gnix_addr pointer to memory to copy translated address to
+ * @param[in,out] addrlen    pointer to length of 'gnix_addr' buffer
+ * @return  FI_SUCCESS on success, -FI_EINVAL on error
  */
-int _gnix_av_addr_retrieve(struct fid_av *av, fi_addr_t fi_addr,
-			   struct gnix_address *gnix_addr);
+int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
+		    struct gnix_address *addr, size_t *addrlen);
 
 #endif /* _GNIX_AV_H_ */

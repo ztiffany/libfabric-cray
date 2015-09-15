@@ -154,7 +154,7 @@ struct gnix_nic {
 
 
 /**
- * gnix_smsg_hdr  - first part of any SMSG message for app data
+ * gnix_smsg_eager_hdr  - first part of an eager send SMSG message
  *
  * @var flags      flag bits from send side that are needed at
  *                 rcv side (e.g. FI_REMOTE_CQ_DATA)
@@ -169,6 +169,19 @@ struct gnix_smsg_eager_hdr {
 	size_t len;
 };
 
+/**
+ * gnix_smsg_rndzv_start_hdr  - first part of a rendezvous send start SMSG
+ *                              message
+ *
+ * @var flags      flag bits from send side that are needed at
+ *                 rcv side (e.g. FI_REMOTE_CQ_DATA)
+ * @var imm        immediate data associated with this message
+ * @var msg_tag    libfabric tag associated with this message
+ * @var mdh        MDH for the rendezvous send buffer
+ * @var addr       address of the rendezvous send buffer
+ * @var len        length in bytes of the send buffer
+ * @var req_addr   local request address
+ */
 struct gnix_smsg_rndzv_start_hdr {
 	uint64_t flags;
 	uint64_t imm;
@@ -179,6 +192,11 @@ struct gnix_smsg_rndzv_start_hdr {
 	uint64_t req_addr;
 };
 
+/**
+ * gnix_smsg_rndzv_fin_hdr  - first part of a rendezvous send fin SMSG message
+ *
+ * @var req_addr   returned local request address
+ */
 struct gnix_smsg_rndzv_fin_hdr {
 	uint64_t req_addr;
 };

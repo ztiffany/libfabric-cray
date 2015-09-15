@@ -685,8 +685,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		assert(av != NULL);
 		ret = _gnix_av_lookup(av, src_addr, &gnix_addr, &addrlen);
 		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_AV,
-				  "_gnix_av_addr_retrieve returned %d\n",
+			GNIX_WARN(FI_LOG_AV, "_gnix_av_lookup returned %d\n",
 				  ret);
 			return ret;
 		}
