@@ -167,6 +167,12 @@ extern "C" {
 #define GNIX_READMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
 
 /*
+ * GNI provider fabric default values
+ */
+#define GNIX_TX_SIZE_DEFAULT	500
+#define GNIX_RX_SIZE_DEFAULT	500
+
+/*
  * if this has to be changed, check gnix_getinfo, etc.
  */
 #define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS

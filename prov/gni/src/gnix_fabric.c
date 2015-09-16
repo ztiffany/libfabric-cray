@@ -355,8 +355,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
 	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
-	/* TODO: probably something else here */
-	gnix_info->tx_attr->size = UINT64_MAX;
+	gnix_info->tx_attr->size = GNIX_TX_SIZE_DEFAULT;
 	gnix_info->tx_attr->iov_limit = 1;
 	gnix_info->tx_attr->inject_size = GNIX_INJECT_SIZE;
 
@@ -372,8 +371,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
 	gnix_info->rx_attr->comp_order = FI_ORDER_NONE;
-	/* TODO: probably something else here */
-	gnix_info->rx_attr->size = UINT64_MAX;
+	gnix_info->rx_attr->size = GNIX_RX_SIZE_DEFAULT;
 	gnix_info->rx_attr->iov_limit = 1;
 
 	*info = gnix_info;
