@@ -121,6 +121,8 @@ struct gnix_tag_storage_ops {
 			struct gnix_address *addr);
 	int (*init)(struct gnix_tag_storage *ts);
 	int (*fini)(struct gnix_tag_storage *ts);
+	struct gnix_fab_req *(*remove_req_by_context)(struct gnix_tag_storage *ts,
+			void *context);
 };
 
 /**
@@ -361,6 +363,10 @@ struct gnix_fab_req *_gnix_match_tag(
 		uint64_t flags,
 		void *context,
 		struct gnix_address *addr);
+
+struct gnix_fab_req *_gnix_remove_req_by_context(
+		struct gnix_tag_storage *ts,
+		void *context);
 
 /* external symbols */
 

@@ -124,6 +124,17 @@ int _gnix_req_matches_params(
 	return valid_request && ((req->tag & ~ignore) == (tag & ~ignore));
 }
 
+static int __req_matches_context(struct slist_entry *entry, const void *arg)
+{
+	struct gnix_tag_list_element *tle;
+	struct gnix_fab_req *req;
+
+	tle = (struct gnix_tag_list_element *) entry;
+	req = __to_gnix_fab_req(tle);
+
+	return req->user_context == arg;
+}
+
 /* used to match elements in the posted lists */
 int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg)
 {
@@ -380,6 +391,13 @@ static struct gnix_fab_req *__gnix_tag_no_remove_tag(
 	return NULL;
 }
 
+static struct gnix_fab_req *__gnix_tag_no_remove_req_by_context(
+		struct gnix_tag_storage *ts,
+		void *context)
+{
+	return NULL;
+}
+
 /* list operations */
 
 static int __gnix_tag_list_init(struct gnix_tag_storage *ts)
@@ -446,6 +464,26 @@ static struct gnix_fab_req *__gnix_tag_list_remove_tag(
 			flags, context, addr);
 	if (!element)
 		return NULL;
+
+	req = __to_gnix_fab_req(element);
+	element->free.next = NULL;
+
+	return req;
+}
+
+static struct gnix_fab_req *__gnix_tag_list_remove_req_by_context(
+		struct gnix_tag_storage *ts,
+		void *context)
+{
+	struct gnix_tag_list_element *element;
+	struct gnix_fab_req *req;
+
+	element = (struct gnix_tag_list_element *)
+			slist_remove_first_match(&ts->list.list,
+			__req_matches_context, context);
+
+	if (!element)
+			return NULL;
 
 	req = __to_gnix_fab_req(element);
 	element->free.next = NULL;
@@ -546,12 +584,20 @@ struct gnix_fab_req *_gnix_match_tag(
 				context, addr);
 }
 
+struct gnix_fab_req *_gnix_remove_req_by_context(
+		struct gnix_tag_storage *ts,
+		void *context)
+{
+	return ts->ops->remove_req_by_context(ts, context);
+}
+
 struct gnix_tag_storage_ops list_ops = {
 		.init = __gnix_tag_list_init,
 		.fini = __gnix_tag_list_fini,
 		.insert_tag = __gnix_tag_list_insert_tag,
 		.peek_tag = __gnix_tag_list_peek_tag,
 		.remove_tag = __gnix_tag_list_remove_tag,
+		.remove_req_by_context = __gnix_tag_list_remove_req_by_context,
 };
 
 struct gnix_tag_storage_ops hlist_ops = {
@@ -560,6 +606,7 @@ struct gnix_tag_storage_ops hlist_ops = {
 		.insert_tag = __gnix_tag_no_insert_tag,
 		.remove_tag = __gnix_tag_no_remove_tag,
 		.peek_tag = __gnix_tag_no_peek_tag,
+		.remove_req_by_context = __gnix_tag_no_remove_req_by_context,
 };
 
 struct gnix_tag_storage_ops kdtree_ops = {
@@ -568,4 +615,5 @@ struct gnix_tag_storage_ops kdtree_ops = {
 		.insert_tag = __gnix_tag_no_insert_tag,
 		.remove_tag = __gnix_tag_no_remove_tag,
 		.peek_tag = __gnix_tag_no_peek_tag,
+		.remove_req_by_context = __gnix_tag_no_remove_req_by_context,
 };

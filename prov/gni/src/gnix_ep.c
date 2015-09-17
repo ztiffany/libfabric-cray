@@ -1084,6 +1084,141 @@ err:
 
 }
 
+static int __match_context(struct slist_entry *item, const void *arg)
+{
+	struct gnix_fab_req *req;
+
+	req = container_of(item, struct gnix_fab_req, slist);
+
+	return req->user_context == arg;
+}
+
+static inline struct gnix_fab_req *__find_tx_req(
+		struct gnix_fid_ep *ep,
+		void *context)
+{
+	struct gnix_fab_req *req = NULL;
+	struct slist_entry *entry;
+	struct gnix_vc *vc;
+
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
+			" cancel, context=%p", context);
+
+	fastlock_acquire(&ep->vc_list_lock);
+	dlist_for_each(&ep->wc_vc_list, vc, entry)
+	{
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "checking vc=%p\n", vc);
+		fastlock_acquire(&vc->tx_queue_lock);
+		entry = slist_remove_first_match(&vc->tx_queue,
+				__match_context, context);
+		fastlock_release(&vc->tx_queue_lock);
+
+		if (entry) {
+			req = container_of(entry, struct gnix_fab_req, slist);
+			break;
+		}
+	}
+	fastlock_release(&ep->vc_list_lock);
+
+	return req;
+}
+
+static inline struct gnix_fab_req *__find_rx_req(
+		struct gnix_fid_ep *ep,
+		void *context)
+{
+	struct gnix_fab_req *req = NULL;
+
+	fastlock_acquire(&ep->recv_queue_lock);
+	req = _gnix_remove_req_by_context(&ep->posted_recv_queue, context);
+	fastlock_release(&ep->recv_queue_lock);
+
+	if (req)
+		return req;
+
+	fastlock_acquire(&ep->tagged_queue_lock);
+	req = _gnix_remove_req_by_context(&ep->tagged_posted_recv_queue,
+			context);
+	fastlock_release(&ep->tagged_queue_lock);
+
+	return req;
+}
+
+static ssize_t gnix_ep_cancel(fid_t fid, void *context)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_fid_ep *ep;
+	struct gnix_fab_req *req;
+	struct gnix_fid_cq *err_cq = NULL;
+	struct gnix_fid_cntr *err_cntr = NULL;
+
+	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
+
+	if (!ep->domain)
+		return -FI_EDOMAIN;
+
+	/* without context, we will have to find a request that matches
+	 * a recv or send request. Try the send requests first.
+	 */
+	GNIX_INFO(FI_LOG_EP_CTRL, "looking for event to cancel\n");
+
+	req = __find_tx_req(ep, context);
+	if (!req) {
+		req = __find_rx_req(ep, context);
+		if (req) {
+			err_cq = ep->recv_cq;
+			err_cntr = ep->recv_cntr;
+		}
+	} else {
+		err_cq = ep->send_cq;
+		err_cntr = ep->send_cntr;
+	}
+	GNIX_INFO(FI_LOG_EP_CTRL, "finished searching\n");
+
+	if (!req)
+		return -FI_ENOENT;
+
+	if (err_cq) {
+		/* add canceled event */
+		_gnix_cq_add_error(err_cq, context, req->flags,
+				req->len, (void *) req->loc_addr, 0 /* data */, req->tag,
+				req->len, FI_ECANCELED, -FI_ECANCELED, 0);
+	}
+
+	if (err_cntr) {
+		/* signal increase in cntr errs */
+		_gnix_cntr_inc_err(err_cntr);
+	}
+
+	_gnix_fr_free(ep, req);
+
+	return ret;
+}
+
+ssize_t gnix_cancel(fid_t fid, void *context)
+{
+	ssize_t ret;
+
+	switch (fid->fclass) {
+	case FI_CLASS_EP:
+		ret = gnix_ep_cancel(fid, context);
+		break;
+
+	/* not supported yet */
+	case FI_CLASS_RX_CTX:
+	case FI_CLASS_SRX_CTX:
+	case FI_CLASS_TX_CTX:
+	case FI_CLASS_STX_CTX:
+		return -FI_ENOENT;
+
+	default:
+		GNIX_ERR(FI_LOG_EP_CTRL, "Invalid fid type\n");
+		return -FI_EINVAL;
+	}
+
+	return ret;
+}
+
 /*******************************************************************************
  * FI_OPS_* data structures.
  ******************************************************************************/
@@ -1097,7 +1232,7 @@ static struct fi_ops gnix_ep_fi_ops = {
 
 static struct fi_ops_ep gnix_ep_ops = {
 	.size = sizeof(struct fi_ops_ep),
-	.cancel = fi_no_cancel,
+	.cancel = gnix_cancel,
 	.getopt = fi_no_getopt,
 	.setopt = fi_no_setopt,
 	.tx_ctx = fi_no_tx_ctx,

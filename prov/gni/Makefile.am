@@ -44,6 +44,7 @@ dist_bin_SCRIPTS = prov/gni/test/run_gnitest
 prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/allocator.c \
 	prov/gni/test/bitmap.c \
+	prov/gni/test/cancel.c \
 	prov/gni/test/cntr.c \
 	prov/gni/test/cq.c \
 	prov/gni/test/datagram.c \
@@ -63,7 +64,7 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/tags.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
-	prov/gni/test/wait.c
+	prov/gni/test/wait.c 
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)
