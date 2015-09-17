@@ -1090,9 +1090,6 @@ static int __match_context(struct slist_entry *item, const void *arg)
 
 	req = container_of(item, struct gnix_fab_req, slist);
 
-	GNIX_INFO(FI_LOG_EP_CTRL, "testing: req->context=%p context=%p item=%p\n",
-			req->user_context, arg, item);
-
 	return req->user_context == arg;
 }
 
@@ -1104,12 +1101,14 @@ static inline struct gnix_fab_req *__find_tx_req(
 	struct slist_entry *entry;
 	struct gnix_vc *vc;
 
+	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
+			" cancel, context=%p", context);
+
 	fastlock_acquire(&ep->vc_list_lock);
 	dlist_for_each(&ep->wc_vc_list, vc, entry)
 	{
-		GNIX_INFO(FI_LOG_EP_CTRL, "checking vc=%p\n", vc);
+		GNIX_DEBUG(FI_LOG_EP_CTRL, "checking vc=%p\n", vc);
 		fastlock_acquire(&vc->tx_queue_lock);
-		GNIX_INFO(FI_LOG_EP_CTRL, "locked\n");
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);
 		fastlock_release(&vc->tx_queue_lock);
