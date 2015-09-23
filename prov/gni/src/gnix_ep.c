@@ -1018,6 +1018,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ret = _gnix_cm_nic_alloc(domain_priv,
+					 info,
 					 &ep_priv->cm_nic);
 		if (ret != FI_SUCCESS)
 			goto err;

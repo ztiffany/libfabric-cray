@@ -214,6 +214,9 @@ struct gnix_address {
 				((a).cdm_id == (b).cdm_id))
 
 
+#define GNIX_EPN_TYPE_UNBOUND	0
+#define GNIX_EPN_TYPE_BOUND	1
+
 /*
  * info returned by fi_getname/fi_getpeer - has enough
  * side band info for RDM ep's to be able to connect, etc.

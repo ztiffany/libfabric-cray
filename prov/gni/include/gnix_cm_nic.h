@@ -91,7 +91,8 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic);
  *                      the cm nic structure
  */
 int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
-			struct gnix_cm_nic **cm_nic);
+		       struct fi_info *info,
+		       struct gnix_cm_nic **cm_nic);
 
 /**
  * @brief poke the cm nic's progress engine
