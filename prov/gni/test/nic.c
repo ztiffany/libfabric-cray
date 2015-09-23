@@ -96,7 +96,9 @@ Test(nic, alloc_free)
 
 	for (i = 0; i < num_nics; i++) {
 		ret = gnix_nic_alloc(container_of(dom, struct gnix_fid_domain,
-						  domain_fid), &nics[i]);
+						  domain_fid),
+						  NULL,
+						  &nics[i]);
 		cr_assert_eq(ret, FI_SUCCESS, "Could not allocate nic");
 	}
 

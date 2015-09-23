@@ -51,9 +51,26 @@ static pthread_mutex_t gnix_nic_list_lock = PTHREAD_MUTEX_INITIALIZER;
 
 uint32_t gnix_max_nics_per_ptag = GNIX_DEF_MAX_NICS_PER_PTAG;
 
+/*
+ * local variables
+ */
+
+static struct gnix_nic_attr default_attr = {
+		.gni_cdm_hndl        = NULL,
+		.gni_nic_hndl        = NULL
+};
+
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
+
+/*
+ * place holder for better attributes checker
+ */
+static int __gnix_nic_check_attr_sanity(struct gnix_nic_attr *attr)
+{
+	return FI_SUCCESS;
+}
 
 static inline struct gnix_tx_descriptor *
 __desc_lkup_by_id(struct gnix_nic *nic, int desc_id)
@@ -536,13 +553,15 @@ static void __nic_destruct(void *obj)
 		}
 	}
 
-	status = GNI_CdmDestroy(nic->gni_cdm_hndl);
-	if (status != GNI_RC_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "GNI_CdmDestroy returned %s\n",
-			  gni_err_str[status]);
-		ret = gnixu_to_fi_errno(status);
-		goto err;
+	if (nic->allocd_gni_res & GNIX_NIC_CDM_ALLOCD) {
+		status = GNI_CdmDestroy(nic->gni_cdm_hndl);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "GNI_CdmDestroy returned %s\n",
+				  gni_err_str[status]);
+			ret = gnixu_to_fi_errno(status);
+			goto err;
+		}
 	}
 
 	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
@@ -598,7 +617,8 @@ int _gnix_nic_free(struct gnix_nic *nic)
  */
 
 int gnix_nic_alloc(struct gnix_fid_domain *domain,
-				struct gnix_nic **nic_ptr)
+		   struct gnix_nic_attr *attr,
+		   struct gnix_nic **nic_ptr)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_nic *nic = NULL;
@@ -606,10 +626,18 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	gni_return_t status;
 	uint32_t fake_cdm_id;
 	gni_smsg_attr_t smsg_mbox_attr;
+	struct gnix_nic_attr *nic_attr = &default_attr;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	*nic_ptr = NULL;
+
+	if (attr) {
+		ret = __gnix_nic_check_attr_sanity(attr);
+		if (ret != FI_SUCCESS)
+			return ret;
+		nic_attr = attr;
+	}
 
 	/*
 	 * If we've maxed out the number of nics for this domain/ptag,
@@ -657,31 +685,39 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		if (ret != FI_SUCCESS)
 			goto err;
 
-		status = GNI_CdmCreate(fake_cdm_id,
-					domain->ptag,
-					domain->cookie,
-					gnix_cdm_modes,
-					&nic->gni_cdm_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
-				 gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err1;
-		}
+		if (nic_attr->gni_cdm_hndl == NULL) {
+			status = GNI_CdmCreate(fake_cdm_id,
+						domain->ptag,
+						domain->cookie,
+						gnix_cdm_modes,
+						&nic->gni_cdm_hndl);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmCreate returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err1;
+			}
+			nic->allocd_gni_res |= GNIX_NIC_CDM_ALLOCD;
+		} else
+			nic->gni_cdm_hndl = nic_attr->gni_cdm_hndl;
 
 		/*
 		 * Okay, now go for the attach
 		*/
-		status = GNI_CdmAttach(nic->gni_cdm_hndl,
-					0,
-					&device_addr,
-					&nic->gni_nic_hndl);
-		if (status != GNI_RC_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
-				 gni_err_str[status]);
-			ret = gnixu_to_fi_errno(status);
-			goto err1;
-		}
+
+		if (nic_attr->gni_nic_hndl == NULL) {
+			status = GNI_CdmAttach(nic->gni_cdm_hndl,
+						0,
+						&device_addr,
+						&nic->gni_nic_hndl);
+			if (status != GNI_RC_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
+					 gni_err_str[status]);
+				ret = gnixu_to_fi_errno(status);
+				goto err1;
+			}
+		} else
+			nic->gni_nic_hndl = nic_attr->gni_nic_hndl;
 
 		/*
 		 * create TX CQs - first polling, then blocking
@@ -860,8 +896,8 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		}
 
 		dlist_insert_tail(&nic->gnix_nic_list, &gnix_nic_list);
-
 		dlist_insert_tail(&nic->dom_nic_list, &domain->nic_list);
+
 		++gnix_nics_per_ptag[domain->ptag];
 
 		GNIX_INFO(FI_LOG_EP_CTRL, "Allocated NIC:%p\n", nic);
@@ -888,7 +924,8 @@ err:
 			GNI_CqDestroy(nic->tx_cq_blk);
 		if (nic->tx_cq != NULL)
 			GNI_CqDestroy(nic->tx_cq);
-		if (nic->gni_cdm_hndl != NULL)
+		if ((nic->gni_cdm_hndl != NULL) && (nic->allocd_gni_res &
+		    GNIX_NIC_CDM_ALLOCD))
 			GNI_CdmDestroy(nic->gni_cdm_hndl);
 		free(nic);
 	}

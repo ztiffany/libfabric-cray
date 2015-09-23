@@ -933,6 +933,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
 	gnix_hashtable_attr_t gnix_ht_attr;
+	struct gnix_nic_attr *attr = NULL;
+	struct gnix_nic_attr ded_nic_attr = {0};
 	struct gnix_tag_storage_attr untagged_attr = {
 			.type = GNIX_TAG_LIST,
 			.use_src_addr_matching = 1,
@@ -1026,6 +1028,25 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		if (ret != FI_SUCCESS)
 			goto err;
 
+		/*
+		 * if we had to dedicate a cm_nic to this ep
+		 * because its bound (i.e. specifying the cdm id)
+		 * then we had to allocate a GNI cdm/nic handle for
+		 * it and thus the underlying CQ hw resources.
+		 * Try to reduce CQ hw consumption by passing in
+		 * the cm_nic's cdm/nic handles.  In this way,
+		 * if a gnix_nic is allocated, it can reuse the
+		 * gni cdm/nic hndls used for the previously
+		 * allocated gnix_cm_nic.
+		 */
+		if (info->src_addr != NULL) {
+			ded_nic_attr.gni_cdm_hndl =
+				ep_priv->cm_nic->gni_cdm_hndl;
+			ded_nic_attr.gni_nic_hndl =
+				ep_priv->cm_nic->gni_nic_hndl;
+			attr = &ded_nic_attr;
+		}
+
 		gnix_ht_attr.ht_initial_size = domain_priv->params.ct_init_size;
 		gnix_ht_attr.ht_maximum_size = domain_priv->params.ct_max_size;
 		gnix_ht_attr.ht_increase_step = domain_priv->params.ct_step;
@@ -1053,7 +1074,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->progress_fn = NULL;
 	ep_priv->rx_progress_fn = NULL;
 
-	ret = gnix_nic_alloc(domain_priv, &ep_priv->nic);
+	ret = gnix_nic_alloc(domain_priv, attr, &ep_priv->nic);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			    "_gnix_nic_alloc call returned %d\n",

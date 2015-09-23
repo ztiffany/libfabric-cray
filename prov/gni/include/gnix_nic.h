@@ -54,6 +54,16 @@ extern "C" {
 extern uint32_t gnix_max_nics_per_ptag;
 
 /*
+ * allocation flags for cleaning up GNI resources
+ * when closing a gnix_nic - needed since these
+ * can be dup'd from another structure.
+ */
+
+#define GNIX_NIC_CDM_ALLOCD	(1ULL << 1)
+#define GNIX_NIC_TX_CQ_ALLOCD	(1ULL << 2)
+#define GNIX_NIC_RX_CQ_ALLOCD	(1ULL << 3)
+
+/*
  * typedefs for callbacks for handling
  * receipt of SMSG messages at the target
  */
@@ -64,6 +74,21 @@ typedef int (*smsg_callback_fn_t)(void  *ptr, void *msg);
  * at initiator when local CQE (tx) is processed
  */
 typedef int (*smsg_completer_fn_t)(void  *desc);
+
+/**
+ * Set of attributes that can be passed to the gnix_alloc_nic.
+ *
+ * @var gni_cdm_hndl         optional previously allocated gni_cdm_hndl to
+ *                           use for allocating GNI resources (GNI CQs) for
+ *                           this nic.
+ * @var gni_nic_hndl         optional previously allocated gni_nic_hndl to
+ *                           use for allocating GNI resources (GNI CQs) for
+ *                           this nic
+ */
+struct gnix_nic_attr {
+	gni_cdm_handle_t gni_cdm_hndl;
+	gni_nic_handle_t gni_nic_hndl;
+};
 
 /**
  * GNIX nic struct
@@ -121,6 +146,7 @@ struct gnix_nic {
 	struct dlist_entry gnix_nic_list; /* global NIC list */
 	struct dlist_entry dom_nic_list;  /* domain NIC list */
 	fastlock_t lock;
+	uint32_t allocd_gni_res;
 	gni_cdm_handle_t gni_cdm_hndl;
 	gni_nic_handle_t gni_nic_hndl;
 	gni_cq_handle_t rx_cq;
@@ -259,6 +285,8 @@ int _gnix_nic_tx_free(struct gnix_nic *nic, struct gnix_tx_descriptor *tdesc);
  * @brief allocate a gnix_nic struct
  *
  * @param[in] domain   pointer to previously allocated gnix_fid_domain struct
+ * @param[in] attrs    optional pointer to an attributes argument.  NULL
+ *                     can be supplied if no attributes are required
  * @param[out] nic_ptr pointer to address where address of allocated nic is
  *                     to be returned
  * @return             FI_SUCCESS on success, -FI_ENOMEM if insufficient memory
@@ -271,7 +299,8 @@ int _gnix_nic_tx_free(struct gnix_nic *nic, struct gnix_tx_descriptor *tdesc);
  *                     allocating kernel related resources for the nic.
  */
 int gnix_nic_alloc(struct gnix_fid_domain *domain,
-			struct gnix_nic **nic_ptr);
+		   struct gnix_nic_attr *attrs,
+		   struct gnix_nic **nic_ptr);
 
 /**
  * @brief frees a previously allocated gnix_nic struct
