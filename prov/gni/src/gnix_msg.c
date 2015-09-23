@@ -661,6 +661,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	struct gnix_fid_av *av;
 	struct gnix_fab_req *req = NULL;
 	struct gnix_address *addr_ptr = NULL;
+	uint64_t addr_unspec = FI_ADDR_UNSPEC;
 	struct gnix_address gnix_addr;
 	fastlock_t *queue_lock = NULL;
 	struct gnix_tag_storage *posted_queue = NULL;
@@ -680,16 +681,21 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 
 	/* Translate source address. */
 	if (ep->type == FI_EP_RDM) {
-		/* TODO ignore src_addr unless FI_DIRECT_RECV */
-		av = ep->av;
-		assert(av != NULL);
-		ret = _gnix_av_lookup(av, src_addr, &gnix_addr, &addrlen);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_AV, "_gnix_av_lookup returned %d\n",
-				  ret);
-			return ret;
+		if (ep->caps & FI_DIRECTED_RECV || src_addr == FI_ADDR_UNSPEC) {
+			av = ep->av;
+			assert(av != NULL);
+			ret = _gnix_av_lookup(av, src_addr, &gnix_addr,
+					      &addrlen);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_AV,
+					  "_gnix_av_lookup returned %d\n",
+					  ret);
+				return ret;
+			}
+			addr_ptr = &gnix_addr;
+		} else {
+			addr_ptr = (void *)&addr_unspec;
 		}
-		addr_ptr = &gnix_addr;
 	} else {
 		assert(ep->vc != NULL);
 		addr_ptr = &ep->vc->peer_addr;
@@ -711,7 +717,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	if (req) {
 		req->modes |= GNIX_FAB_RQ_M_MATCHED;
 
-		req->addr = *addr_ptr;
 		req->gnix_ep = ep;
 		req->user_context = context;
 

@@ -307,6 +307,7 @@ struct gnix_fid_ep {
 	enum fi_ep_type type;
 	struct gnix_fid_domain *domain;
 	uint64_t op_flags;
+	uint64_t caps;
 	struct gnix_fid_cq *send_cq;
 	struct gnix_fid_cq *recv_cq;
 	struct gnix_fid_cntr *send_cntr;

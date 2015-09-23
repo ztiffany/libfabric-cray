@@ -940,7 +940,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if ((domain == NULL) || (info == NULL) || (ep == NULL))
+	if ((domain == NULL) || (info == NULL) || (ep == NULL) ||
+	    (info->ep_attr == NULL))
 		return -FI_EINVAL;
 
 	if (info->ep_attr->type != FI_EP_RDM)
@@ -991,6 +992,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&ep_priv->recv_queue_lock);
 	fastlock_init(&ep_priv->tagged_queue_lock);
 	slist_init(&ep_priv->pending_recv_comp_queue);
+
+	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS;
 
 	if (info->tx_attr)
 		ep_priv->op_flags = info->tx_attr->op_flags;
