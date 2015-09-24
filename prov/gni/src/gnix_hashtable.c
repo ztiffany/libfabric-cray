@@ -55,6 +55,9 @@
  *   value during initialization
  */
 
+/*
+ * default_attr is global for a criterion test.
+ */
 gnix_hashtable_attr_t default_attr = {
 		.ht_initial_size     = __GNIX_HT_INITIAL_SIZE,
 		.ht_maximum_size     = __GNIX_HT_MAXIMUM_SIZE,
