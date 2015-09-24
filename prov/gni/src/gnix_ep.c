@@ -813,7 +813,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 			ret = -FI_EINVAL;
 			break;
 		}
-		if (flags & (FI_SEND | FI_WRITE)) {
+		if (flags & FI_TRANSMIT) {
 			/* don't allow rebinding */
 			if (ep->send_cq) {
 				ret = -FI_EINVAL;
@@ -940,7 +940,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	if ((domain == NULL) || (info == NULL) || (ep == NULL))
+	if ((domain == NULL) || (info == NULL) || (ep == NULL) ||
+	    (info->ep_attr == NULL))
 		return -FI_EINVAL;
 
 	if (info->ep_attr->type != FI_EP_RDM)
@@ -992,6 +993,8 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	fastlock_init(&ep_priv->tagged_queue_lock);
 	slist_init(&ep_priv->pending_recv_comp_queue);
 
+	ep_priv->caps = info->caps & GNIX_EP_RDM_CAPS;
+
 	if (info->tx_attr)
 		ep_priv->op_flags = info->tx_attr->op_flags;
 	if (info->rx_attr)
@@ -1018,6 +1021,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ret = _gnix_cm_nic_alloc(domain_priv,
+					 info,
 					 &ep_priv->cm_nic);
 		if (ret != FI_SUCCESS)
 			goto err;

@@ -184,17 +184,33 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 			goto err;
 		}
 
+		/* resolve node/service to gnix_ep_name */
 		ret = gnix_resolve_name(node, service, addr);
 		if (ret) {
 			goto err;
 		}
 
 		if (flags & FI_SOURCE) {
+			/* resolved address is the local address */
 			src_addr = addr;
+			if (hints && hints->dest_addr)
+				dest_addr = hints->dest_addr;
 		} else {
+			/* resolved address is a peer */
 			dest_addr = addr;
+			if (hints && hints->src_addr)
+				src_addr = hints->src_addr;
 		}
 	}
+
+	if (src_addr)
+		GNIX_INFO(FI_LOG_FABRIC, "src_pe: 0x%x src_port: 0x%lx\n",
+			  src_addr->gnix_addr.device_addr,
+			  src_addr->gnix_addr.cdm_id);
+	if (dest_addr)
+		GNIX_INFO(FI_LOG_FABRIC, "dest_pe: 0x%x dest_port: 0x%lx\n",
+			  dest_addr->gnix_addr.device_addr,
+			  dest_addr->gnix_addr.cdm_id);
 
 	if (hints) {
 		/*
@@ -333,7 +349,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->next = NULL;
 	gnix_info->ep_attr->type = FI_EP_RDM;
-	gnix_info->caps = GNIX_EP_RDM_CAPS;
+	gnix_info->caps = hints->caps & GNIX_EP_RDM_CAPS;
 	gnix_info->mode = mode;
 	gnix_info->addr_format = FI_ADDR_GNI;
 	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
@@ -355,8 +371,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
 	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
-	/* TODO: probably something else here */
-	gnix_info->tx_attr->size = UINT64_MAX;
+	gnix_info->tx_attr->size = GNIX_TX_SIZE_DEFAULT;
 	gnix_info->tx_attr->iov_limit = 1;
 	gnix_info->tx_attr->inject_size = GNIX_INJECT_SIZE;
 
@@ -372,8 +387,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->rx_attr->msg_order = FI_ORDER_SAS;
 	gnix_info->rx_attr->comp_order = FI_ORDER_NONE;
-	/* TODO: probably something else here */
-	gnix_info->rx_attr->size = UINT64_MAX;
+	gnix_info->rx_attr->size = GNIX_RX_SIZE_DEFAULT;
 	gnix_info->rx_attr->iov_limit = 1;
 
 	*info = gnix_info;

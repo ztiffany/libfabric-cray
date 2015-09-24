@@ -145,10 +145,9 @@ err:
  * gnix_ep_name pointer with the information.
  *
  * node (IN) : Node name being resolved to gnix specific address
+ * service (IN) : Port number being resolved to gnix specific address
  * resolved_addr (IN/OUT) : Pointer that must be provided to contain the
  *	resolved address.
- *
- * TODO: consider a use for service.
  */
 int gnix_resolve_name(IN const char *node, IN const char *service,
 		      INOUT struct gnix_ep_name *resolved_addr)
@@ -204,7 +203,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 
 	sin = (struct sockaddr_in *) &ifr.ifr_addr;
 
-	ret = getaddrinfo(node, "domain", &hints, &result);
+	ret = getaddrinfo(node, service, &hints, &result);
 	if (ret != 0) {
 		GNIX_ERR(FI_LOG_FABRIC,
 			 "Failed to get address for node provided: %s\n",
@@ -258,10 +257,16 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	memset(resolved_addr, 0, sizeof(struct gnix_ep_name));
 
 	resolved_addr->gnix_addr.device_addr = pe;
-	/* TODO: have to write a nameserver to get this info */
-	resolved_addr->gnix_addr.cdm_id = 0;
-	/* TODO: likely depend on service? */
-	resolved_addr->name_type = 0;
+	if (service) {
+		/* use resolved service/port */
+		resolved_addr->gnix_addr.cdm_id = sa->sin_port;
+		resolved_addr->name_type = GNIX_EPN_TYPE_BOUND;
+	} else {
+		/* generate port internally */
+		resolved_addr->name_type = GNIX_EPN_TYPE_UNBOUND;
+	}
+	GNIX_INFO(FI_LOG_FABRIC, "Resolved: %s:%s to gnix_addr: 0x%lx\n",
+		  node ?: "", service ?: "", resolved_addr->gnix_addr);
 sock_cleanup:
 	if(close(sock) == -1) {
 		GNIX_ERR(FI_LOG_FABRIC, "Unable to close socket: %s\n",

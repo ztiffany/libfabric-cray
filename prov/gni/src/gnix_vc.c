@@ -1530,6 +1530,8 @@ static int __gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			  ret);
 		goto err;
 	}
+	GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
+		  dest_addr, gnix_addr);
 
 	memcpy(&key, &gnix_addr, sizeof(gnix_ht_key_t));
 	vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht,

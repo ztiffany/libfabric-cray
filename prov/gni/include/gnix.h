@@ -167,6 +167,12 @@ extern "C" {
 #define GNIX_READMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
 
 /*
+ * GNI provider fabric default values
+ */
+#define GNIX_TX_SIZE_DEFAULT	500
+#define GNIX_RX_SIZE_DEFAULT	500
+
+/*
  * if this has to be changed, check gnix_getinfo, etc.
  */
 #define GNIX_EP_MSG_CAPS GNIX_EP_RDM_CAPS
@@ -207,6 +213,9 @@ struct gnix_address {
 #define GNIX_ADDR_EQUAL(a, b) (((a).device_addr == (b).device_addr) && \
 				((a).cdm_id == (b).cdm_id))
 
+
+#define GNIX_EPN_TYPE_UNBOUND	0
+#define GNIX_EPN_TYPE_BOUND	1
 
 /*
  * info returned by fi_getname/fi_getpeer - has enough
@@ -298,6 +307,7 @@ struct gnix_fid_ep {
 	enum fi_ep_type type;
 	struct gnix_fid_domain *domain;
 	uint64_t op_flags;
+	uint64_t caps;
 	struct gnix_fid_cq *send_cq;
 	struct gnix_fid_cq *recv_cq;
 	struct gnix_fid_cntr *send_cntr;

@@ -165,12 +165,14 @@ int _gnix_cm_nic_free(struct gnix_cm_nic *cm_nic)
 }
 
 int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
-			struct gnix_cm_nic **cm_nic_ptr)
+		       struct fi_info *info,
+		       struct gnix_cm_nic **cm_nic_ptr)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_cm_nic *cm_nic = NULL;
-	uint32_t device_addr, cdm_id;
+	uint32_t device_addr, cdm_id = -1;
 	gni_return_t status;
+	struct gnix_ep_name *name;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -182,9 +184,20 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		goto err;
 	}
 
-	ret = _gnix_get_new_cdm_id(domain, &cdm_id);
-	if (ret != FI_SUCCESS)
-		goto err;
+	if (info->src_addr &&
+	    info->src_addrlen == sizeof(struct gnix_ep_name)) {
+		name = (struct gnix_ep_name *)info->src_addr;
+		if (name->name_type == GNIX_EPN_TYPE_BOUND) {
+			/* EP name includes user specified service/port */
+			cdm_id = name->gnix_addr.cdm_id;
+		}
+	}
+
+	if (cdm_id == -1) {
+		ret = _gnix_get_new_cdm_id(domain, &cdm_id);
+		if (ret != FI_SUCCESS)
+			goto err;
+	}
 
 	GNIX_INFO(FI_LOG_EP_CTRL, "creating cm_nic for %u/0x%x/%u\n",
 		      domain->ptag, domain->cookie, cdm_id);

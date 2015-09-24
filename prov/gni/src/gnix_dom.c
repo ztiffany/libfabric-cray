@@ -59,7 +59,7 @@ static struct fi_ops_domain gnix_domain_ops;
 
 static void __domain_destruct(void *obj)
 {
-	int ret = FI_SUCCESS, v;
+	int ret = FI_SUCCESS;
 	struct gnix_nic *p, *next;
 	gni_return_t status;
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
@@ -80,23 +80,12 @@ static void __domain_destruct(void *obj)
 	assert(ret == FI_SUCCESS);
 
 	/*
-	 *  remove nics from the domain's nic list,
-	 *  decrement ref_cnt on each nic.  If ref_cnt
-	 *  drops to 0, destroy the cdm, remove from
-	 *  the global nic list.
+	 * Drop a reference to each NIC used by this domain.
 	 */
-	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list)
-	{
+
+	dlist_for_each_safe(&domain->nic_list, p, next, dom_nic_list) {
 		dlist_remove(&p->dom_nic_list);
-		v = _gnix_ref_put(p);
-		if (v == 0) {
-			dlist_remove(&p->gnix_nic_list);
-			status = GNI_CdmDestroy(p->gni_cdm_hndl);
-			if (status != GNI_RC_SUCCESS)
-				GNIX_ERR(FI_LOG_DOMAIN,
-					 "oops, cdm destroy failed\n");
-			free(p);
-		}
+		_gnix_ref_put(p);
 	}
 
 	_gnix_ref_put(domain->fabric);
