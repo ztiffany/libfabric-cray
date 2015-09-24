@@ -61,7 +61,6 @@ static void __domain_destruct(void *obj)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_nic *p, *next;
-	gni_return_t status;
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
 
 	/* if the domain isn't being destructed by close, we need to check the

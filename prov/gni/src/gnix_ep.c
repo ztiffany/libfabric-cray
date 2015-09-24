@@ -655,7 +655,7 @@ err:
 
 static void __ep_destruct(void *obj)
 {
-	int ret;
+	int __attribute__((unused)) ret;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	struct gnix_fid_av *av;
