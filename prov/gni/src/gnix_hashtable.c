@@ -488,7 +488,10 @@ static int __gnix_ht_lk_insert(
 
 	bucket = __gnix_hash_func(ht, entry->key);
 	lh = &ht->ht_lk_tbl[bucket];
+
+	rwlock_wrlock(&lh->lh_lock);
 	ret = __gnix_ht_insert_list(&lh->head, entry, collisions);
+	rwlock_unlock(&lh->lh_lock);
 
 	rwlock_unlock(&ht->ht_lock);
 

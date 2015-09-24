@@ -45,6 +45,9 @@
 #include "gnix_cntr.h"
 #include "gnix_av.h"
 
+#define INVALID_PEEK_FORMAT(fmt) \
+	((fmt) == FI_CQ_FORMAT_CONTEXT || (fmt) == FI_CQ_FORMAT_MSG)
+
 /*******************************************************************************
  * helper functions
  ******************************************************************************/
@@ -67,8 +70,15 @@ static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 }
 
 
-static int __gnix_recv_completion(struct gnix_fid_ep *ep,
-				  struct gnix_fab_req *req)
+static int __recv_completion(
+		struct gnix_fid_ep *ep,
+		struct gnix_fab_req *req,
+		void *context,
+		uint64_t flags,
+		size_t len,
+		void *addr,
+		uint64_t data,
+		uint64_t tag)
 {
 	struct gnix_fid_cq *cq;
 	int rc;
@@ -76,13 +86,7 @@ static int __gnix_recv_completion(struct gnix_fid_ep *ep,
 	cq = ep->recv_cq;
 	assert(cq != NULL);
 
-	rc = _gnix_cq_add_event(cq,
-				req->user_context,
-				FI_RECV | FI_MSG,
-				req->msg.recv_len,
-				(void *)req->msg.recv_addr,
-				req->msg.imm,
-				0);
+	rc = _gnix_cq_add_event(cq, context, flags, len, addr, data, tag);
 	if (rc != FI_SUCCESS)  {
 		GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
 				"_gnix_cq_add_event returned %d\n",
@@ -100,6 +104,19 @@ static int __gnix_recv_completion(struct gnix_fid_ep *ep,
 	return FI_SUCCESS;
 }
 
+static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
+				  struct gnix_fab_req *req)
+{
+	return __recv_completion(ep,
+			req,
+			req->user_context,
+			FI_RECV | FI_MSG,
+			req->msg.recv_len,
+			(void *)req->msg.recv_addr,
+			req->msg.imm,
+			req->msg.tag);
+}
+
 static int __gnix_send_completion(struct gnix_fid_ep *ep,
 				  struct gnix_fab_req *req)
 {
@@ -115,7 +132,7 @@ static int __gnix_send_completion(struct gnix_fid_ep *ep,
 				req->msg.send_len,
 				(void *)req->msg.send_addr,
 				req->msg.imm,
-				0);
+				req->msg.tag);
 	if (rc != FI_SUCCESS)  {
 		GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
 				"_gnix_cq_add_event returned %d\n",
@@ -173,6 +190,27 @@ static int __gnix_rndzv_req_complete(void *arg)
 	GNIX_INFO(FI_LOG_EP_DATA, "Initiated RNDZV_FIN, req: %p\n", req);
 
 	return gnixu_to_fi_errno(status);
+}
+
+static int __gnix_rndzv_req_send_fin(void *arg)
+{
+	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
+	struct gnix_fid_ep *ep = req->gnix_ep;
+	struct gnix_nic *nic = ep->nic;
+	struct gnix_tx_descriptor *txd;
+	int rc;
+
+	rc = _gnix_nic_tx_alloc(nic, &txd);
+	if (rc) {
+		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_nic_tx_alloc() failed: %d\n",
+			 rc);
+		return -FI_EAGAIN;
+	}
+
+	txd->completer_fn = NULL;
+	txd->req = req;
+
+	return __gnix_rndzv_req_complete(txd);
 }
 
 static int __gnix_rndzv_req(void *arg)
@@ -649,6 +687,100 @@ smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin
 };
 
+
+static int __gnix_peek_request(struct gnix_fid_ep *ep,
+		struct gnix_fab_req *req,
+		void *addr,
+		size_t len,
+		void *context,
+		uint64_t flags,
+		uint64_t tag)
+{
+	struct gnix_fid_cq *recv_cq = ep->recv_cq;
+	int rendezvous = !!(req->msg.send_flags & GNIX_MSG_RENDEZVOUS);
+	void *peek_addr = addr;
+
+	/* all claim work is performed by the tag storage,
+	 * so nothing special here
+	 *
+	 * if no CQ, no data is to be returned. Just inform the user that a
+	 * message is present.
+	 */
+	GNIX_INFO(FI_LOG_EP_DATA, "peeking req=%p\n", req);
+	if (!recv_cq)
+		return FI_SUCCESS;
+
+	/* rendezvous messages on the unexpected queue won't have data
+	 *
+	 * additionally, if the cq format doesn't support passing a buffer
+	 * location and length, then data will not be copied
+	 * */
+	if (!rendezvous && peek_addr &&
+			!INVALID_PEEK_FORMAT(recv_cq->attr.format))
+		memcpy(peek_addr, (void *) req->msg.recv_addr,
+				len);
+	else
+		peek_addr = NULL;
+
+	return __recv_completion(ep, req, context, flags, len,
+			peek_addr, req->msg.imm, tag);
+}
+
+static int  __gnix_discard_request(struct gnix_fid_ep *ep,
+		struct gnix_fab_req *req,
+		void *addr,
+		size_t len,
+		void *context,
+		uint64_t flags,
+		uint64_t tag,
+		uint64_t src_addr)
+{
+	int ret = FI_SUCCESS;
+	int rendezvous = !!(req->msg.send_flags & GNIX_MSG_RENDEZVOUS);
+
+	GNIX_INFO(FI_LOG_EP_DATA, "discarding req=%p\n", req);
+	if (rendezvous) {
+		/* return a send completion so the sender knows the request/data
+		 * was sent, but discard the data locally
+		 */
+		req->gnix_ep = ep;
+
+		req->msg.recv_addr = (uint64_t) addr;
+		req->msg.recv_len = len;
+		req->user_context = context;
+		req->msg.tag = tag;
+
+		/* TODO: prevent re-lookup of src_addr */
+		ret = _gnix_ep_get_vc(ep, src_addr, &req->vc);
+		if (ret) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "_gnix_ep_get_vc failed: %dn",
+				  ret);
+			return ret;
+		}
+
+		GNIX_INFO(FI_LOG_EP_DATA,
+				"returning rndzv completion for req, %p", req);
+
+		/* send completion data. */
+		req->send_fn = __gnix_rndzv_req_send_fin;
+		ret = _gnix_vc_queue_req(req);
+	} else {
+		/* data has already been delivered, so just discard it and
+		 * generate cqe
+		 */
+		ret = __recv_completion(ep, req, context, flags, len,
+				addr, req->msg.imm, tag);
+
+		/* data has already been delivered, so just discard it */
+		_gnix_fr_free(ep, req);
+	}
+
+	return ret;
+}
+
+
+
 /*******************************************************************************
  * Generic EP recv handling
  ******************************************************************************/
@@ -673,11 +805,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	void *tmp_buf;
 
 	r_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
-
-	/* CLAIM/DISCARD/PEEK not yet supported. */
-	if (tagged && r_flags) {
-		return -FI_EOPNOTSUPP;
-	}
 
 	/* Translate source address. */
 	if (ep->type == FI_EP_RDM) {
@@ -715,6 +842,28 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	req = _gnix_match_tag(unexp_queue, r_tag, r_ignore,
 			      r_flags, context, addr_ptr);
 	if (req) {
+		/* check to see if we are peeking */
+		if (r_flags & FI_DISCARD) {
+			ret = __gnix_discard_request(ep,
+					req,
+					(void *)buf,
+					MIN(req->msg.send_len, len),
+					context,
+					req->flags,
+					r_tag,
+					src_addr);
+			goto pdc_exit;
+		} else if (r_flags & FI_PEEK) {
+			ret = __gnix_peek_request(ep,
+					req,
+					(void *) buf,
+					MIN(req->msg.send_len, len),
+					context,
+					req->flags,
+					r_tag);
+			goto pdc_exit;
+		}
+
 		req->modes |= GNIX_FAB_RQ_M_MATCHED;
 
 		req->gnix_ep = ep;
@@ -764,6 +913,35 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			_gnix_fr_free(ep, req);
 		}
 	} else {
+		/* if peek/claim/discard, we didn't find what we
+		 * were looking for, return FI_ENOMSG
+		 */
+		if (r_flags) {
+			if (ep->recv_cq) {
+				ret = _gnix_cq_add_error(ep->recv_cq, context, flags,
+						len, (void *) buf, 0, tag, len, FI_ENOMSG,
+						FI_ENOMSG, NULL);
+				if (ret) {
+					GNIX_ERR(FI_LOG_EP_DATA, "could not add error to CQ, "
+							"cq=%p\n", ep->recv_cq);
+				}
+			}
+
+			if (ep->recv_cntr) {
+				ret = _gnix_cntr_inc_err(ep->recv_cntr);
+				if (ret) {
+					GNIX_ERR(FI_LOG_EP_DATA, "could not add error to cntr,"
+							"cntr=%p", ep->recv_cntr);
+				}
+			}
+
+			/* if handling trecvmsg flags, return here
+			 * Never post a receive request from this type of context
+			 */
+			ret = -FI_ENOMSG;
+			goto pdc_exit;
+		}
+
 		/* Add new posted receive request. */
 		req = _gnix_fr_alloc(ep);
 		if (req == NULL) {
@@ -794,6 +972,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		_gnix_insert_tag(posted_queue, r_tag, req, r_ignore);
 	}
 
+pdc_exit:
 err:
 	fastlock_release(queue_lock);
 
