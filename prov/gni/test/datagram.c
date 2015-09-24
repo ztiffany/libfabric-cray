@@ -63,7 +63,7 @@ static struct fid_ep *ep;
 static struct fi_info *hints;
 static struct fi_info *fi;
 static struct gnix_fid_ep *ep_priv;
-const char  my_cdm_id[] = "0xdeadbeef";
+const char  my_cdm_id[] = "3000";
 
 void dg_setup(void)
 {
