@@ -340,7 +340,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->ep_attr->tx_ctx_cnt = 1;
 	gnix_info->ep_attr->rx_ctx_cnt = 1;
 
-	gnix_info->domain_attr->threading = FI_THREAD_COMPLETION;
+	gnix_info->domain_attr->threading = FI_THREAD_SAFE;
 	gnix_info->domain_attr->control_progress = control_progress;
 	gnix_info->domain_attr->data_progress = data_progress;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
