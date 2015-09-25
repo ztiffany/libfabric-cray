@@ -353,6 +353,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->control_progress = control_progress;
 	gnix_info->domain_attr->data_progress = data_progress;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
+	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
 	/* only one aries per node */
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 
