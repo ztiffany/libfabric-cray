@@ -48,8 +48,9 @@ extern "C" {
  * prototypes
  */
 
-int gnix_resolve_name(const char *node, const char *service,
-		      struct gnix_ep_name *dest_addr);
+int gnix_resolve_name(IN const char *node, IN const char *service,
+		      IN uint64_t flags, INOUT struct gnix_ep_name
+		      *resolved_addr);
 
 #ifdef __cplusplus
 } /* extern "C" */

@@ -185,7 +185,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		/* resolve node/service to gnix_ep_name */
-		ret = gnix_resolve_name(node, service, addr);
+		ret = gnix_resolve_name(node, service, flags, addr);
 		if (ret) {
 			goto err;
 		}
