@@ -150,7 +150,8 @@ err:
  *	resolved address.
  */
 int gnix_resolve_name(IN const char *node, IN const char *service,
-		      INOUT struct gnix_ep_name *resolved_addr)
+		      IN uint64_t flags, INOUT struct gnix_ep_name
+		      *resolved_addr)
 {
 	int sock = -1;
 	uint32_t pe = -1;
@@ -171,6 +172,12 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		.ai_socktype = SOCK_DGRAM,
 		.ai_flags = AI_CANONNAME
 	};
+
+	if (flags & FI_SOURCE)
+		hints.ai_flags |= AI_PASSIVE;
+
+	if (flags & FI_NUMERICHOST)
+		hints.ai_flags |= AI_NUMERICHOST;
 
 	if (!resolved_addr) {
 		GNIX_ERR(FI_LOG_FABRIC,
@@ -259,7 +266,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 	resolved_addr->gnix_addr.device_addr = pe;
 	if (service) {
 		/* use resolved service/port */
-		resolved_addr->gnix_addr.cdm_id = sa->sin_port;
+		resolved_addr->gnix_addr.cdm_id = ntohs(sa->sin_port);
 		resolved_addr->name_type = GNIX_EPN_TYPE_BOUND;
 	} else {
 		/* generate port internally */
