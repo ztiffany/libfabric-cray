@@ -357,6 +357,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->src_addr = src_addr;
 	gnix_info->dest_addr = dest_addr;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
+	gnix_info->fabric_attr->prov_name = strdup(gnix_fab_name);
 	/* let's consider gni copyrighted :) */
 
 	gnix_info->tx_attr->caps = gnix_info->caps;
