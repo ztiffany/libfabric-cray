@@ -349,7 +349,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 
 	gnix_info->next = NULL;
 	gnix_info->ep_attr->type = FI_EP_RDM;
-	gnix_info->caps = hints->caps & GNIX_EP_RDM_CAPS;
+	gnix_info->caps = hints ? hints->caps & GNIX_EP_RDM_CAPS :
+		GNIX_EP_RDM_CAPS;
 	gnix_info->mode = mode;
 	gnix_info->addr_format = FI_ADDR_GNI;
 	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
