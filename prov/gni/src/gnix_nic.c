@@ -777,7 +777,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			goto err1;
 
 		fastlock_init(&nic->pending_vc_lock);
-		slist_init(&nic->pending_vcs);
+		dlist_init(&nic->pending_vcs);
 
 		_gnix_ref_init(&nic->ref_cnt, 1, __nic_destruct);
 		atomic_initialize(&nic->outstanding_fab_reqs_nic, 0);
