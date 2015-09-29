@@ -457,7 +457,7 @@ void do_inject_write(int len)
 			     gni_addr[1], (uint64_t)target, mr_key);
 	cr_assert_eq(sz, 0);
 
-	for (i = 0; i < INJECT_SIZE; i++) {
+	for (i = 0; i < len; i++) {
 		loops = 0;
 		while (source[i] != target[i]) {
 			ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
