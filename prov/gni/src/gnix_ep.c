@@ -643,40 +643,33 @@ ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 
 static int gnix_ep_control(fid_t fid, int command, void *arg)
 {
-	int i, ret = FI_SUCCESS;
+	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
-	struct gnix_fid_domain *dom;
-	struct gnix_vc *vc;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid);
 
 	switch (command) {
 	/*
-	 * for FI_EP_RDM, post wc datagrams now
+	 * for FI_EP_RDM, enable the cm_nic associated
+	 * with this ep.
 	 */
 	case FI_ENABLE:
 		if (ep->type == FI_EP_RDM) {
-			dom = ep->domain;
-			for (i = 0; i < dom->fabric->n_wc_dgrams; i++) {
-				ret = _gnix_vc_alloc(ep, NULL, &vc);
-				if (ret != FI_SUCCESS) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-				     "_gnix_vc_alloc call returned %d\n", ret);
-					goto err;
-				}
-				ret = _gnix_vc_accept(vc);
-				if (ret != FI_SUCCESS) {
-					GNIX_WARN(FI_LOG_EP_CTRL,
-						"_gnix_vc_accept returned %d\n",
-						ret);
-					_gnix_vc_destroy(vc);
-					goto err;
-				} else {
-					fastlock_acquire(&ep->vc_list_lock);
-					dlist_insert_tail(&vc->entry,
-						       &ep->wc_vc_list);
-					fastlock_release(&ep->vc_list_lock);
-				}
+			ret = _gnix_vc_cm_init(ep->cm_nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				     "_gnix_vc_cm_nic_init call returned %d\n",
+					ret);
+				goto err;
+			}
+			ret = _gnix_cm_nic_enable(ep->cm_nic);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+				     "_gnix_cm_nic_enable call returned %d\n",
+					ret);
+				goto err;
 			}
 		}
 		break;
@@ -700,7 +693,10 @@ static void __ep_destruct(void *obj)
 	struct gnix_nic *nic;
 	struct gnix_fid_av *av;
 	struct gnix_cm_nic *cm_nic;
+	gnix_ht_key_t *key_ptr;
 	struct gnix_fid_ep *ep = (struct gnix_fid_ep *) obj;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/* TODO: lots more stuff to do here */
 	if (ep->send_cq) {
@@ -749,10 +745,15 @@ static void __ep_destruct(void *obj)
 		_gnix_ref_put(av);
 
 	/*
-	 * clean up any vc hash table or vector
+	 * clean up any vc hash table or vector,
+	 * remove entry from addr_to_ep ht.
 	 */
 
 	if (ep->type == FI_EP_RDM) {
+
+		key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
+		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
+				       *key_ptr);
 		if (ep->vc_ht != NULL) {
 			_gnix_ht_destroy(ep->vc_ht);
 			free(ep->vc_ht);
@@ -783,45 +784,18 @@ static int gnix_ep_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
-	struct gnix_vc *vc, *tvc;
 	int references_held;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 
-	/*
-	 * Destroy any VCs being used by this EP. This must occur
-	 * before destroying the EP, because the VCs contain a
-	 * reference to the EP.
-	 */
-	dlist_for_each_safe(&ep->wc_vc_list, vc, tvc, entry) {
-		dlist_remove(&vc->entry);
-		if (vc->conn_state == GNIX_VC_CONNECTED) {
-			ret = _gnix_vc_disconnect(vc);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_CTRL,
-					"_gnix_vc_disconnect returned %d\n",
-					 ret);
-				goto err;
-			}
-		}
-		ret = _gnix_vc_destroy(vc);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_vc_destroy returned %d\n",
-				 ret);
-			goto err;
-		}
-	}
-
 	references_held = _gnix_ref_put(ep);
 	if (references_held)
-			GNIX_INFO(FI_LOG_EP_CTRL, "failed to fully close ep due "
-					"to lingering references. references=%i ep=%p\n",
-					references_held, ep);
+		GNIX_INFO(FI_LOG_EP_CTRL, "failed to fully close ep due "
+			  "to lingering references. references=%i ep=%p\n",
+			  references_held, ep);
 
-err:
 	return ret;
 }
 
@@ -968,9 +942,11 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 {
 	int ret = FI_SUCCESS;
 	int tsret = FI_SUCCESS;
+	uint32_t cdm_id;
 	struct gnix_fid_domain *domain_priv;
 	struct gnix_fid_ep *ep_priv;
 	gnix_hashtable_attr_t gnix_ht_attr;
+	gnix_ht_key_t *key_ptr;
 	struct gnix_nic_attr *attr = NULL;
 	struct gnix_nic_attr ded_nic_attr = {0};
 	struct gnix_tag_storage_attr untagged_attr = {
@@ -1023,8 +999,6 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->domain = domain_priv;
 	ep_priv->type = info->ep_attr->type;
 
-	fastlock_init(&ep_priv->vc_list_lock);
-	dlist_init(&ep_priv->wc_vc_list);
 	atomic_initialize(&ep_priv->active_fab_reqs, 0);
 	_gnix_ref_init(&ep_priv->ref_cnt, 1, __ep_destruct);
 
@@ -1056,9 +1030,6 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
 
-	/*
-	 * TODO, initialize vc hash table
-	 */
 	if (ep_priv->type == FI_EP_RDM) {
 		ret = _gnix_cm_nic_alloc(domain_priv,
 					 info,
@@ -1083,6 +1054,30 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 			ded_nic_attr.gni_nic_hndl =
 				ep_priv->cm_nic->gni_nic_hndl;
 			attr = &ded_nic_attr;
+			ep_priv->my_name = ep_priv->cm_nic->my_name;
+		} else {
+			ep_priv->my_name.gnix_addr.device_addr =
+				ep_priv->cm_nic->my_name.gnix_addr.device_addr;
+			ep_priv->my_name.cm_nic_cdm_id =
+				ep_priv->cm_nic->my_name.gnix_addr.cdm_id;
+			ret = _gnix_get_new_cdm_id(domain_priv, &cdm_id);
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					    "gnix_get_new_cdm_id call returned %s\n",
+					     fi_strerror(-ret));
+				goto err;
+			}
+			ep_priv->my_name.gnix_addr.cdm_id = cdm_id;
+		}
+
+		key_ptr = (gnix_ht_key_t *)&ep_priv->my_name.gnix_addr;
+		ret = _gnix_ht_insert(ep_priv->cm_nic->addr_to_ep_ht,
+					*key_ptr,
+					ep_priv);
+		if ((ret != FI_SUCCESS) && (ret != -FI_ENOSPC)) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "__gnix_ht_insert returned %d\n",
+				  ret);
 		}
 
 		gnix_ht_attr.ht_initial_size = domain_priv->params.ct_init_size;
@@ -1167,21 +1162,17 @@ static inline struct gnix_fab_req *__find_tx_req(
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "searching VCs for the correct context to"
 			" cancel, context=%p", context);
 
-	fastlock_acquire(&ep->vc_list_lock);
-	dlist_for_each(&ep->wc_vc_list, vc, entry)
-	{
-		GNIX_DEBUG(FI_LOG_EP_CTRL, "checking vc=%p\n", vc);
+	while ((vc = _gnix_nic_next_pending_vc(ep->nic))) {
 		fastlock_acquire(&vc->tx_queue_lock);
 		entry = slist_remove_first_match(&vc->tx_queue,
 				__match_context, context);
 		fastlock_release(&vc->tx_queue_lock);
-
+		_gnix_vc_schedule(vc);
 		if (entry) {
 			req = container_of(entry, struct gnix_fab_req, slist);
 			break;
 		}
 	}
-	fastlock_release(&ep->vc_list_lock);
 
 	return req;
 }
@@ -1218,6 +1209,8 @@ static ssize_t gnix_ep_cancel(fid_t fid, void *context)
 	uint64_t tag, flags;
 	size_t len;
 	int is_send = 0;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 
@@ -1284,6 +1277,8 @@ static ssize_t gnix_ep_cancel(fid_t fid, void *context)
 ssize_t gnix_cancel(fid_t fid, void *context)
 {
 	ssize_t ret;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	switch (fid->fclass) {
 	case FI_CLASS_EP:

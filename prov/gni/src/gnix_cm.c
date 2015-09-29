@@ -95,11 +95,7 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	 */
 
 	if (ep->type == FI_EP_RDM) {
-		name.gnix_addr.cdm_id = ep->cm_nic->cdm_id;
-		name.gnix_addr.device_addr = ep->cm_nic->device_addr;
-		name.cookie = ep->domain->cookie;
-		name.cm_nic_cdm_id = ep->cm_nic->cdm_id;
-		name.name_type = ep->cm_nic->name_type;
+		name = ep->my_name;
 	} else {
 		return -FI_ENOSYS;  /*TODO: something different needed for
 				      FI_EP_MSG */

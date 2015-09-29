@@ -53,6 +53,7 @@ extern "C" {
 #define GNIX_VC_MODE_IN_HT		(1U << 1)
 #define GNIX_VC_MODE_DG_POSTED		(1U << 2)
 #define GNIX_VC_MODE_PENDING_MSGS	(1U << 3)
+#define GNIX_VC_MODE_PEER_CONNECTED	(1U << 4)
 
 /* VC flags */
 #define GNIX_VC_FLAG_SCHEDULED		0
@@ -71,9 +72,12 @@ enum gnix_vc_conn_state {
 };
 
 enum gnix_vc_conn_req_type {
-	GNIX_VC_CONN_REQ_CONN = 100,
-	GNIX_VC_CONN_REQ_LISTEN
+	GNIX_VC_CONN_REQ = 1,
+	GNIX_VC_CONN_RESP
 };
+
+#define LOCAL_MBOX_SENT (1UL)
+#define REMOTE_MBOX_RCVD (1UL << 1)
 
 /**
  * Virual Connection (VC) struct
@@ -117,6 +121,7 @@ struct gnix_vc {
 	atomic_t outstanding_tx_reqs;
 	atomic_t outstanding_reqs;
 	enum gnix_vc_conn_state conn_state;
+	uint32_t post_state;
 	int vc_id;
 	int modes;
 	struct dlist_entry pending_list;
@@ -241,5 +246,7 @@ int _gnix_vc_queue_req(struct gnix_fab_req *req);
  */
 int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		    struct gnix_vc **vc_ptr);
+
+int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic);
 
 #endif /* _GNIX_VC_H_ */
