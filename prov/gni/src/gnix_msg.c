@@ -940,8 +940,9 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->msg.send_md = md;
 	req->msg.send_len = len;
 	req->msg.send_flags = flags;
+	req->flags = 0;
 
-	if (req->flags & FI_INJECT) {
+	if (flags & FI_INJECT) {
 		memcpy(req->inject_buf, (void *)loc_addr, len);
 		req->msg.send_addr = (uint64_t)req->inject_buf;
 	} else {
