@@ -114,7 +114,7 @@ struct gnix_vc {
 	enum gnix_vc_conn_state conn_state;
 	int vc_id;
 	int modes;
-	struct slist_entry pending_list;
+	struct dlist_entry pending_list;
 	gnix_bitmap_t flags; /* We're missing regular bit ops */
 };
 

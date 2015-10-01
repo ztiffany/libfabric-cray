@@ -908,6 +908,19 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		return -FI_EINVAL;
 
 	/*
+	 * if the vc is in a nic's work queue, remove it
+	 */
+
+	if (_gnix_test_and_clear_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED)) {
+		fastlock_acquire(&nic->pending_vc_lock);
+		dlist_remove(&vc->pending_list);
+		fastlock_release(&nic->pending_vc_lock);
+		GNIX_INFO(FI_LOG_EP_CTRL, "Removed VC (%p) from pending_list\n",
+			  vc);
+	}
+
+
+	/*
 	 * check the state of the VC, may need to
 	 * do something for some cases
 	 */
@@ -1177,7 +1190,7 @@ int _gnix_vc_schedule(struct gnix_vc *vc)
 
 	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED)) {
 		fastlock_acquire(&nic->pending_vc_lock);
-		slist_insert_tail(&vc->pending_list, &nic->pending_vcs);
+		dlist_insert_tail(&vc->pending_list, &nic->pending_vcs);
 		fastlock_release(&nic->pending_vc_lock);
 		GNIX_INFO(FI_LOG_EP_CTRL, "Scheduled VC (%p)\n", vc);
 	}
@@ -1199,17 +1212,16 @@ int _gnix_vc_schedule_reqs(struct gnix_vc *vc)
 
 struct gnix_vc *_gnix_nic_next_pending_vc(struct gnix_nic *nic)
 {
-	struct slist_entry *entry;
 	struct gnix_vc *vc = NULL;
 
 	fastlock_acquire(&nic->pending_vc_lock);
-	entry = slist_remove_head(&nic->pending_vcs);
+	vc = dlist_first_entry(&nic->pending_vcs, struct gnix_vc,
+				  pending_list);
+	if (vc)
+		dlist_remove(&vc->pending_list);
 	fastlock_release(&nic->pending_vc_lock);
 
-	if (entry) {
-		vc = (struct gnix_vc *)container_of(entry,
-						    struct gnix_vc,
-						    pending_list);
+	if (vc) {
 		GNIX_INFO(FI_LOG_EP_CTRL, "Dequeued VC (%p)\n", vc);
 
 		_gnix_clear_bit(&vc->flags, GNIX_VC_FLAG_SCHEDULED);
