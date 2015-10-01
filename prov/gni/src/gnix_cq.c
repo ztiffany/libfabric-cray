@@ -128,6 +128,7 @@ static void fill_cq_tagged(void *cq_entry, void *op_context, uint64_t flags,
 	entry->buf = buf;
 	entry->data = data;
 	entry->tag = tag;
+	entry->len = len;
 }
 
 static int verify_cq_attr(struct fi_cq_attr *attr, struct fi_ops_cq *ops,
@@ -316,6 +317,9 @@ ssize_t _gnix_cq_add_error(struct gnix_fid_cq *cq, void *op_context,
 	struct slist_entry *item;
 
 	ssize_t ret = FI_SUCCESS;
+
+	GNIX_INFO(FI_LOG_CQ, "creating error event entry\n");
+
 
 	fastlock_acquire(&cq->lock);
 

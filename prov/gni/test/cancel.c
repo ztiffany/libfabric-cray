@@ -284,7 +284,7 @@ Test(gnix_cancel, cancel_ep_send)
 	cr_assert(buf.buf == (void *) 0xdeadbeef, "buffer mismatch");
 	cr_assert(buf.data == 0, "data mismatch");
 	cr_assert(buf.err == FI_ECANCELED, "error code mismatch");
-	cr_assert(buf.prov_errno == -FI_ECANCELED, "prov error code mismatch");
+	cr_assert(buf.prov_errno == FI_ECANCELED, "prov error code mismatch");
 	cr_assert(buf.len == 128, "length mismatch");
 }
 
@@ -308,7 +308,7 @@ Test(gnix_cancel, cancel_ep_recv)
 	cr_assert(buf.buf == (void *) 0xdeadbeef, "buffer mismatch");
 	cr_assert(buf.data == 0, "data mismatch");
 	cr_assert(buf.err == FI_ECANCELED, "error code mismatch");
-	cr_assert(buf.prov_errno == -FI_ECANCELED, "prov error code mismatch");
+	cr_assert(buf.prov_errno == FI_ECANCELED, "prov error code mismatch");
 	cr_assert(buf.len == 128, "length mismatch");
 }
 
