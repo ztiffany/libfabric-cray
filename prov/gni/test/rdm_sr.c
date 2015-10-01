@@ -39,6 +39,8 @@
 #include <time.h>
 #include <string.h>
 #include <pthread.h>
+#include <unistd.h>
+#include <limits.h>
 
 #include <rdma/fabric.h>
 #include <rdma/fi_domain.h>
@@ -67,12 +69,14 @@ static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep[2];
 static struct fid_av *av;
-static struct fi_info *hints;
-static struct fi_info *fi;
 void *ep_name[2];
 size_t gni_addr[2];
 static struct fid_cq *msg_cq[2];
+static struct fi_info *fi[2];
 static struct fi_cq_attr cq_attr;
+const char *cdm_id[2] = { "5000", "5001" };
+struct fi_info *hints;
+static int using_bnd_ep = 0;
 
 #define BUF_SZ (1<<20)
 char *target;
@@ -80,27 +84,16 @@ char *source;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
-void rdm_sr_setup(void)
+void rdm_sr_setup_common(void)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
 	size_t addrlen = 0;
 
-	hints = fi_allocinfo();
-	cr_assert(hints, "fi_allocinfo");
-
-	hints->domain_attr->cq_data_size = 4;
-	hints->mode = ~0;
-
-	hints->fabric_attr->name = strdup("gni");
-
-	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi);
-	cr_assert(!ret, "fi_getinfo");
-
-	ret = fi_fabric(fi->fabric_attr, &fab, NULL);
+	ret = fi_fabric(fi[0]->fabric_attr, &fab, NULL);
 	cr_assert(!ret, "fi_fabric");
 
-	ret = fi_domain(fab, fi, &dom, NULL);
+	ret = fi_domain(fab, fi[0], &dom, NULL);
 	cr_assert(!ret, "fi_domain");
 
 	attr.type = FI_AV_MAP;
@@ -109,7 +102,7 @@ void rdm_sr_setup(void)
 	ret = fi_av_open(dom, &attr, &av, NULL);
 	cr_assert(!ret, "fi_av_open");
 
-	ret = fi_endpoint(dom, fi, &ep[0], NULL);
+	ret = fi_endpoint(dom, fi[0], &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
 	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
@@ -134,7 +127,7 @@ void rdm_sr_setup(void)
 	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
 
-	ret = fi_endpoint(dom, fi, &ep[1], NULL);
+	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
 	ret = fi_ep_bind(ep[1], &msg_cq[1]->fid, FI_SEND | FI_RECV);
@@ -183,6 +176,56 @@ void rdm_sr_setup(void)
 	mr_key = fi_mr_key(rem_mr);
 }
 
+void rdm_sr_setup(void)
+{
+	int ret = 0;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->cq_data_size = 4;
+	hints->mode = ~0;
+
+	hints->fabric_attr->name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+	fi[1] = fi[0];
+
+	rdm_sr_setup_common();
+
+}
+
+void rdm_sr_bnd_ep_setup(void)
+{
+	int ret = 0;
+	char my_hostname[HOST_NAME_MAX];
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->cq_data_size = 4;
+	hints->mode = ~0;
+
+	hints->fabric_attr->name = strdup("gni");
+
+	ret = gethostname(my_hostname, sizeof(my_hostname));
+	cr_assert(!ret, "gethostname");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
+			 cdm_id[0], 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), my_hostname,
+			 cdm_id[1], 0, hints, &fi[1]);
+	cr_assert(!ret, "fi_getinfo");
+
+	using_bnd_ep = 1;
+
+	rdm_sr_setup_common();
+
+}
+
 void rdm_sr_teardown(void)
 {
 	int ret = 0;
@@ -214,7 +257,9 @@ void rdm_sr_teardown(void)
 	ret = fi_close(&fab->fid);
 	cr_assert(!ret, "failure in closing fabric.");
 
-	fi_freeinfo(fi);
+	fi_freeinfo(fi[0]);
+	if (using_bnd_ep)
+		fi_freeinfo(fi[1]);
 	fi_freeinfo(hints);
 	free(ep_name[0]);
 	free(ep_name[1]);
@@ -258,6 +303,9 @@ void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
  ******************************************************************************/
 
 TestSuite(rdm_sr, .init = rdm_sr_setup, .fini = rdm_sr_teardown,
+	  .disabled = false);
+
+TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 /*
@@ -636,6 +684,11 @@ void do_recvmsg(int len)
 }
 
 Test(rdm_sr, recvmsg)
+{
+	rdm_sr_xfer_for_each_size(do_recvmsg, 1, BUF_SZ);
+}
+
+Test(rdm_sr_bnd_ep, recvmsg)
 {
 	rdm_sr_xfer_for_each_size(do_recvmsg, 1, BUF_SZ);
 }

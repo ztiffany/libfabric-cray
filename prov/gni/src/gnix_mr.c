@@ -379,7 +379,7 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 	/* If the nic list is empty, create a nic */
 	if (unlikely(dlist_empty(&domain->nic_list))) {
-		rc = gnix_nic_alloc(domain, &nic);
+		rc = gnix_nic_alloc(domain, NULL, &nic);
 		if (rc) {
 			GNIX_WARN(FI_LOG_MR, "could not allocate nic to do mr_reg,"
 					" ret=%i\n", rc);
