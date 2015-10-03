@@ -42,9 +42,6 @@
 #include "gnix_nic.h"
 #include "gnix_util.h"
 
-uint32_t gnix_def_gni_tx_cq_size = 2048;
-/* rx cq bigger to avoid having to deal with rx overruns so much */
-uint32_t gnix_def_gni_rx_cq_size = 16384;
 /* TODO: should we use physical pages for gni cq rings? This is a question for
  * Zach */
 gni_cq_mode_t gnix_def_gni_cq_modes = GNI_CQ_PHYS_PAGES;
@@ -158,6 +155,9 @@ static const uint32_t default_mbox_page_size = GNIX_PAGE_2MB;
 static const uint32_t default_mbox_num_per_slab = 2048;
 static const uint32_t default_mbox_maxcredit = 64;
 static const uint32_t default_mbox_msg_maxsize = 16384;
+/* rx cq bigger to avoid having to deal with rx overruns so much */
+static const uint32_t default_rx_cq_size = 16384;
+static const uint32_t default_tx_cq_size = 2048;
 
 static int
 __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
@@ -201,6 +201,12 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_MBOX_MSG_MAX_SIZE:
 		*(uint32_t *)val = domain->params.mbox_msg_maxsize;
+		break;
+	case GNI_RX_CQ_SIZE:
+		*(uint32_t *)val = domain->params.rx_cq_size;
+		break;
+	case GNI_TX_CQ_SIZE:
+		*(uint32_t *)val = domain->params.tx_cq_size;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -252,6 +258,12 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_MBOX_MSG_MAX_SIZE:
 		domain->params.mbox_msg_maxsize = *(uint32_t *)val;
+		break;
+	case GNI_RX_CQ_SIZE:
+		domain->params.rx_cq_size = *(uint32_t *)val;
+		break;
+	case GNI_TX_CQ_SIZE:
+		domain->params.tx_cq_size = *(uint32_t *)val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -358,8 +370,8 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.mbox_maxcredit = default_mbox_maxcredit;
 	domain->params.mbox_msg_maxsize = default_mbox_msg_maxsize;
 
-	domain->gni_tx_cq_size = gnix_def_gni_tx_cq_size;
-	domain->gni_rx_cq_size = gnix_def_gni_rx_cq_size;
+	domain->gni_tx_cq_size = default_tx_cq_size;
+	domain->gni_rx_cq_size = default_rx_cq_size;
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
 	_gnix_ref_init(&domain->ref_cnt, 1, __domain_destruct);
 
