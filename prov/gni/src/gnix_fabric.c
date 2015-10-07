@@ -376,6 +376,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->tx_attr->size = GNIX_TX_SIZE_DEFAULT;
 	gnix_info->tx_attr->iov_limit = 1;
 	gnix_info->tx_attr->inject_size = GNIX_INJECT_SIZE;
+	gnix_info->tx_attr->rma_iov_limit = 1;
 
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
