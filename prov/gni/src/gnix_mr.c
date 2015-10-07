@@ -361,10 +361,6 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 
 		return -FI_EINVAL;
 
-	/* requested key is not permitted at this point */
-	if (unlikely(requested_key))
-		return -FI_EKEYREJECTED;
-
 	domain = container_of(fid, struct gnix_fid_domain, domain_fid.fid);
 
 	mr = calloc(1, sizeof(*mr));
