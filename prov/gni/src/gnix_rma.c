@@ -46,13 +46,11 @@
 
 #include <gni_pub.h>
 
-static int __gnix_rma_txd_complete(void *arg)
+static int __gnix_rma_send_completion(struct gnix_fid_ep *ep,
+				      struct gnix_fab_req *req)
 {
-	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
-	struct gnix_fab_req *req = txd->req;
-	struct gnix_fid_ep *ep = req->gnix_ep;
-	int rc;
 	struct gnix_fid_cntr *cntr = NULL;
+	int rc = FI_SUCCESS;
 
 	if ((req->flags & FI_COMPLETION) && ep->send_cq) {
 		rc = _gnix_cq_add_event(ep->send_cq, req->user_context,
@@ -81,16 +79,101 @@ static int __gnix_rma_txd_complete(void *arg)
 				  "_gnix_cntr_inc() failed: %d\n", rc);
 	}
 
+	return rc;
+}
+
+static int __gnix_rma_txd_data_complete(void *arg)
+{
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_fab_req *req = txd->req;
+
+	__gnix_rma_send_completion(req->vc->ep, req);
+
 	atomic_dec(&req->vc->outstanding_tx_reqs);
-	_gnix_nic_tx_free(ep->nic, txd);
+	_gnix_nic_tx_free(req->vc->ep->nic, txd);
 
 	/* We could have requests waiting for TXDs or FI_FENCE operations.
 	 * Schedule this VC to push any such requests. */
 	_gnix_vc_schedule_reqs(req->vc);
 
-	_gnix_fr_free(ep, req);
+	_gnix_fr_free(req->vc->ep, req);
 
 	return FI_SUCCESS;
+}
+
+static int __gnix_rma_send_data_req(void *arg)
+{
+	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
+	struct gnix_fid_ep *ep = req->gnix_ep;
+	struct gnix_nic *nic = ep->nic;
+	struct gnix_tx_descriptor *txd;
+	gni_return_t status;
+	int rc;
+
+	txd = (struct gnix_tx_descriptor *)req->txd;
+	if (!txd) {
+		rc = _gnix_nic_tx_alloc(nic, &txd);
+		if (rc) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "_gnix_nic_tx_alloc() failed: %d\n",
+				  rc);
+			return -FI_EAGAIN;
+		}
+	}
+
+	txd->req = req;
+	txd->completer_fn = __gnix_rma_txd_data_complete;
+
+	txd->rma_data_hdr.flags = FI_RMA | FI_REMOTE_CQ_DATA;
+	if (req->type == GNIX_FAB_RQ_RDMA_WRITE) {
+		txd->rma_data_hdr.flags |= FI_REMOTE_WRITE;
+	} else {
+		txd->rma_data_hdr.flags |= FI_REMOTE_READ;
+	}
+	txd->rma_data_hdr.data = req->rma.imm;
+
+	fastlock_acquire(&nic->lock);
+	status = GNI_SmsgSendWTag(req->vc->gni_ep,
+			&txd->rma_data_hdr, sizeof(txd->rma_data_hdr),
+			NULL, 0, txd->id, GNIX_SMSG_T_RMA_DATA);
+	fastlock_release(&nic->lock);
+
+	if (status == GNI_RC_NOT_DONE) {
+		_gnix_nic_tx_free(nic, txd);
+		req->txd = NULL;
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "GNI_SmsgSendWTag returned %s\n",
+			  gni_err_str[status]);
+	} else if (status != GNI_RC_SUCCESS) {
+		_gnix_nic_tx_free(nic, txd);
+		req->txd = NULL;
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "GNI_SmsgSendWTag returned %s\n",
+			  gni_err_str[status]);
+	} else {
+		GNIX_INFO(FI_LOG_EP_DATA, "Sent RMA CQ data, req: %p\n", req);
+	}
+
+	return gnixu_to_fi_errno(status);
+}
+
+static int __gnix_rma_txd_complete(void *arg)
+{
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_fab_req *req = txd->req;
+	int rc = FI_SUCCESS;
+
+	if (req->flags & FI_REMOTE_CQ_DATA) {
+		struct gnix_fab_req *req = txd->req;
+
+		req->txd = (void *)txd;
+		req->send_fn = __gnix_rma_send_data_req;
+		_gnix_vc_queue_req(req);
+	} else {
+		rc = __gnix_rma_txd_data_complete(txd);
+	}
+
+	return rc;
 }
 
 static gni_post_type_t __gnix_fr_post_type(int fr_type, int rdma)
@@ -252,6 +335,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	req->rma.rem_addr = rem_addr;
 	req->rma.rem_mr_key = mkey;
 	req->rma.len = len;
+	req->rma.imm = data;
 	req->flags = flags;
 
 	if (req->flags & FI_INJECT) {

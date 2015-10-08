@@ -106,10 +106,14 @@ static int __recv_completion(
 static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 				  struct gnix_fab_req *req)
 {
+	uint64_t flags = FI_RECV | FI_MSG;
+
+	flags |= req->msg.send_flags & (FI_TAGGED | FI_REMOTE_CQ_DATA);
+
 	return __recv_completion(ep,
 			req,
 			req->user_context,
-			FI_RECV | FI_MSG,
+			flags,
 			req->msg.recv_len,
 			(void *)req->msg.recv_addr,
 			req->msg.imm,
@@ -119,7 +123,10 @@ static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 static int __gnix_send_completion(struct gnix_fid_ep *ep,
 				  struct gnix_fab_req *req)
 {
+	uint64_t flags = FI_RECV | FI_MSG;
 	int rc;
+
+	flags |= req->msg.send_flags & FI_TAGGED;
 
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_event(ep->send_cq,
@@ -384,7 +391,7 @@ smsg_completer_fn_t gnix_ep_smsg_completers[] = {
 	[GNIX_SMSG_T_RNDZV_SDONE] = __comp_rndzv_msg_send_done,
 	[GNIX_SMSG_T_RNDZV_RDONE] = __comp_rndzv_msg_recv_done,
 	[GNIX_SMSG_T_RNDZV_START] = __comp_rndzv_start,
-	[GNIX_SMSG_T_RNDZV_FIN] = __comp_rndzv_fin
+	[GNIX_SMSG_T_RNDZV_FIN] = __comp_rndzv_fin,
 };
 
 
@@ -670,6 +677,37 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	return ret;
 }
 
+/* TODO: This is kind of out of place. */
+static int __smsg_rma_data(void *data, void *msg)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_rma_data_hdr *hdr =
+			(struct gnix_smsg_rma_data_hdr *)msg;
+	struct gnix_fid_ep *ep = vc->ep;
+	gni_return_t status;
+
+	if (ep->recv_cq) {
+		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->flags, 0,
+					 0, hdr->data, 0);
+		if (ret != FI_SUCCESS)  {
+			GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+					"_gnix_cq_add_event returned %d\n",
+					ret);
+		}
+	}
+
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"GNI_SmsgRelease returned %s\n",
+				gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+	return ret;
+}
+
 smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_EGR_W_DATA] = __smsg_eager_msg_w_data,
 	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __smsg_eager_msg_w_data_ack,
@@ -681,9 +719,9 @@ smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_RNDZV_SDONE] = __smsg_rndzv_msg_send_done,
 	[GNIX_SMSG_T_RNDZV_RDONE] = __smsg_rndzv_msg_recv_done,
 	[GNIX_SMSG_T_RNDZV_START] = __smsg_rndzv_start,
-	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin
+	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin,
+	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data
 };
-
 
 static int __gnix_peek_request(struct gnix_fid_ep *ep,
 		struct gnix_fab_req *req,
@@ -1012,7 +1050,7 @@ static int _gnix_send_req(void *arg)
 
 		tag = GNIX_SMSG_T_RNDZV_START;
 		tdesc->rndzv_start_hdr.flags = req->msg.send_flags;
-		tdesc->rndzv_start_hdr.imm = 0;
+		tdesc->rndzv_start_hdr.imm = req->msg.imm;
 		tdesc->rndzv_start_hdr.msg_tag = req->msg.tag;
 		tdesc->rndzv_start_hdr.mdh = req->msg.send_md->mem_hndl;
 		tdesc->rndzv_start_hdr.addr = req->msg.send_addr;
@@ -1026,7 +1064,7 @@ static int _gnix_send_req(void *arg)
 	} else {
 		tag = GNIX_SMSG_T_EGR_W_DATA;
 		tdesc->eager_hdr.flags = req->msg.send_flags;
-		tdesc->eager_hdr.imm = 0;
+		tdesc->eager_hdr.imm = req->msg.imm;
 		tdesc->eager_hdr.msg_tag = req->msg.tag;
 		tdesc->eager_hdr.len = req->msg.send_len;
 
@@ -1116,6 +1154,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->msg.send_md = md;
 	req->msg.send_len = len;
 	req->msg.send_flags = flags;
+	req->msg.imm = data;
 	req->flags = 0;
 
 	if (flags & FI_INJECT) {
