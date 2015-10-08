@@ -76,6 +76,7 @@ static struct fi_info *fi;
 void *ep_name[2];
 size_t gni_addr[2];
 static struct fid_cq *send_cq;
+static struct fid_cq *recv_cq;
 static struct fi_cq_attr cq_attr;
 
 #define BUF_SZ (64*1024)
@@ -144,6 +145,13 @@ void rdm_rma_setup(void)
 
 	ret = fi_endpoint(dom, fi, &ep[1], NULL);
 	cr_assert(!ret, "fi_endpoint");
+
+	cq_attr.format = FI_CQ_FORMAT_DATA;
+	ret = fi_cq_open(dom, &cq_attr, &recv_cq, 0);
+	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_ep_bind(ep[1], &recv_cq->fid, FI_RECV);
+	cr_assert(!ret, "fi_ep_bind");
 
 	ret = fi_getname(&ep[1]->fid, ep_name[1], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
@@ -480,6 +488,7 @@ void do_writedata(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_entry cqe;
+	struct fi_cq_data_entry dcqe;
 
 #define WRITE_DATA 0x5123da1a145
 	init_data(source, len, 0x23);
@@ -499,6 +508,18 @@ void do_writedata(int len)
 	dbg_printf("got write context event!\n");
 
 	cr_assert(check_data(source, target, len), "Data mismatch");
+
+	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+	cr_assert(ret != FI_SUCCESS, "Missing remote data");
+
+	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
+	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
+		  "Bad dcqe flags");
+	cr_assert(dcqe.len == 0, "Bad dcqe length");
+	cr_assert(dcqe.buf == 0, "Bad dcqe address");
+	cr_assert(dcqe.data == WRITE_DATA, "Bad immediate data");
 }
 
 Test(rdm_rma, writedata)
@@ -512,6 +533,7 @@ void do_inject_writedata(int len)
 	ssize_t sz;
 	int ret, i, loops = 0;
 	struct fi_cq_entry cqe;
+	struct fi_cq_data_entry dcqe;
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
@@ -530,6 +552,19 @@ void do_inject_writedata(int len)
 			cr_assert(++loops < 10000, "Data mismatch");
 		}
 	}
+
+	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		pthread_yield();
+	}
+	cr_assert(ret != FI_SUCCESS, "Missing remote data");
+
+	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
+	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
+		  "Bad dcqe flags");
+	cr_assert(dcqe.len == 0, "Bad dcqe length");
+	cr_assert(dcqe.buf == 0, "Bad dcqe address");
+	cr_assert(dcqe.data == INJECTWRITE_DATA, "Bad immediate data");
 }
 
 Test(rdm_rma, inject_writedata)
@@ -647,6 +682,68 @@ void do_readmsg(int len)
 Test(rdm_rma, readmsg)
 {
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+#define READ_DATA 0xdededadadeaddeef
+void do_readmsgdata(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+	struct iovec iov;
+	struct fi_msg_rma msg;
+	struct fi_rma_iov rma_iov;
+	struct fi_cq_data_entry dcqe;
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	rma_iov.addr = (uint64_t)target;
+	rma_iov.len = len;
+	rma_iov.key = mr_key;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)&loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.rma_iov = &rma_iov;
+	msg.rma_iov_count = 1;
+	msg.context = target;
+	msg.data = (uint64_t)READ_DATA;
+
+	init_data(target, len, 0xef);
+	init_data(source, len, 0);
+	sz = fi_readmsg(ep[0], &msg, FI_REMOTE_CQ_DATA);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+
+	dbg_printf("got write context event!\n");
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+
+	while ((ret = fi_cq_read(recv_cq, &dcqe, 1)) == -FI_EAGAIN) {
+		ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
+		pthread_yield();
+	}
+	cr_assert(ret != FI_SUCCESS, "Missing remote data");
+
+	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
+	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_READ | FI_REMOTE_CQ_DATA),
+		  "Bad dcqe flags");
+	cr_assert(dcqe.len == 0, "Bad dcqe length");
+	cr_assert(dcqe.buf == 0, "Bad dcqe address");
+	cr_assert(dcqe.data == READ_DATA, "Bad immediate data");
+}
+
+Test(rdm_rma, readmsgdata)
+{
+	xfer_for_each_size(do_readmsgdata, 8, BUF_SZ);
 }
 
 Test(rdm_rma, inject)

@@ -283,46 +283,6 @@ static int __comp_eager_msg_w_data(void *data)
 	return ret;
 }
 
-static int __comp_eager_msg_w_data_ack(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_eager_msg_data_at_src(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_eager_msg_data_at_src_ack(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_rndzv_msg_rts(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_rndzv_msg_rtr(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_rndzv_msg_cookie(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_rndzv_msg_send_done(void *data)
-{
-	return -FI_ENOSYS;
-}
-
-static int __comp_rndzv_msg_recv_done(void *data)
-{
-	return -FI_ENOSYS;
-}
-
 /* Completed request to start rendezvous send. */
 static int __comp_rndzv_start(void *data)
 {
@@ -375,16 +335,8 @@ static int __comp_rndzv_fin(void *data)
 
 smsg_completer_fn_t gnix_ep_smsg_completers[] = {
 	[GNIX_SMSG_T_EGR_W_DATA] = __comp_eager_msg_w_data,
-	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __comp_eager_msg_w_data_ack,
-	[GNIX_SMSG_T_EGR_GET] = __comp_eager_msg_data_at_src,
-	[GNIX_SMSG_T_EGR_GET_ACK] = __comp_eager_msg_data_at_src_ack,
-	[GNIX_SMSG_T_RNDZV_RTS] = __comp_rndzv_msg_rts,
-	[GNIX_SMSG_T_RNDZV_RTR] = __comp_rndzv_msg_rtr,
-	[GNIX_SMSG_T_RNDZV_COOKIE] = __comp_rndzv_msg_cookie,
-	[GNIX_SMSG_T_RNDZV_SDONE] = __comp_rndzv_msg_send_done,
-	[GNIX_SMSG_T_RNDZV_RDONE] = __comp_rndzv_msg_recv_done,
 	[GNIX_SMSG_T_RNDZV_START] = __comp_rndzv_start,
-	[GNIX_SMSG_T_RNDZV_FIN] = __comp_rndzv_fin
+	[GNIX_SMSG_T_RNDZV_FIN] = __comp_rndzv_fin,
 };
 
 
@@ -489,58 +441,6 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 	}
 
 	return ret;
-}
-
-/*
- * this function will probably not be used unless we need
- * some kind of explicit flow control to handle unexpected
- * receives
- */
-
-static int __smsg_eager_msg_w_data_ack(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-/*
- * Handle SMSG message with tag GNIX_SMSG_T_EGR_GET
- */
-static int __smsg_eager_msg_data_at_src(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-/*
- * Handle SMSG message with tag GNIX_SMSG_T_EGR_GET_ACK
- */
-static int  __smsg_eager_msg_data_at_src_ack(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-static int __smsg_rndzv_msg_rts(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-static int __smsg_rndzv_msg_rtr(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-static int __smsg_rndzv_msg_cookie(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-static int __smsg_rndzv_msg_send_done(void *data, void *msg)
-{
-	return -FI_ENOSYS;
-}
-
-static int __smsg_rndzv_msg_recv_done(void *data, void *msg)
-{
-	return -FI_ENOSYS;
 }
 
 /* Received SMSG rendezvous start message.  Try to match a posted receive and
@@ -670,20 +570,43 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	return ret;
 }
 
+/* TODO: This is kind of out of place. */
+static int __smsg_rma_data(void *data, void *msg)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_vc *vc = (struct gnix_vc *)data;
+	struct gnix_smsg_rma_data_hdr *hdr =
+			(struct gnix_smsg_rma_data_hdr *)msg;
+	struct gnix_fid_ep *ep = vc->ep;
+	gni_return_t status;
+
+	if (ep->recv_cq) {
+		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->flags, 0,
+					 0, hdr->data, 0);
+		if (ret != FI_SUCCESS)  {
+			GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+					"_gnix_cq_add_event returned %d\n",
+					ret);
+		}
+	}
+
+	status = GNI_SmsgRelease(vc->gni_ep);
+	if (unlikely(status != GNI_RC_SUCCESS)) {
+		GNIX_WARN(FI_LOG_EP_DATA,
+				"GNI_SmsgRelease returned %s\n",
+				gni_err_str[status]);
+		ret = gnixu_to_fi_errno(status);
+	}
+
+	return ret;
+}
+
 smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_EGR_W_DATA] = __smsg_eager_msg_w_data,
-	[GNIX_SMSG_T_EGR_W_DATA_ACK] = __smsg_eager_msg_w_data_ack,
-	[GNIX_SMSG_T_EGR_GET] = __smsg_eager_msg_data_at_src,
-	[GNIX_SMSG_T_EGR_GET_ACK] = __smsg_eager_msg_data_at_src_ack,
-	[GNIX_SMSG_T_RNDZV_RTS] = __smsg_rndzv_msg_rts,
-	[GNIX_SMSG_T_RNDZV_RTR] = __smsg_rndzv_msg_rtr,
-	[GNIX_SMSG_T_RNDZV_COOKIE] = __smsg_rndzv_msg_cookie,
-	[GNIX_SMSG_T_RNDZV_SDONE] = __smsg_rndzv_msg_send_done,
-	[GNIX_SMSG_T_RNDZV_RDONE] = __smsg_rndzv_msg_recv_done,
 	[GNIX_SMSG_T_RNDZV_START] = __smsg_rndzv_start,
-	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin
+	[GNIX_SMSG_T_RNDZV_FIN] = __smsg_rndzv_fin,
+	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data
 };
-
 
 static int __gnix_peek_request(struct gnix_fid_ep *ep,
 		struct gnix_fab_req *req,
