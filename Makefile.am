@@ -47,6 +47,7 @@ src_libfabric_la_SOURCES = \
 	include/fi_enosys.h \
 	include/fi_indexer.h \
 	include/fi_list.h \
+	include/fi_signal.h \
 	include/fi_rbuf.h \
 	include/prov.h \
 	src/fabric.c \
@@ -560,5 +561,8 @@ EXTRA_DIST = \
 dist-hook: libfabric.spec
 	cp libfabric.spec $(distdir)
 	"$(top_srcdir)/config/distscript.pl" "$(distdir)" "$(PACKAGE_VERSION)"
+
+test:
+	./util/fi_info
 
 include prov/gni/Makefile.am
