@@ -32,6 +32,62 @@
 
 #include "psmx.h"
 
+static void *psmx_progress_func(void *args)
+{
+	struct psmx_fid_domain *domain = args;
+
+	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
+
+	while (1) {
+		psmx_progress(domain);
+		pthread_testcancel();
+		usleep(psmx_env.prog_intv);
+	}
+
+	return NULL;
+}
+
+static void psmx_domain_start_progress(struct psmx_fid_domain *domain)
+{
+	int err;
+
+	err = pthread_create(&domain->progress_thread, NULL,
+			     psmx_progress_func, (void *)domain);
+	if (err) {
+		domain->progress_thread = pthread_self();
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"pthread_create returns %d\n", err);
+	} else {
+		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread started\n");
+	}
+}
+
+static void psmx_domain_stop_progress(struct psmx_fid_domain *domain)
+{
+	int err;
+	void *exit_code;
+
+	if (!pthread_equal(domain->progress_thread, pthread_self())) {
+		err = pthread_cancel(domain->progress_thread);
+		if (err) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"pthread_cancel returns %d\n", err);
+		}
+		err = pthread_join(domain->progress_thread, &exit_code);
+		if (err) {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"pthread_join returns %d\n", err);
+		}
+		else {
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"progress thread exited with code %ld (%s)\n",
+				(uintptr_t)exit_code,
+				(exit_code == PTHREAD_CANCELED) ?
+					"PTHREAD_CANCELED" : "?");
+		}
+	}
+}
+
 static int psmx_domain_close(fid_t fid)
 {
 	struct psmx_fid_domain *domain;
@@ -44,7 +100,15 @@ static int psmx_domain_close(fid_t fid)
 	if (--domain->refcnt > 0)
 		return 0;
 
+	if (domain->progress_thread_enabled)
+		psmx_domain_stop_progress(domain);
+
 	psmx_am_fini(domain);
+
+	err = pthread_spin_destroy(&domain->poll_lock);
+	if (err)
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"pthread_spin_destroy returns %d\n", err);
 
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
@@ -123,6 +187,8 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain_priv->mode = info->mode;
 	domain_priv->caps = info->caps;
 	domain_priv->fabric = fabric_priv;
+	domain_priv->progress_thread_enabled =
+		(info->domain_attr->data_progress == FI_PROGRESS_AUTO);
 
 	psm_ep_open_opts_get_defaults(&opts);
 
@@ -148,15 +214,26 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err_out_close_ep;
 	}
 
-	if (psmx_domain_enable_ep(domain_priv, NULL) < 0) {
-		psm_mq_finalize(domain_priv->psm_mq);
-		goto err_out_close_ep;
+	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
+		goto err_out_finalize_mq;
+
+	err = pthread_spin_init(&domain_priv->poll_lock, PTHREAD_PROCESS_SHARED);
+	if (err) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"pthread_spin_init returns %d\n", err);
+		goto err_out_finalize_mq;
 	}
+
+	if (domain_priv->progress_thread_enabled)
+		psmx_domain_start_progress(domain_priv);
 
 	domain_priv->refcnt = 1;
 	fabric_priv->active_domain = domain_priv;
 	*domain = &domain_priv->domain;
 	return 0;
+
+err_out_finalize_mq:
+	psm_mq_finalize(domain_priv->psm_mq);
 
 err_out_close_ep:
 	if (psm_ep_close(domain_priv->psm_ep, PSM_EP_CLOSE_GRACEFUL,
