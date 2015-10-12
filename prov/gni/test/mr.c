@@ -188,7 +188,7 @@ Test(memory_registration_bare, invalid_requested_key)
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, ~0, default_flags,
 			&mr, NULL);
-	cr_assert(ret == -FI_EKEYREJECTED);
+	cr_assert(ret == -FI_SUCCESS);
 }
 
 /* Test invalid buf param to fi_mr_reg */
