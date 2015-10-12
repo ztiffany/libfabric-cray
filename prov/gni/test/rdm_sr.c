@@ -112,7 +112,7 @@ void rdm_sr_setup(void)
 	ret = fi_endpoint(dom, fi, &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.format = FI_CQ_FORMAT_DATA;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
@@ -253,6 +253,22 @@ void rdm_sr_xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 	}
 }
 
+void rdm_sr_check_dcqe(struct fi_cq_data_entry *dcqe, void *ctx,
+		      uint64_t flags, void *addr, size_t len,
+		      uint64_t data)
+{
+	cr_assert(dcqe->op_context == ctx, "CQE Context mismatch");
+	cr_assert(dcqe->flags == flags, "CQE flags mismatch");
+
+	if (flags & FI_RECV) {
+		cr_assert(dcqe->len == len, "CQE length mismatch");
+		cr_assert(dcqe->buf == addr, "CQE address mismatch");
+
+		if (flags & FI_REMOTE_CQ_DATA)
+			cr_assert(dcqe->data == data, "CQE data mismatch");
+	}
+}
+
 /*******************************************************************************
  * Test MSG functions
  ******************************************************************************/
@@ -271,7 +287,7 @@ void do_send(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 	ssize_t sz;
 
 	rdm_sr_init_data(source, len, 0xab);
@@ -295,8 +311,8 @@ void do_send(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
 
 	dbg_printf("got context events!\n");
 
@@ -316,7 +332,7 @@ void do_sendv(int len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 	ssize_t sz;
 	struct iovec iov;
 
@@ -344,8 +360,8 @@ void do_sendv(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
 
 	dbg_printf("got context events!\n");
 
@@ -366,7 +382,7 @@ void do_sendmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -401,8 +417,8 @@ void do_sendmsg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
 
 	dbg_printf("got context events!\n");
 
@@ -415,6 +431,64 @@ Test(rdm_sr, sendmsg)
 }
 
 /*
+ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+		uint64_t flags);
+*/
+void do_sendmsgdata(int len)
+{
+	int ret;
+	ssize_t sz;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_data_entry s_cqe, d_cqe;
+	struct fi_msg msg;
+	struct iovec iov;
+
+	iov.iov_base = source;
+	iov.iov_len = len;
+
+	msg.msg_iov = &iov;
+	msg.desc = (void **)&loc_mr;
+	msg.iov_count = 1;
+	msg.addr = gni_addr[1];
+	msg.context = target;
+	msg.data = (uint64_t)source;
+
+	rdm_sr_init_data(source, len, 0xef);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_sendmsg(ep[0], &msg, FI_REMOTE_CQ_DATA);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, rem_mr, gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
+			  target, len, (uint64_t)source);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr, sendmsgdata)
+{
+	rdm_sr_xfer_for_each_size(do_sendmsgdata, 1, BUF_SZ);
+}
+
+/*
 ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
 		fi_addr_t dest_addr);
 */
@@ -423,7 +497,7 @@ void do_inject(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_data_entry cqe;
 
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);
@@ -439,7 +513,8 @@ void do_inject(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&cqe, source, (FI_MSG|FI_RECV),
+			  target, len, (uint64_t)source);
 
 	dbg_printf("got recv context event!\n");
 
@@ -460,7 +535,7 @@ void do_senddata(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -484,8 +559,9 @@ void do_senddata(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
+			  target, len, (uint64_t)source);
 
 	dbg_printf("got context events!\n");
 
@@ -505,7 +581,7 @@ void do_injectdata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_data_entry cqe;
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -521,8 +597,8 @@ void do_injectdata(int len)
 		pthread_yield();
 	}
 
-	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
+			  target, len, (uint64_t)source);
 
 	dbg_printf("got recv context event!\n");
 
@@ -543,7 +619,7 @@ void do_recvv(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 	struct iovec iov;
 
 	rdm_sr_init_data(source, len, 0xab);
@@ -570,8 +646,8 @@ void do_recvv(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
 
 	dbg_printf("got context events!\n");
 
@@ -592,7 +668,7 @@ void do_recvmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_data_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
 
@@ -627,8 +703,8 @@ void do_recvmsg(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	cr_assert_eq((uint64_t)s_cqe.op_context, (uint64_t)target);
-	cr_assert_eq((uint64_t)d_cqe.op_context, (uint64_t)source);
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
 
 	dbg_printf("got context events!\n");
 

@@ -106,10 +106,14 @@ static int __recv_completion(
 static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 				  struct gnix_fab_req *req)
 {
+	uint64_t flags = FI_RECV | FI_MSG;
+
+	flags |= req->msg.send_flags & (FI_TAGGED | FI_REMOTE_CQ_DATA);
+
 	return __recv_completion(ep,
 			req,
 			req->user_context,
-			FI_RECV | FI_MSG,
+			flags,
 			req->msg.recv_len,
 			(void *)req->msg.recv_addr,
 			req->msg.imm,
@@ -119,7 +123,10 @@ static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 static int __gnix_send_completion(struct gnix_fid_ep *ep,
 				  struct gnix_fab_req *req)
 {
+	uint64_t flags = FI_RECV | FI_MSG;
 	int rc;
+
+	flags |= req->msg.send_flags & FI_TAGGED;
 
 	if (ep->send_cq) {
 		rc = _gnix_cq_add_event(ep->send_cq,
@@ -935,7 +942,7 @@ static int _gnix_send_req(void *arg)
 
 		tag = GNIX_SMSG_T_RNDZV_START;
 		tdesc->rndzv_start_hdr.flags = req->msg.send_flags;
-		tdesc->rndzv_start_hdr.imm = 0;
+		tdesc->rndzv_start_hdr.imm = req->msg.imm;
 		tdesc->rndzv_start_hdr.msg_tag = req->msg.tag;
 		tdesc->rndzv_start_hdr.mdh = req->msg.send_md->mem_hndl;
 		tdesc->rndzv_start_hdr.addr = req->msg.send_addr;
@@ -949,7 +956,7 @@ static int _gnix_send_req(void *arg)
 	} else {
 		tag = GNIX_SMSG_T_EGR_W_DATA;
 		tdesc->eager_hdr.flags = req->msg.send_flags;
-		tdesc->eager_hdr.imm = 0;
+		tdesc->eager_hdr.imm = req->msg.imm;
 		tdesc->eager_hdr.msg_tag = req->msg.tag;
 		tdesc->eager_hdr.len = req->msg.send_len;
 
@@ -1039,6 +1046,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->msg.send_md = md;
 	req->msg.send_len = len;
 	req->msg.send_flags = flags;
+	req->msg.imm = data;
 	req->flags = 0;
 
 	if (flags & FI_INJECT) {

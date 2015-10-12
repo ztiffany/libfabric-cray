@@ -313,7 +313,7 @@ ssize_t gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 			GNIX_SUPPRESS_COMPLETION;
 
 	return _gnix_send(gnix_ep, (uint64_t)buf, len, NULL, dest_addr,
-			  NULL, flags, 0, 0);
+			  NULL, flags, data, 0);
 }
 
 
