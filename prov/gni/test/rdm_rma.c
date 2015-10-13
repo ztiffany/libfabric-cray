@@ -82,6 +82,7 @@ static struct fi_cq_attr cq_attr;
 #define BUF_SZ (64*1024)
 char *target;
 char *source;
+char *uc_source;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
@@ -190,12 +191,17 @@ void rdm_rma_setup(void)
 			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
 
+	uc_source = malloc(BUF_SZ);
+	assert(uc_source);
+
 	mr_key = fi_mr_key(rem_mr);
 }
 
 void rdm_rma_teardown(void)
 {
 	int ret = 0;
+
+	free(uc_source);
 
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
@@ -794,3 +800,62 @@ Test(rdm_rma, inject)
 		  "Data mismatch");
 }
 
+void do_write_autoreg(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+
+	init_data(source, len, 0xab);
+	init_data(target, len, 0);
+	sz = fi_write(ep[0], source, len,
+			 NULL, gni_addr[1], (uint64_t)target, mr_key,
+			 target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+
+	dbg_printf("got write context event!\n");
+
+	cr_assert(check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_rma, write_autoreg)
+{
+	xfer_for_each_size(do_write_autoreg, 8, BUF_SZ);
+}
+
+void do_write_autoreg_uncached(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+
+	init_data(uc_source, len, 0xab);
+	init_data(target, len, 0);
+	sz = fi_write(ep[0], uc_source, len,
+			 NULL, gni_addr[1], (uint64_t)target, mr_key,
+			 target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, 1);
+	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+
+	dbg_printf("got write context event!\n");
+
+	cr_assert(check_data(uc_source, target, len), "Data mismatch");
+}
+
+Test(rdm_rma, write_autoreg_uncached)
+{
+	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
+}

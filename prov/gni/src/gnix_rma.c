@@ -163,6 +163,12 @@ static int __gnix_rma_txd_complete(void *arg)
 	struct gnix_fab_req *req = txd->req;
 	int rc = FI_SUCCESS;
 
+	if (req->flags & FI_LOCAL_MR) {
+		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+			  req->rma.loc_md);
+		fi_close(&req->rma.loc_md->mr_fid.fid);
+	}
+
 	if (req->flags & FI_REMOTE_CQ_DATA) {
 		struct gnix_fab_req *req = txd->req;
 
@@ -283,6 +289,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	struct gnix_fid_mem_desc *md = NULL;
 	int rc;
 	int rdma;
+	struct fid_mr *auto_mr = NULL;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -299,10 +306,18 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 
 	/* need a memory descriptor for all RDMA and reads */
 	if (!mdesc && (rdma || fr_type == GNIX_FAB_RQ_RDMA_READ)) {
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "RMA of length %d requires memory descriptor\n",
-			  len);
-		return -FI_EINVAL;
+		rc = gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,
+				 len, FI_READ | FI_WRITE, 0, 0, 0, &auto_mr,
+				 NULL);
+		if (rc != FI_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Failed to auto-register local buffer: %d\n",
+				  rc);
+			return rc;
+		}
+		flags |= FI_LOCAL_MR;
+		mdesc = (void *)auto_mr;
+		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
 	/* find VC for target */
@@ -311,14 +326,15 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		GNIX_INFO(FI_LOG_EP_DATA,
 			  "_gnix_ep_get_vc() failed, addr: %lx, rc:\n",
 			  dest_addr, rc);
-		return rc;
+		goto err_get_vc;
 	}
 
 	/* setup fabric request */
 	req = _gnix_fr_alloc(ep);
 	if (!req) {
 		GNIX_INFO(FI_LOG_EP_DATA, "_gnix_fr_alloc() failed\n");
-		return -FI_ENOSPC;
+		rc = -FI_ENOSPC;
+		goto err_fr_alloc;
 	}
 
 	req->type = fr_type;
@@ -360,5 +376,12 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 	}
 
 	return _gnix_vc_queue_tx_req(req);
+
+err_fr_alloc:
+err_get_vc:
+	if (auto_mr) {
+		fi_close(&auto_mr->fid);
+	}
+	return rc;
 }
 

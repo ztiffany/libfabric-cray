@@ -81,6 +81,7 @@ static int using_bnd_ep = 0;
 #define BUF_SZ (1<<20)
 char *target;
 char *source;
+char *uc_source;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
@@ -173,6 +174,9 @@ void rdm_sr_setup_common(void)
 			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
 
+	uc_source = malloc(BUF_SZ);
+	assert(uc_source);
+
 	mr_key = fi_mr_key(rem_mr);
 }
 
@@ -229,6 +233,8 @@ void rdm_sr_bnd_ep_setup(void)
 void rdm_sr_teardown(void)
 {
 	int ret = 0;
+
+	free(uc_source);
 
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
@@ -767,4 +773,86 @@ Test(rdm_sr, recvmsg)
 Test(rdm_sr_bnd_ep, recvmsg)
 {
 	rdm_sr_xfer_for_each_size(do_recvmsg, 1, BUF_SZ);
+}
+
+void do_send_autoreg(int len)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_data_entry s_cqe, d_cqe;
+	ssize_t sz;
+
+	rdm_sr_init_data(source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_send(ep[0], source, len, NULL, gni_addr[1], target);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], source);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr, send_autoreg)
+{
+	rdm_sr_xfer_for_each_size(do_send_autoreg, 1, BUF_SZ);
+}
+
+void do_send_autoreg_uncached(int len)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_data_entry s_cqe, d_cqe;
+	ssize_t sz;
+
+	rdm_sr_init_data(uc_source, len, 0xab);
+	rdm_sr_init_data(target, len, 0);
+
+	sz = fi_send(ep[0], uc_source, len, NULL, gni_addr[1], target);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], uc_source);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_dcqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_dcqe(&d_cqe, uc_source, (FI_MSG|FI_RECV), target, len, 0);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(uc_source, target, len), "Data mismatch");
+}
+
+Test(rdm_sr, send_autoreg_uncached)
+{
+	rdm_sr_xfer_for_each_size(do_send_autoreg_uncached, 1, BUF_SZ);
 }
