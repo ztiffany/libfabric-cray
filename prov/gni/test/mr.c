@@ -180,17 +180,6 @@ Test(memory_registration_bare, invalid_offset)
 	cr_assert(ret == -FI_EINVAL);
 }
 
-/* Test invalid requested key param to fi_mr_reg */
-Test(memory_registration_bare, invalid_requested_key)
-{
-	int ret;
-
-	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
-			default_offset, ~0, default_flags,
-			&mr, NULL);
-	cr_assert(ret == -FI_EKEYREJECTED);
-}
-
 /* Test invalid buf param to fi_mr_reg */
 Test(memory_registration_bare, invalid_buf)
 {

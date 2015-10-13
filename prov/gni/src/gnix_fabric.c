@@ -307,8 +307,16 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 				FI_PROGRESS_UNSPEC)
 				data_progress =
 					hints->domain_attr->control_progress;
-		}
 
+			switch (hints->domain_attr->mr_mode) {
+			case FI_MR_UNSPEC:
+			case FI_MR_BASIC:
+				break;
+			case FI_MR_SCALABLE:
+				ret = -FI_ENODATA;
+				goto err;
+			}
+		}
 
 		if (hints->ep_attr) {
 			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
