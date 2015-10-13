@@ -70,8 +70,8 @@ extern "C" {
 #include "fi_ext_gni.h"
 #include "gnix_tags.h"
 
-#define GNI_MAJOR_VERSION 0
-#define GNI_MINOR_VERSION 5
+#define GNI_MAJOR_VERSION 1
+#define GNI_MINOR_VERSION 0
 
 /*
  * useful macros
