@@ -294,8 +294,9 @@ Test(gnix_cancel, cancel_ep_recv)
 	struct fi_cq_err_entry buf;
 
 	/* simulate a posted request */
-	fi_recv(ep[0], (void *) 0xdeadbeef, 128, 0, FI_ADDR_UNSPEC,
+	ret = fi_recv(ep[0], (void *) 0xdeadbeef, 128, 0, FI_ADDR_UNSPEC,
 			(void *) 0xcafebabe);
+	cr_assert(ret == FI_SUCCESS, "fi_recv failed");
 
 	/* cancel simulated request */
 	ret = fi_cancel(&ep[0]->fid, (void *) 0xcafebabe);

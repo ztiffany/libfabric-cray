@@ -44,6 +44,7 @@ extern "C" {
 
 #include "gnix.h"
 #include "gnix_bitmap.h"
+#include "gnix_av.h"
 
 /*
  * mode bits
@@ -83,6 +84,9 @@ enum gnix_vc_conn_req_type {
  * @var entry                used internally for managing linked lists
  *                           of vc structs that require O(1) insertion/removal
  * @var peer_addr            address of peer with which this VC is connected
+ * @var peer_cm_nic_addr     address of the cm_nic being used by peer, this
+ *                           is the address to which GNI datagrams must be
+ *                           posted
  * @var ep                   libfabric endpoint with which this VC is
  *                           associated
  * @var smsg_mbox            pointer to GNI SMSG mailbox used by this VC
@@ -105,6 +109,7 @@ struct gnix_vc {
 	fastlock_t req_queue_lock;
 	struct dlist_entry entry;
 	struct gnix_address peer_addr;
+	struct gnix_address peer_cm_nic_addr;
 	struct gnix_fid_ep *ep;
 	void *smsg_mbox;
 	struct gnix_datagram *dgram;
@@ -126,13 +131,14 @@ struct gnix_vc {
  * @brief Allocates a virtual channel(vc) struct
  *
  * @param[in]  ep_priv    pointer to previously allocated gnix_fid_ep object
- * @param[in]  dest_addr  remote peer address for this VC
+ * @param[in]  entry      av entry for remote peer for this VC.  Can be NULL
+ *                        for accepting VCs.
  * @param[out] vc         location in which the address of the allocated vc
  *                        struct is to be returned.
  * @return FI_SUCCESS on success, -FI_ENOMEM if allocation of vc struct fails,
  */
-int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, struct gnix_address *dest_addr,
-			struct gnix_vc **vc);
+int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
+		   struct gnix_av_addr_entry *entry, struct gnix_vc **vc);
 
 /**
  * @brief Initiates non-blocking connect of a vc with its peer

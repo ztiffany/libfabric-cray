@@ -41,7 +41,15 @@
 
 #include "gnix.h"
 #include "gnix_util.h"
+#include "gnix_hashtable.h"
+#include "gnix_av.h"
 
+/*
+ * local variables and structs
+ */
+
+#define GNIX_AV_ENTRY_VALID		(1ULL)
+#define GNIX_AV_ENTRY_CM_NIC_ID		(1ULL << 2)
 
 /*******************************************************************************
  * Forward declarations of ops structures.
@@ -78,13 +86,16 @@ static int gnix_verify_av_attr(struct fi_av_attr *attr)
  */
 static int gnix_check_capacity(struct gnix_fid_av *av, size_t count)
 {
-	struct gnix_addr_entry *addrs = NULL;
+	struct gnix_av_addr_entry *addrs = NULL;
+	int *valid_entry_vec = NULL;
 	size_t capacity = av->capacity;
+	size_t prev_capacity;
 
 	/*
 	 * av->count + count is the amount of used indices after adding the
 	 * count items.
 	 */
+	prev_capacity = capacity;
 	while (capacity < av->count + count) {
 		/*
 		 * Handle initial capacity of 0, by adding 1.
@@ -104,10 +115,22 @@ static int gnix_check_capacity(struct gnix_fid_av *av, size_t count)
 		return -FI_ENOMEM;
 	}
 
+	memset(&addrs[prev_capacity], 0, (capacity - prev_capacity) *
+	       sizeof(*addrs));
+
+	valid_entry_vec = realloc(av->valid_entry_vec, capacity * sizeof(int));
+	if (!valid_entry_vec) {
+		return -FI_ENOMEM;
+	}
+
+	memset(&valid_entry_vec[prev_capacity], 0, (capacity - prev_capacity) *
+	       sizeof(int));
+
 	/*
 	 * Update table and capacity to reflect new values.
 	 */
 	av->table = addrs;
+	av->valid_entry_vec = valid_entry_vec;
 	av->capacity = capacity;
 
 	return FI_SUCCESS;
@@ -133,8 +156,13 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 	assert(int_av->table);
 	for (index = int_av->count, i = 0; i < count; index++, i++) {
 		temp = &((struct gnix_ep_name *)addr)[i];
-		int_av->table[index].addr = &temp->gnix_addr;
-		int_av->table[index].valid = true;
+		int_av->table[index].gnix_addr = temp->gnix_addr;
+		int_av->valid_entry_vec[index] = 1;
+		int_av->table[index].name_type = temp->name_type;
+		int_av->table[index].cookie = temp->cookie;
+		if (temp->name_type == GNIX_EPN_TYPE_UNBOUND)
+			int_av->table[index].cm_nic_cdm_id =
+				temp->cm_nic_cdm_id;
 		if (fi_addr)
 			fi_addr[i] = index;
 	}
@@ -160,11 +188,15 @@ static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 	for (i = 0; i < count; i++) {
 		index = (size_t) fi_addr[i];
 		if (index < int_av->count) {
-			if (!int_av->table[index].valid) {
+			if (int_av->valid_entry_vec[index] == 0) {
 				ret = -FI_EINVAL;
+				break;
 			} else {
-				int_av->table[index].valid = false;
+				int_av->valid_entry_vec[index] = 0;
 			}
+		} else {
+			ret = -FI_EINVAL;
+			break;
 		}
 	}
 
@@ -175,25 +207,25 @@ static int table_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
  * table_lookup(): Translate fi_addr_t to struct gnix_address.
  */
 static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
-			struct gnix_address *addr, size_t *addrlen)
+			struct gnix_av_addr_entry **entry_ptr)
 {
 	size_t index;
-	struct gnix_addr_entry *entry;
+	struct gnix_av_addr_entry *entry = NULL;
 
 	index = (size_t)fi_addr;
-	if (index > int_av->count) {
+	if (index >= int_av->count)
 		return -FI_EINVAL;
-	}
 
 	assert(int_av->table);
 	entry = &int_av->table[index];
 
-	if (!(entry && entry->valid)) {
+	if (entry == NULL)
 		return -FI_EINVAL;
-	}
 
-	memcpy(addr, entry->addr, MIN(*addrlen, sizeof(*addr)));
-	*addrlen = sizeof(*addr);
+	if (int_av->valid_entry_vec[index] == 0)
+		return -FI_EINVAL;
+
+	*entry_ptr = entry;
 
 	return FI_SUCCESS;
 }
@@ -210,12 +242,44 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		      size_t count, fi_addr_t *fi_addr, uint64_t flags,
 		      void *context)
 {
+	int ret;
 	struct gnix_ep_name *temp = NULL;
+	struct gnix_av_addr_entry *the_entry;
+	gnix_ht_key_t key;
 	size_t i;
 
+	assert(gnix_fid_av->cdm_id_ht != NULL);
+
+	/*
+ 	 * TODO: ugh, something better than malloc for each
+ 	 * little element here.
+ 	 */
 	for (i = 0; i < count; i++) {
 		temp = &((struct gnix_ep_name *)addr)[i];
 		((struct gnix_address *)fi_addr)[i] = temp->gnix_addr;
+		the_entry =  calloc(1, sizeof(*the_entry));
+		if (the_entry == NULL)
+			return -FI_ENOMEM;
+		memcpy(&the_entry->gnix_addr, &temp->gnix_addr,
+		       sizeof(struct gnix_address));
+		the_entry->name_type = temp->name_type;
+		the_entry->cm_nic_cdm_id = temp->cm_nic_cdm_id;
+		the_entry->cookie = temp->cookie;
+		memcpy(&key, &temp->gnix_addr, sizeof(gnix_ht_key_t));
+		ret = _gnix_ht_insert(int_av->map_ht,
+				      key,
+				      the_entry);
+		/*
+		 * we are okay with user trying to add more
+		 * entries with same key.
+		 */
+		if ((ret != FI_SUCCESS) && (ret != -FI_ENOSPC)) {
+			GNIX_WARN(FI_LOG_AV,
+				  "_gnix_ht_insert failed %d\n",
+				  ret);
+			return ret;
+		}
+
 	}
 
 	return count;
@@ -227,18 +291,43 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 		      size_t count, uint64_t flags)
 {
-	return FI_SUCCESS;
+	int i,ret = FI_SUCCESS;
+	struct gnix_av_addr_entry *the_entry = NULL;
+	gnix_ht_key_t key;
+
+	for (i = 0; i < count; i++) {
+
+		key = *(gnix_ht_key_t *)&fi_addr[i];
+
+		/*
+		 * first see if we have this entry in the hash
+		 * TODO: is there a race condition here for multi-threaded?
+		 */
+
+		the_entry = _gnix_ht_lookup(int_av->map_ht, key);
+		if (the_entry == NULL)
+			return -FI_ENOENT;
+
+		ret = _gnix_ht_remove(int_av->map_ht, key);
+		if (ret == FI_SUCCESS)
+			free(the_entry);
+
+	}
+
+	return ret;
 }
 
-/*
- * TODO:
- * 1.) Check if given item was actually inserted.
- */
 static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
-		      struct gnix_address *addr, size_t *addrlen)
+		      struct gnix_av_addr_entry **entry_ptr)
 {
-	memcpy(addr, (void *)&fi_addr, MIN(*addrlen, sizeof(*addr)));
-	*addrlen = sizeof(*addr);
+	gnix_ht_key_t *key = (gnix_ht_key_t *)&fi_addr;
+	struct gnix_av_addr_entry *entry;
+
+	entry = _gnix_ht_lookup(int_av->map_ht, *key);
+	if (entry == NULL)
+		return -FI_ENOENT;
+
+	*entry_ptr = entry;
 
 	return FI_SUCCESS;
 }
@@ -248,9 +337,11 @@ static int map_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
  ******************************************************************************/
 
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
-		    struct gnix_address *addr, size_t *addrlen)
+		    struct gnix_av_addr_entry **entry_ptr)
 {
 	int ret = FI_SUCCESS;
+
+	GNIX_TRACE(FI_LOG_AV, "\n");
 
 	if (!gnix_av) {
 		ret = -FI_EINVAL;
@@ -259,10 +350,10 @@ int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
 
 	switch (gnix_av->type) {
 	case FI_AV_TABLE:
-		ret = table_lookup(gnix_av, fi_addr, addr, addrlen);
+		ret = table_lookup(gnix_av, fi_addr, entry_ptr);
 		break;
 	case FI_AV_MAP:
-		ret = map_lookup(gnix_av, fi_addr, addr, addrlen);
+		ret = map_lookup(gnix_av, fi_addr, entry_ptr);
 		break;
 	default:
 		ret = -FI_EINVAL;
@@ -273,29 +364,50 @@ err:
 	return ret;
 }
 
+/*
+ * Note: this function (according to WG), is not intended to
+ * typically be used in the critical path for messaging/rma/amo
+ * requests
+ */
 static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 			  size_t *addrlen)
 {
 	struct gnix_fid_av *gnix_av;
-	struct gnix_ep_name ep_name;
-	size_t gnix_addr_len = sizeof(struct gnix_address);
+	struct gnix_ep_name ep_name = { {0} };
+	struct gnix_av_addr_entry *entry = NULL;
 	int rc;
 
-	if (!av || !addr || !addrlen) {
+	GNIX_TRACE(FI_LOG_AV, "\n");
+
+	if (!av || !addrlen)
 		return -FI_EINVAL;
+
+	if (*addrlen < sizeof(ep_name)) {
+		*addrlen = sizeof(ep_name);
+		return -FI_ETOOSMALL;
 	}
+
+	/*
+	 * user better have provided a buffer since the
+	 * value stored in addrlen is big enough to return ep_name
+	 */
+
+	if (!addr)
+		return -FI_EINVAL;
 
 	gnix_av = container_of(av, struct gnix_fid_av, av_fid);
 
-	rc = _gnix_av_lookup(gnix_av, fi_addr, &ep_name.gnix_addr,
-			     &gnix_addr_len);
+	rc = _gnix_av_lookup(gnix_av, fi_addr, &entry);
 	if (rc != FI_SUCCESS) {
-		GNIX_INFO(FI_LOG_AV, "_gnix_av_lookup failed: %d\n", rc);
+		GNIX_WARN(FI_LOG_AV, "_gnix_av_lookup failed: %d\n", rc);
 		return rc;
 	}
 
-	ep_name.name_type = 0;
-	ep_name.cookie = gnix_av->domain->cookie;
+	memcpy(&ep_name.gnix_addr, &entry->gnix_addr,
+	       sizeof(struct gnix_address));
+	ep_name.name_type = entry->name_type;
+	ep_name.cm_nic_cdm_id = entry->cm_nic_cdm_id;
+	ep_name.cookie = entry->cookie;
 
 	memcpy(addr, (void *)&ep_name, MIN(*addrlen, sizeof(ep_name)));
 	*addrlen = sizeof(ep_name);
@@ -303,10 +415,6 @@ static int gnix_av_lookup(struct fid_av *av, fi_addr_t fi_addr, void *addr,
 	return FI_SUCCESS;
 }
 
-/*
- * TODO: Fix implementation for FI_AV_MAP so it's actually stored and looked up
- * rather than recreated each time.
- */
 static int gnix_av_insert(struct fid_av *av, const void *addr, size_t count,
 			  fi_addr_t *fi_addr, uint64_t flags, void *context)
 {
@@ -405,10 +513,19 @@ static const char *gnix_av_straddr(struct fid_av *av, const void *addr,
 
 static void __av_destruct(void *obj)
 {
+	int ret;
 	struct gnix_fid_av *av = (struct gnix_fid_av *) obj;
 
-	if (av->table) {
-		free(av->table);
+	if (av->type == FI_AV_TABLE) {
+		if (av->table) {
+			free(av->table);
+		}
+	}else if (av->type ==FI_AV_MAP) {
+		ret = _gnix_ht_destroy(av->map_ht);
+		if (ret != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_AV,
+				  "_gnix_ht_destroy failed %d\n",
+				  ret);
 	}
 	free(av);
 }
@@ -450,6 +567,7 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 {
 	struct gnix_fid_domain *int_dom = NULL;
 	struct gnix_fid_av *int_av = NULL;
+	struct gnix_hashtable_attr ht_attr;
 
 	enum fi_av_type type = FI_AV_TABLE;
 	size_t count = 128;
@@ -489,8 +607,14 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->addrlen = sizeof(struct gnix_address);
 
 	int_av->capacity = count;
-	int_av->table = calloc(count, sizeof(struct gnix_addr_entry));
+	int_av->table = calloc(count, sizeof(struct gnix_av_addr_entry));
 	if (!int_av->table) {
+		ret = -FI_ENOMEM;
+		goto cleanup;
+	}
+
+	int_av->valid_entry_vec = calloc(count, sizeof(int));
+	if (!int_av->valid_entry_vec) {
 		ret = -FI_ENOMEM;
 		goto cleanup;
 	}
@@ -499,6 +623,27 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->av_fid.fid.context = context;
 	int_av->av_fid.fid.ops = &gnix_fi_av_ops;
 	int_av->av_fid.ops = &gnix_av_ops;
+
+	if (type == FI_AV_MAP) {
+		int_av->map_ht = calloc(1, sizeof(struct gnix_hashtable));
+		if (int_av->map_ht == NULL)
+			goto cleanup;
+
+		/*
+		 * use same parameters as used for ep vc hash
+		 */
+
+		ht_attr.ht_initial_size = int_dom->params.ct_init_size;
+		ht_attr.ht_maximum_size = int_dom->params.ct_max_size;
+		ht_attr.ht_increase_step = int_dom->params.ct_step;
+		ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
+		ht_attr.ht_collision_thresh = 500;
+		ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
+		ht_attr.ht_internal_locking = 1;
+
+		ret = _gnix_ht_init(int_av->map_ht,
+				    &ht_attr);
+	}
 	_gnix_ref_init(&int_av->ref_cnt, 1, __av_destruct);
 
 	*av = &int_av->av_fid;
@@ -506,6 +651,10 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	return ret;
 
 cleanup:
+	if (int_av->table != NULL)
+		free(int_av->table);
+	if (int_av->valid_entry_vec != NULL)
+		free(int_av->valid_entry_vec);
 	free(int_av);
 err:
 	return ret;
