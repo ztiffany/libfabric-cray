@@ -44,7 +44,7 @@ libfabric API:
   *FI_WAIT_NONE*, *FI_WAIT_FD*, and *FI_WAIT_MUTEX_COND*.
 
 *Modes*
-: The GNI provider only requires the *FI_LOCAL_MR* mode.
+: The GNI provider does not require any operation modes.
 
 *Progress*
 : The GNI provider supports both *FI_PROGRESS_AUTO* and

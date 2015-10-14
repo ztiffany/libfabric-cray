@@ -188,7 +188,7 @@ extern "C" {
  * Cray gni provider will require the following fabric interface modes (see
  * fi_getinfo.3 man page)
  */
-#define GNIX_FAB_MODES	FI_LOCAL_MR
+#define GNIX_FAB_MODES	0
 
 /*
  * fabric modes that GNI provider doesn't need

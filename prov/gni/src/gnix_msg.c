@@ -170,6 +170,12 @@ static int __gnix_rndzv_req_complete(void *arg)
 	nic = ep->nic;
 	assert(nic != NULL);
 
+	if (req->msg.recv_flags & FI_LOCAL_MR) {
+		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+			  req->msg.recv_md);
+		fi_close(&req->msg.recv_md->mr_fid.fid);
+	}
+
 	txd->rndzv_fin_hdr.req_addr = req->msg.rma_id;
 
 	txd->req = req;
@@ -225,6 +231,24 @@ static int __gnix_rndzv_req(void *arg)
 	struct gnix_tx_descriptor *txd;
 	gni_return_t status;
 	int rc;
+	struct fid_mr *auto_mr = NULL;
+
+	if (!req->msg.recv_md) {
+		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
+				 (void *)req->msg.recv_addr, req->msg.recv_len,
+				 FI_READ, 0, 0, 0, &auto_mr, NULL);
+		if (rc != FI_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Failed to auto-register local buffer: %d\n",
+				  rc);
+			return -FI_EAGAIN;
+		}
+		req->msg.recv_flags |= FI_LOCAL_MR;
+		req->msg.recv_md = container_of(auto_mr,
+						struct gnix_fid_mem_desc,
+						mr_fid);
+		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
+	}
 
 	rc = _gnix_nic_tx_alloc(nic, &txd);
 	if (rc) {
@@ -655,6 +679,12 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 
 	ep = req->gnix_ep;
 	assert(ep != NULL);
+
+	if (req->msg.send_flags & FI_LOCAL_MR) {
+		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+			  req->msg.send_md);
+		fi_close(&req->msg.send_md->mr_fid.fid);
+	}
 
 	__gnix_send_completion(ep, req);
 
@@ -1108,6 +1138,7 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	struct gnix_fab_req *req;
 	struct gnix_fid_mem_desc *md = NULL;
 	int rendezvous;
+	struct fid_mr *auto_mr = NULL;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -1124,21 +1155,29 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 
 	/* need a memory descriptor for large sends */
 	if (rendezvous && !mdesc) {
-		/* TODO auto-register source buffer */
-		GNIX_INFO(FI_LOG_EP_DATA,
-			  "Send of length %d requires memory descriptor\n",
-			  len);
-		return -FI_EINVAL;
+		ret = gnix_mr_reg(&ep->domain->domain_fid.fid, (void *)loc_addr,
+				 len, FI_WRITE, 0, 0, 0, &auto_mr, NULL);
+		if (ret != FI_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_DATA,
+				  "Failed to auto-register local buffer: %d\n",
+				  ret);
+			return ret;
+		}
+		flags |= FI_LOCAL_MR;
+		mdesc = (void *)auto_mr;
+		GNIX_INFO(FI_LOG_EP_DATA, "auto-reg MR: %p\n", auto_mr);
 	}
 
 	ret = _gnix_ep_get_vc(ep, dest_addr, &vc);
 	if (ret) {
-		return ret;
+		goto err_get_vc;
 	}
 
 	req = _gnix_fr_alloc(ep);
-	if (req == NULL)
-		return -FI_EAGAIN;
+	if (req == NULL) {
+		ret = -FI_ENOSPC;
+		goto err_fr_alloc;
+	}
 
 	req->type = GNIX_FAB_RQ_SEND;
 	req->gnix_ep = ep;
@@ -1171,5 +1210,12 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	GNIX_INFO(FI_LOG_EP_DATA, "Queuing TX req: %p\n", req);
 
 	return _gnix_vc_queue_tx_req(req);
+
+err_fr_alloc:
+err_get_vc:
+	if (auto_mr) {
+		fi_close(&auto_mr->fid);
+	}
+	return ret;
 }
 
