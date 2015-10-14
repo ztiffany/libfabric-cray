@@ -228,6 +228,17 @@ struct gnix_smsg_rndzv_fin_hdr {
 };
 
 /**
+ * gnix_smsg_rma_data_hdr  - RMA remote data message
+ *
+ * @var flags  remote CQ RMA flags
+ * @var data   remote CQ immediate data
+ */
+struct gnix_smsg_rma_data_hdr {
+	uint64_t flags;
+	uint64_t data;
+};
+
+/**
  * gni_tx_descriptor - full tx descriptor used to to track GNI SMSG
  *                     and Post operations
  *
@@ -245,6 +256,7 @@ struct gnix_tx_descriptor {
 		struct gnix_smsg_eager_hdr       eager_hdr;
 		struct gnix_smsg_rndzv_start_hdr rndzv_start_hdr;
 		struct gnix_smsg_rndzv_fin_hdr   rndzv_fin_hdr;
+		struct gnix_smsg_rma_data_hdr    rma_data_hdr;
 	};
 	struct gnix_fab_req *req;
 	int  (*completer_fn)(void *);

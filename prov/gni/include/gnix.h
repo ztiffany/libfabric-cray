@@ -166,7 +166,8 @@ extern "C" {
 #define GNIX_WRITEMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | \
 				 FI_MORE | FI_INJECT | FI_INJECT_COMPLETE | \
 				 FI_TRANSMIT_COMPLETE | FI_FENCE)
-#define GNIX_READMSG_FLAGS	(FI_COMPLETION | FI_MORE | FI_FENCE)
+#define GNIX_READMSG_FLAGS	(FI_REMOTE_CQ_DATA | FI_COMPLETION | FI_MORE | \
+				 FI_FENCE)
 
 /*
  * GNI provider fabric default values
@@ -442,6 +443,7 @@ struct gnix_fab_req {
 	int                       modes;
 	int                       retries;
 	uint64_t                  flags;
+	void                      *txd;
 
 	/* common to rma/amo/msg */
 	union {
