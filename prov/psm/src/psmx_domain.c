@@ -32,16 +32,102 @@
 
 #include "psmx.h"
 
+static inline int normalize_core_id(int core_id, int num_cores)
+{
+	if (core_id < 0)
+		core_id += num_cores;
+
+	if (core_id < 0)
+		core_id = 0;
+
+	if (core_id >= num_cores)
+		core_id = num_cores - 1;
+
+	return core_id;
+}
+
+static int psmx_progress_set_affinity(char *affinity)
+{
+	int num_cores = sysconf(_SC_NPROCESSORS_ONLN);
+	int core_id;
+	cpu_set_t cpuset;
+	char *triplet;
+	int n, start, end, stride;
+	int set_count = 0;
+
+	if (!affinity) {
+		FI_INFO(&psmx_prov, FI_LOG_CORE, "progress thread affinity not set\n");
+		return 0;
+	}
+
+	CPU_ZERO(&cpuset);
+
+	for (triplet = affinity; triplet; triplet = strchr(triplet, 'c')) {
+		if (triplet[0] == ',')
+			triplet++;
+
+		stride = 1;
+		n = sscanf(triplet, "%d:%d:%d", &start, &end, &stride);
+		if (n < 1)
+			continue;
+
+		if (n < 2)
+			end = start;
+	
+		if (stride < 1)
+			stride = 1;
+
+		start = normalize_core_id(start, num_cores);
+		end = normalize_core_id(end, num_cores);
+
+		for (core_id = start; core_id <= end; core_id += stride) {
+			CPU_SET(core_id, &cpuset);
+			set_count++;
+		}
+
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"core set [%d:%d:%d] added to progress thread affinity set\n",
+			start, end, stride);
+	}
+
+	if (set_count)
+		pthread_setaffinity_np(pthread_self(), sizeof(cpu_set_t), &cpuset);
+	else
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"progress thread affinity not set due to invalid format\n");
+
+	return set_count;
+}
+
 static void *psmx_progress_func(void *args)
 {
 	struct psmx_fid_domain *domain = args;
+	int affinity_set;
+	int sleep_usec;
+	struct timespec ts;
 
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
+	affinity_set = psmx_progress_set_affinity(psmx_env.prog_affinity);
+
+	/* Negative sleep time means let the system choose the default.
+	 * If affinity is set, sleep a short time to get better latency.
+	 * If affinity is not set, short sleep time doesn't make difference.
+	 */
+	sleep_usec = psmx_env.prog_interval;
+	if (sleep_usec < 0) {
+		if (affinity_set)
+			sleep_usec = 1;
+		else
+			sleep_usec = 1000;
+	}
+
+	ts.tv_sec = sleep_usec / 1000000;
+	ts.tv_nsec = (sleep_usec % 1000000) * 1000;
+
 	while (1) {
 		psmx_progress(domain);
-		pthread_testcancel();
-		usleep(psmx_env.prog_intv);
+		nanosleep(&ts, NULL);
 	}
 
 	return NULL;
