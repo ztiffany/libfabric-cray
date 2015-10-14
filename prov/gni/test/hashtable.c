@@ -159,6 +159,7 @@ Test(gnix_hashtable_basic, uninitialized)
 Test(gnix_hashtable_basic, initialize_ht)
 {
 	__gnix_hashtable_initialize();
+	__gnix_hashtable_destroy();
 }
 
 Test(gnix_hashtable_basic, initialize_locked_ht)
@@ -174,6 +175,8 @@ Test(gnix_hashtable_basic, initialize_locked_ht)
 	cr_assert(ret == 0);
 
 	__gnix_hashtable_test_initialized();
+
+	__gnix_hashtable_destroy();
 }
 
 Test(gnix_hashtable_basic, err_initialize_twice)
@@ -185,6 +188,8 @@ Test(gnix_hashtable_basic, err_initialize_twice)
 	ret = _gnix_ht_init(test_ht, NULL);
 	cr_assert(ret == -FI_EINVAL);
 	__gnix_hashtable_test_initialized();
+
+	__gnix_hashtable_destroy();
 }
 
 Test(gnix_hashtable_basic, err_invalid_initial_size_0)
