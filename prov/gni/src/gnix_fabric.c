@@ -61,6 +61,7 @@
 
 const char gnix_fab_name[] = "gni";
 const char gnix_dom_name[] = "/sys/class/gni/kgni0";
+const char gnix_prov_name[] = "gni";
 
 uint32_t gnix_cdm_modes =
 	(GNI_CDM_MODE_FAST_DATAGRAM_POLL | GNI_CDM_MODE_FMA_SHARED |
@@ -358,7 +359,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->src_addr = src_addr;
 	gnix_info->dest_addr = dest_addr;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
-	gnix_info->fabric_attr->prov_name = strdup(gnix_fab_name);
+	/* prov_name gets filled in by fi_getinfo from the gnix_prov struct */
 	/* let's consider gni copyrighted :) */
 
 	gnix_info->tx_attr->caps = gnix_info->caps;
@@ -418,7 +419,7 @@ static void gnix_fini(void)
 }
 
 struct fi_provider gnix_prov = {
-	.name = "gni",
+	.name = gnix_prov_name,
 	.version = FI_VERSION(GNI_MAJOR_VERSION, GNI_MINOR_VERSION),
 	.fi_version = FI_VERSION(FI_MAJOR_VERSION, FI_MINOR_VERSION),
 	.getinfo = gnix_getinfo,
