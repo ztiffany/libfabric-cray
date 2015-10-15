@@ -125,7 +125,7 @@ Test(domain, open_ops)
 	for (i = 0; i < num_doms; i++) {
 		ret = fi_domain(fabric, fi, &doms[i], NULL);
 		cr_assert(ret == FI_SUCCESS, "fi_domain");
-		ret = fi_open_ops(&doms[i]->fid, FI_GNI_DOMAIN_OPS,
+		ret = fi_open_ops(&doms[i]->fid, FI_GNI_DOMAIN_OPS_1,
 				  0, (void **) &gni_domain_ops, NULL);
 		cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 		for (op = 0; op < GNI_NUM_DOM_OPS; op++) {
@@ -156,7 +156,7 @@ Test(domain, invalid_open_ops)
 
 	ret = fi_domain(fabric, fi, &dom, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_domain");
-	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS,
+	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
 			  0, (void **) &gni_domain_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 

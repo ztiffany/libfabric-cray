@@ -41,7 +41,7 @@ extern "C" {
 #include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#define FI_GNI_DOMAIN_OPS "domain ops"
+#define FI_GNI_DOMAIN_OPS_1 "domain ops 1"
 typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_CONN_TABLE_INITIAL_SIZE,
 			   GNI_CONN_TABLE_MAX_SIZE,

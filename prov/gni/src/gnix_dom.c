@@ -285,7 +285,7 @@ gnix_domain_ops_open(struct fid *fid, const char *ops_name, uint64_t flags,
 {
 	int ret = FI_SUCCESS;
 
-	if (strcmp(ops_name, FI_GNI_DOMAIN_OPS) == 0)
+	if (strcmp(ops_name, FI_GNI_DOMAIN_OPS_1) == 0)
 		*ops = &gnix_ops_domain;
 	else
 		ret = -FI_EINVAL;
