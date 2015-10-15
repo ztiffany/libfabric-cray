@@ -44,10 +44,8 @@
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
-static struct fid_ep *ep;
 static struct fi_info *hints;
 static struct fi_info *fi;
-static struct gnix_fid_ep *ep_priv;
 
 static void av_setup(void)
 {
@@ -70,18 +68,12 @@ static void av_setup(void)
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert_eq(ret, FI_SUCCESS, "fi_domain");
 
-	ret = fi_endpoint(dom, fi, &ep, NULL);
-	cr_assert_eq(ret, FI_SUCCESS, "fi_endpoint");
-
-	ep_priv = container_of(ep, struct gnix_fid_ep, ep_fid);
 }
 
 static void av_teardown(void)
 {
 	int ret = 0;
 
-	ret = fi_close(&ep->fid);
-	cr_assert_eq(ret, FI_SUCCESS, "failure in closing ep.");
 	ret = fi_close(&dom->fid);
 	cr_assert_eq(ret, FI_SUCCESS, "failure in closing domain.");
 	ret = fi_close(&fab->fid);
