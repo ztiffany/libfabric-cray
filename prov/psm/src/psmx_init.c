@@ -480,7 +480,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->src_addr = NULL;
 	psmx_info->dest_addr = dest_addr;
 	psmx_info->fabric_attr->name = strdup(PSMX_FABRIC_NAME);
-	psmx_info->fabric_attr->prov_name = strdup(PSMX_PROV_NAME);
+	psmx_info->fabric_attr->prov_name = NULL;
 
 	psmx_info->tx_attr->caps = psmx_info->caps;
 	psmx_info->tx_attr->mode = psmx_info->mode;
@@ -665,7 +665,7 @@ PSM_INI
 			"Interval (microseconds) between progress calls made in the "
 			"progress thread (default: 1 if affinity is set, 1000 if not)");
 
-	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_INT,
+	fi_param_define(&psmx_prov, "prog_affinity", FI_PARAM_STRING,
 			"When set, specify the set of CPU cores to set the progress "
 			"thread affinity to. The format is "
 			"<start>[:<end>[:<stride>]][,<start>[:<end>[:<stride>]]]*, "
