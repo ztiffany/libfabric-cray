@@ -101,7 +101,7 @@ static void setup(void)
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
 
-	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS, 0,
+	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1, 0,
 			  (void **) &gni_domain_ops, NULL);
 	cr_assert(ret == FI_SUCCESS, "fi_open_ops");
 
