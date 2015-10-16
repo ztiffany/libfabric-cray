@@ -37,19 +37,49 @@
 #include "gnix.h"
 
 /*
+ * this structure should ideally be as compact
+ * as possible, since its looked up in the critical
+ * path for FI_EP_RDM EPs that use FI_AV_MAP.  It
+ * needs to hold sufficient content that the gnix_ep_name
+ * can be regnerated in full for fi_av_lookup.
+ */
+
+/**
+ * Av addr entry struct
+ *
+ * @var gnix_addr            gnix address for this entry
+ * @var name_type            the endpoint type associated with this
+ *                           address (GNIX_EPN_TYPE_UNBOUND/BOUND)
+ * @var cm_nic_cdm_id        for GNIX_EPN_TYPE_UNBOUND endpoint types
+ *                           the cdm id of the cm_nic with which the endpoint
+ *                           is associated
+ * @var cookie               RDMA cookie credential for the endpoint
+ *                           this entry corresponds to
+ */
+struct gnix_av_addr_entry {
+	struct gnix_address gnix_addr;
+	struct {
+		uint32_t name_type : 8;
+		uint32_t cm_nic_cdm_id : 24;
+		uint32_t cookie;
+	};
+};
+
+/*
  * Prototypes for GNI AV helper functions for managing the AV system.
  */
 
 /**
- * @brief  Translate fi_addr_t to struct gnix_address.
+ * @brief  Return pointer to an AV table internal gnix_av_addr_entry for
+ *         a given fi_addr address
  *
  * @param[in]     gnix_av   pointer to a previously allocated gnix_fid_av
  * @param[in]     fi_addr   address to be translated
- * @param[out]    gnix_addr pointer to memory to copy translated address to
- * @param[in,out] addrlen    pointer to length of 'gnix_addr' buffer
+ * @param[out]    addr      pointer to address entry in AV table
  * @return  FI_SUCCESS on success, -FI_EINVAL on error
  */
 int _gnix_av_lookup(struct gnix_fid_av *gnix_av, fi_addr_t fi_addr,
-		    struct gnix_address *addr, size_t *addrlen);
+		    struct gnix_av_addr_entry **addr);
+
 
 #endif /* _GNIX_AV_H_ */

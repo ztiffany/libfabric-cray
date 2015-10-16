@@ -818,33 +818,16 @@ static int __gnix_vc_connect_comp_fn(void *data)
  * Internal API functions
  ******************************************************************************/
 
-int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, struct gnix_address *dest_addr,
-		   struct gnix_vc **vc)
+int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
+		   struct gnix_av_addr_entry *entry, struct gnix_vc **vc)
 
 {
 	int ret = FI_SUCCESS;
 	int remote_id;
 	struct gnix_vc *vc_ptr = NULL;
 	struct gnix_nic *nic = NULL;
-#if 0
-	struct gnix_fid_av *av = NULL;
-#endif
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-#if 0
-	/*
-	 * if ep is of type FI_EP_RDM, need to check the map type
-	 */
-
-	if (ep_priv->type == FI_EP_RDM) {
-		if (!ep_priv->av)
-			return -FI_EINVAL;
-		av = ep_priv->av;
-		if (ep_priv->av->type == FI_AV_TABLE)
-			/* TODO: need something here */
-	}
-#endif
 
 	nic = ep_priv->nic;
 	if (nic == NULL)
@@ -855,11 +838,19 @@ int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv, struct gnix_address *dest_addr,
 		return -FI_ENOMEM;
 
 	vc_ptr->conn_state = GNIX_VC_CONN_NONE;
-	if (dest_addr) {
-		memcpy(&vc_ptr->peer_addr, dest_addr, sizeof(*dest_addr));
+	if (entry) {
+		memcpy(&vc_ptr->peer_addr,
+			&entry->gnix_addr,
+			sizeof(struct gnix_address));
+		vc_ptr->peer_cm_nic_addr.device_addr =
+			entry->gnix_addr.device_addr;
+		vc_ptr->peer_cm_nic_addr.cdm_id =
+			entry->cm_nic_cdm_id;
 	} else {
 		vc_ptr->peer_addr.device_addr = -1;
 		vc_ptr->peer_addr.cdm_id = -1;
+		vc_ptr->peer_cm_nic_addr.device_addr = -1;
+		vc_ptr->peer_cm_nic_addr.cdm_id = -1;
 	}
 	vc_ptr->ep = ep_priv;
 	_gnix_ref_get(ep_priv);
@@ -1528,14 +1519,13 @@ static int __gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 	int ret = FI_SUCCESS;
 	struct gnix_vc *vc = NULL;
 	struct gnix_fid_av *av;
-	struct gnix_address gnix_addr;
-	size_t addrlen = sizeof(gnix_addr);
+	struct gnix_av_addr_entry *av_entry;
 	gnix_ht_key_t key;
 
 	av = ep->av;
 	assert(av != NULL);
 
-	ret = _gnix_av_lookup(av, dest_addr, &gnix_addr, &addrlen);
+	ret = _gnix_av_lookup(av, dest_addr, &av_entry);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
 			  "_gnix_av_lookup returned %d\n",
@@ -1543,14 +1533,14 @@ static int __gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		goto err;
 	}
 	GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
-		  dest_addr, gnix_addr);
+		  dest_addr, av_entry->gnix_addr);
 
-	memcpy(&key, &gnix_addr, sizeof(gnix_ht_key_t));
+	memcpy(&key, &av_entry->gnix_addr, sizeof(gnix_ht_key_t));
 	vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht,
 						key);
 	if (vc == NULL) {
 		ret = _gnix_vc_alloc(ep,
-				     &gnix_addr,
+				     av_entry,
 				     &vc);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,

@@ -228,7 +228,7 @@ struct gnix_ep_name {
 	struct gnix_address gnix_addr;
 	struct {
 		uint32_t name_type : 8;
-		uint32_t unused : 24;
+		uint32_t cm_nic_cdm_id : 24;
 		uint32_t cookie;
 	};
 	uint64_t reserved[4];
@@ -357,11 +357,6 @@ struct gnix_fid_ep {
 	struct gnix_reference ref_cnt;
 };
 
-struct gnix_addr_entry {
-	struct gnix_address* addr;
-	bool valid;
-};
-
 /*
  * TODO: Support shared named AVs
  */
@@ -369,12 +364,15 @@ struct gnix_fid_av {
 	struct fid_av av_fid;
 	struct gnix_fid_domain *domain;
 	enum fi_av_type type;
-	struct gnix_addr_entry* table;
+	struct gnix_av_addr_entry* table;
+	int *valid_entry_vec;
 	size_t addrlen;
 	/* How many addresses AV can hold before it needs to be resized */
 	size_t capacity;
 	/* How many address are currently stored in AV */
 	size_t count;
+	/* Hash table for mapping FI_AV_MAP */
+	struct gnix_hashtable *map_ht;
 	struct gnix_reference ref_cnt;
 };
 
