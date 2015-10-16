@@ -48,10 +48,10 @@
 #include "fi.h"
 
 /* Print fi_info and related structs, enums, OR_able flags, addresses.
- * 
+ *
  * Each printable type should be well formatted YAML.
  *
- * A struct is a dictionary containing one key named after the struct tag 
+ * A struct is a dictionary containing one key named after the struct tag
  * which contains a dictionary of member-value mappings. The struct member
  * keys are the field names (not the types).
  *
@@ -219,6 +219,7 @@ static void fi_tostr_protocol(char *buf, uint32_t protocol)
 	CASEENUMSTR(FI_PROTO_RDMA_CM_IB_RC);
 	CASEENUMSTR(FI_PROTO_IWARP);
 	CASEENUMSTR(FI_PROTO_IB_UD);
+	CASEENUMSTR(FI_PROTO_GNI);
 	CASEENUMSTR(FI_PROTO_PSMX);
 	CASEENUMSTR(FI_PROTO_UDP);
 	CASEENUMSTR(FI_PROTO_SOCK_TCP);
