@@ -248,7 +248,7 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 	gnix_ht_key_t key;
 	size_t i;
 
-	assert(gnix_fid_av->cdm_id_ht != NULL);
+	assert(int_av->map_ht != NULL);
 
 	/*
  	 * TODO: ugh, something better than malloc for each
