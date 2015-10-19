@@ -519,7 +519,7 @@ static void __av_destruct(void *obj)
 		if (av->table) {
 			free(av->table);
 		}
-	}else if (av->type ==FI_AV_MAP) {
+	} else if (av->type == FI_AV_MAP) {
 		ret = _gnix_ht_destroy(av->map_ht);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_AV,
