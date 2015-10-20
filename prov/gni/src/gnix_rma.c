@@ -198,8 +198,6 @@ static gni_post_type_t __gnix_fr_post_type(int fr_type, int rdma)
 	return -FI_ENOSYS;
 }
 
-#define GNIX_RMA_RDMA_THRESH (8*1024)
-
 int _gnix_rma_post_req(void *data)
 {
 	struct gnix_fab_req *fab_req = (struct gnix_fab_req *)data;
@@ -302,7 +300,7 @@ ssize_t _gnix_rma(struct gnix_fid_ep *ep, enum gnix_fab_req_type fr_type,
 		return -FI_EINVAL;
 	}
 
-	rdma = len >= GNIX_RMA_RDMA_THRESH;
+	rdma = len >= ep->domain->params.rma_rdma_thresh;
 
 	/* need a memory descriptor for all RDMA and reads */
 	if (!mdesc && (rdma || fr_type == GNIX_FAB_RQ_RDMA_READ)) {

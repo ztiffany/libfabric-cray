@@ -11,16 +11,16 @@ The GNI Fabric Provider
 
 # OVERVIEW
 
-The GNI provider runs on Cray XC Systems utilizing the user-space
+The GNI provider runs on Cray XC (TM) systems utilizing the user-space
 Generic Network Interface (uGNI) which provides low-level access to
-the Cray XC's Aries Interconnect.  The Aries interconnect is designed
-for low-latency one-sided messaging and also includes direct hardware
-support for common atomics operations and optimized collectives.
+the Aries interconnect.  The Aries interconnect is designed for
+low-latency one-sided messaging and also includes direct hardware
+support for common atomic operations and optimized collectives.
 
 # REQUIREMENTS
 
-The GNI provider run on Cray XC Systems running CLE 5.2 UP02 or
-higher using gcc version 4.9 or higher.
+The GNI provider run on Cray XC systems running CLE 5.2 UP02 or higher
+using gcc version 4.9 or higher.
 
 # SUPPORTED FEATURES
 
@@ -35,12 +35,12 @@ libfabric API:
   address vector types.
 
 *Data transfer operations*
-: The following data transfer interface is supported for a all endpoint
-  types: *fi_atomic*, *fi_msg*, *fi_rma*, *fi_tagged*.
+: The following data transfer interfaces are supported for a all
+  endpoint types: *fi_atomic*, *fi_msg*, *fi_rma*, *fi_tagged*.
 
 *Completion events*
 : The proveders supports *FI_CQ_FORMAT_CONTEXT*, *FI_CQ_FORMAT_MSG*,
-  FI_CQ_FORMAT_DATA* and FI_CQ_FORMAT_TAGGED* with wait objects of type
+  *FI_CQ_FORMAT_DATA* and *FI_CQ_FORMAT_TAGGED* with wait objects of type
   *FI_WAIT_NONE*, *FI_WAIT_FD*, and *FI_WAIT_MUTEX_COND*.
 
 *Modes*
@@ -78,6 +78,10 @@ values are:
 *GNI_MSG_RENDEZVOUS_THRESHOLD*
 : Threshold message size at which a rendezvous protocol is used for
   `fi_msg` data transfers.
+
+*GNI_RMA_RDMA_THRESHOLD*
+: Threshold message size at which RDMA is used for `fi_rma` data
+  transfers.
 
 *GNI_CONN_TABLE_INITIAL_SIZE*
 : Initial size of the internal table data structure used to manage
