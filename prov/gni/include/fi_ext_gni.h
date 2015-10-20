@@ -43,6 +43,7 @@ extern "C" {
 
 #define FI_GNI_DOMAIN_OPS_1 "domain ops 1"
 typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
+			   GNI_RMA_RDMA_THRESHOLD,
 			   GNI_CONN_TABLE_INITIAL_SIZE,
 			   GNI_CONN_TABLE_MAX_SIZE,
 			   GNI_CONN_TABLE_STEP_SIZE,
@@ -65,6 +66,7 @@ struct fi_gni_ops_domain {
 /* per domain parameters */
 struct gnix_ops_domain {
 	uint32_t msg_rendezvous_thresh;
+	uint32_t rma_rdma_thresh;
 	uint32_t ct_init_size;
 	uint32_t ct_max_size;
 	uint32_t ct_step;

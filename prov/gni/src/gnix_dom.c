@@ -147,6 +147,7 @@ err:
  */
 
 static const uint32_t default_msg_rendezvous_thresh = 16*1024;
+static const uint32_t default_rma_rdma_thresh = 8*1024;
 static const uint32_t default_ct_init_size = 64;
 static const uint32_t default_ct_max_size = 16384;
 static const uint32_t default_ct_step = 2;
@@ -177,6 +178,9 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	switch (t) {
 	case GNI_MSG_RENDEZVOUS_THRESHOLD:
 		*(uint32_t *)val = domain->params.msg_rendezvous_thresh;
+		break;
+	case GNI_RMA_RDMA_THRESHOLD:
+		*(uint32_t *)val = domain->params.rma_rdma_thresh;
 		break;
 	case GNI_CONN_TABLE_INITIAL_SIZE:
 		*(uint32_t *)val = domain->params.ct_init_size;
@@ -234,6 +238,9 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	switch (t) {
 	case GNI_MSG_RENDEZVOUS_THRESHOLD:
 		domain->params.msg_rendezvous_thresh = *(uint32_t *)val;
+		break;
+	case GNI_RMA_RDMA_THRESHOLD:
+		domain->params.rma_rdma_thresh = *(uint32_t *)val;
 		break;
 	case GNI_CONN_TABLE_INITIAL_SIZE:
 		domain->params.ct_init_size = *(uint32_t *)val;
@@ -360,11 +367,11 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	/* user tunables */
 	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
+	domain->params.rma_rdma_thresh = default_rma_rdma_thresh;
 	domain->params.ct_init_size = default_ct_init_size;
 	domain->params.ct_max_size = default_ct_max_size;
 	domain->params.ct_step = default_ct_step;
 	domain->params.vc_id_table_capacity = default_vc_id_table_capacity;
-	domain->params.msg_rendezvous_thresh = default_msg_rendezvous_thresh;
 	domain->params.mbox_page_size = default_mbox_page_size;
 	domain->params.mbox_num_per_slab = default_mbox_num_per_slab;
 	domain->params.mbox_maxcredit = default_mbox_maxcredit;
