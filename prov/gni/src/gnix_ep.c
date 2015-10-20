@@ -764,8 +764,7 @@ static int gnix_ep_close(fid_t fid)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_fid_ep *ep;
-	struct gnix_vc *vc;
-	struct dlist_entry *p, *head;
+	struct gnix_vc *vc, *tvc;
 	int references_held;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -773,12 +772,11 @@ static int gnix_ep_close(fid_t fid)
 	ep = container_of(fid, struct gnix_fid_ep, ep_fid.fid);
 
 	/*
-	 * destroy any vc's being used by this EP. This must occur before destruct
-	 * because the VCs contain a reference to the EP.
+	 * Destroy any VCs being used by this EP. This must occur
+	 * before destroying the EP, because the VCs contain a
+	 * reference to the EP.
 	 */
-	head = &ep->wc_vc_list;
-	for (p = head->next; p != head; p = p->next) {
-		vc = container_of(p, struct gnix_vc, entry);
+	dlist_for_each_safe(&ep->wc_vc_list, vc, tvc, entry) {
 		dlist_remove(&vc->entry);
 		if (vc->conn_state == GNIX_VC_CONNECTED) {
 			ret = _gnix_vc_disconnect(vc);
