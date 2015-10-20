@@ -268,6 +268,7 @@ int gnix_resolve_name(IN const char *node, IN const char *service,
 		/* use resolved service/port */
 		resolved_addr->gnix_addr.cdm_id = ntohs(sa->sin_port);
 		resolved_addr->name_type = GNIX_EPN_TYPE_BOUND;
+		resolved_addr->cm_nic_cdm_id = resolved_addr->gnix_addr.cdm_id;
 	} else {
 		/* generate port internally */
 		resolved_addr->name_type = GNIX_EPN_TYPE_UNBOUND;
