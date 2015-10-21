@@ -720,6 +720,7 @@ int _gnix_mbox_free(struct gnix_mbox *ptr)
 {
 	size_t position;
 	int ret;
+	fastlock_t *lock;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -728,19 +729,20 @@ int _gnix_mbox_free(struct gnix_mbox *ptr)
 		return -FI_EINVAL;
 	}
 
-	fastlock_acquire(&ptr->slab->allocator->lock);
+	lock = &ptr->slab->allocator->lock;
+	fastlock_acquire(lock);
 	position = ptr->offset / ptr->slab->allocator->mbox_size;
 
 	ret = _gnix_test_and_clear_bit(ptr->slab->used, position);
 	if (ret != 1) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			  "Bit already cleared while freeing mbox.\n");
-		fastlock_release(&ptr->slab->allocator->lock);
+		fastlock_release(lock);
 		return -FI_EINVAL;
 	}
 
 	free(ptr);
-	fastlock_release(&ptr->slab->allocator->lock);
+	fastlock_release(lock);
 
 	return FI_SUCCESS;
 }
