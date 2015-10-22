@@ -273,7 +273,7 @@ struct psmx_unexp {
 };
 
 struct psmx_req_queue {
-	pthread_mutex_t	lock;
+	fastlock_t	lock;
 	struct slist	list;
 };
 
@@ -398,7 +398,7 @@ struct psmx_fid_cq {
 	size_t				event_count;
 	struct slist			event_queue;
 	struct slist			free_list;
-	pthread_mutex_t			mutex;
+	fastlock_t			lock;
 	struct psmx_cq_event		*pending_error;
 	struct psmx_fid_wait		*wait;
 	int				wait_cond;
@@ -411,7 +411,7 @@ struct psmx_fid_eq {
 	struct slist			event_queue;
 	struct slist			error_queue;
 	struct slist			free_list;
-	pthread_mutex_t			mutex;
+	fastlock_t			lock;
 	struct psmx_fid_wait		*wait;
 	int				wait_is_local;
 };
@@ -591,8 +591,8 @@ struct psmx_fid_ep {
 	struct psmx_fid_cntr	*read_cntr;
 	struct psmx_fid_cntr	*remote_write_cntr;
 	struct psmx_fid_cntr	*remote_read_cntr;
-	int			send_selective_completion:1;
-	int			recv_selective_completion:1;
+	unsigned		send_selective_completion:1;
+	unsigned		recv_selective_completion:1;
 	uint64_t		flags;
 	uint64_t		caps;
 	struct fi_context	nocomp_send_context;
@@ -725,6 +725,8 @@ int	psmx_am_rma_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 int	psmx_am_atomic_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				psm_amarg_t *args, int nargs, void *src, uint32_t len);
 #endif
+void	psmx_atomic_init(void);
+void	psmx_atomic_fini(void);
 
 void	psmx_am_ack_rma(struct psmx_am_request *req);
 
