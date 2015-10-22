@@ -619,3 +619,61 @@ Test(memory_registration_cache, lru_evict_middle_entry)
 	mr_arr = NULL;
 }
 
+/* Test repeated registration of a memory region with the same base
+ * address, increasing the size each time..  This is an explicit
+ * version of what the test rdm_sr::send_autoreg_uncached does under
+ * the covers (currently).
+ */
+Test(memory_registration_cache, same_addr_incr_size)
+{
+	int ret;
+	int i;
+	int num_stale = 0;
+
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+
+	for (i = 2; i <= buf_len; i *= 2) {
+		printf("i=%d\n", i);
+		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
+				default_offset, default_req_key,
+				default_flags, &mr, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		cr_assert(atomic_get(&cache->inuse_elements) == 1);
+		cr_assert(atomic_get(&cache->stale_elements) == num_stale);
+
+		num_stale++;
+
+		ret = fi_close(&mr->fid);
+		cr_assert(ret == FI_SUCCESS);
+
+		cr_assert(atomic_get(&cache->inuse_elements) == 0);
+		cr_assert(atomic_get(&cache->stale_elements) == num_stale);
+	}
+}
+
+/* Same as above, except with decreasing sizes */
+Test(memory_registration_cache, same_addr_decr_size)
+{
+	int ret;
+	int i;
+
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
+
+	for (i = buf_len; i >= 2; i /= 2) {
+		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
+				default_offset, default_req_key,
+				default_flags, &mr, NULL);
+		cr_assert(ret == FI_SUCCESS);
+
+		cr_assert(atomic_get(&cache->inuse_elements) == 1);
+		cr_assert(atomic_get(&cache->stale_elements) == 0);
+
+		ret = fi_close(&mr->fid);
+		cr_assert(ret == FI_SUCCESS);
+
+		cr_assert(atomic_get(&cache->inuse_elements) == 0);
+		cr_assert(atomic_get(&cache->stale_elements) == 1);
+	}
+}
+
