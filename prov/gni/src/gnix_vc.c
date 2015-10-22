@@ -728,7 +728,7 @@ static int __gnix_vc_connect_prog_fn(void *data, int *complete_ptr)
 	 * and target address
 	 */
 
-	dgram->target_addr = vc->peer_addr;
+	dgram->target_addr = vc->peer_cm_nic_addr;
 	dgram->callback_fn = __gnix_vc_process_datagram;
 	dgram->pre_post_clbk_fn = __gnix_vc_pre_post_clbk;
 	dgram->post_post_clbk_fn = __gnix_vc_post_post_clbk;

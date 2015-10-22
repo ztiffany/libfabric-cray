@@ -160,8 +160,7 @@ static int table_insert(struct gnix_fid_av *int_av, const void *addr,
 		int_av->valid_entry_vec[index] = 1;
 		int_av->table[index].name_type = temp->name_type;
 		int_av->table[index].cookie = temp->cookie;
-		if (temp->name_type == GNIX_EPN_TYPE_UNBOUND)
-			int_av->table[index].cm_nic_cdm_id =
+		int_av->table[index].cm_nic_cdm_id =
 				temp->cm_nic_cdm_id;
 		if (fi_addr)
 			fi_addr[i] = index;

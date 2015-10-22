@@ -55,6 +55,8 @@
  *                     This will always be zero unless Cray starts
  *                     selling systems with multiple aries/node.
  * @var device_addr    Aries network address associated with this nic.
+ * @var name_type      name type for ep type this cm_nic is bound to,
+ *                     either GNIX_EPN_TYPE_UNBOUND/GNIX_EPN_TYPE_BOUND
  */
 struct gnix_cm_nic {
 	fastlock_t lock;
@@ -70,6 +72,7 @@ struct gnix_cm_nic {
 	uint32_t cookie;
 	uint32_t device_id;
 	uint32_t device_addr;
+	uint32_t name_type;
 };
 
 /**

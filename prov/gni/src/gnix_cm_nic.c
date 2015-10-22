@@ -190,10 +190,10 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		if (name->name_type == GNIX_EPN_TYPE_BOUND) {
 			/* EP name includes user specified service/port */
 			cdm_id = name->gnix_addr.cdm_id;
+			cm_nic->name_type = GNIX_EPN_TYPE_BOUND;
 		}
-	}
-
-	if (cdm_id == -1) {
+	} else {
+		cm_nic->name_type = GNIX_EPN_TYPE_UNBOUND;
 		ret = _gnix_get_new_cdm_id(domain, &cdm_id);
 		if (ret != FI_SUCCESS)
 			goto err;
