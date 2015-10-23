@@ -117,7 +117,7 @@ void rdm_tagged_sr_setup(void)
 	ret = fi_endpoint(dom, fi, &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
@@ -178,11 +178,11 @@ void rdm_tagged_sr_setup(void)
 	assert(source);
 
 	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+			FI_SEND | FI_RECV, 0, 0, 0, &rem_mr, &target);
 	cr_assert_eq(ret, 0);
 
 	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+			FI_SEND | FI_RECV, 0, 0, 0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
 
 	mr_key = fi_mr_key(rem_mr);
@@ -280,7 +280,7 @@ void do_tsend(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 
 	rdm_tagged_sr_init_data(source, len, 0xab);
 	rdm_tagged_sr_init_data(target, len, 0);
@@ -324,7 +324,7 @@ void do_tsendv(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
 
 	iov.iov_base = source;
@@ -370,7 +370,7 @@ void do_tsendmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg_tagged msg;
 	struct iovec iov;
 
@@ -426,7 +426,7 @@ void do_tinject(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 	rdm_tagged_sr_init_data(source, len, 0x23);
 	rdm_tagged_sr_init_data(target, len, 0);
@@ -463,7 +463,7 @@ void do_tsenddata(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 
 	rdm_tagged_sr_init_data(source, len, 0xab);
 	rdm_tagged_sr_init_data(target, len, 0);
@@ -506,7 +506,7 @@ void do_trecvv(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
 
 	rdm_tagged_sr_init_data(source, len, 0xab);
@@ -553,7 +553,7 @@ void do_trecvmsg(int len)
 	int ret;
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
-	struct fi_cq_entry s_cqe, d_cqe;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg_tagged msg;
 	struct iovec iov;
 
@@ -598,4 +598,64 @@ void do_trecvmsg(int len)
 Test(rdm_tagged_sr, trecvmsg)
 {
 	rdm_tagged_sr_xfer_for_each_size(do_trecvmsg, 1, BUF_SZ);
+}
+
+
+Test(rdm_tagged_sr, multi_tsend_trecv) {
+	int i, it, ridx, ret;
+	const int iters = 37;
+	const int num_msgs = 17;
+	const int slen = 256;
+	uint64_t tags[num_msgs];
+	uint64_t rtag = 0x01000000;
+	uint64_t ignore = 0xf0ffffff;
+	char msg[num_msgs][slen];
+	struct fi_cq_tagged_entry cqe;
+
+	srand(time(NULL));
+
+	for (it = 0; it < iters; it++) {
+		for (i = 0; i < num_msgs; i++) {
+			tags[i] = 0x01010abc + it*iters + i;
+
+			sprintf(msg[i], "%d\n", i);
+			ret = fi_tsend(ep[1], msg[i], strlen(msg[i]),
+				       NULL, gni_addr[0], tags[i], NULL);
+			cr_assert(ret == FI_SUCCESS);
+
+			do {
+				ret = fi_cq_read(msg_cq[1], &cqe, 1);
+				cr_assert((ret == 1) || (ret == -FI_EAGAIN));
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert(cqe.len == strlen(msg[i]));
+			cr_assert(cqe.tag == tags[i]);
+		}
+
+		for (i = 0; i < num_msgs; i++) {
+			ret = fi_trecv(ep[0], target, BUF_SZ,
+				       fi_mr_desc(loc_mr),
+				       gni_addr[1], rtag, ignore, NULL);
+			cr_assert(ret == FI_SUCCESS);
+
+			do {
+				ret = fi_cq_read(msg_cq[0], &cqe, 1);
+				cr_assert((ret == 1) || (ret == -FI_EAGAIN));
+			} while (ret == -FI_EAGAIN);
+
+			cr_assert(rtag != cqe.tag);
+
+			ret = sscanf(target, "%d", &ridx);
+			cr_assert(ret == 1);
+			cr_assert(cqe.len == strlen(msg[ridx]));
+
+			/* zero out the tag for error checking below */
+			tags[ridx] = 0;
+		}
+
+		/* Make sure we got everything */
+		for (i = 0; i < num_msgs; i++)
+			cr_assert(tags[i] == 0);
+	}
+
 }
