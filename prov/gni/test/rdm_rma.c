@@ -69,6 +69,7 @@ do {				\
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
+struct fi_gni_ops_domain *gni_domain_ops;
 static struct fid_ep *ep[2];
 static struct fid_av *av;
 static struct fi_info *hints;
@@ -108,6 +109,9 @@ void rdm_rma_setup(void)
 
 	ret = fi_domain(fab, fi, &dom, NULL);
 	cr_assert(!ret, "fi_domain");
+
+	ret = fi_open_ops(&dom->fid, FI_GNI_DOMAIN_OPS_1,
+			  0, (void **) &gni_domain_ops, NULL);
 
 	attr.type = FI_AV_MAP;
 	attr.count = 16;
@@ -248,8 +252,8 @@ int check_data(char *buf1, char *buf2, int len)
 
 	for (i = 0; i < len; i++) {
 		if (buf1[i] != buf2[i]) {
-			printf("data mismatch, elem: %d, exp: %x, act: %x\n",
-			       i, buf1[i], buf2[i]);
+			printf("data mismatch, elem: %d, b1: 0x%hhx, b2: 0x%hhx, len: %d\n",
+			       i, buf1[i], buf2[i], len);
 			return 0;
 		}
 	}
@@ -264,6 +268,15 @@ void xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 	for (i = slen; i <= elen; i *= 2) {
 		xfer(i);
 	}
+}
+
+void err_inject_enable(void)
+{
+	int ret, err_count_val = 1;
+
+	ret = gni_domain_ops->set_val(&dom->fid, GNI_ERR_INJECT_COUNT,
+				      &err_count_val);
+	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 }
 
 /*******************************************************************************
@@ -303,6 +316,12 @@ Test(rdm_rma, write)
 	xfer_for_each_size(do_write, 8, BUF_SZ);
 }
 
+Test(rdm_rma, write_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write, 8, BUF_SZ);
+}
+
 void do_writev(int len)
 {
 	int ret;
@@ -334,6 +353,12 @@ void do_writev(int len)
 
 Test(rdm_rma, writev)
 {
+	xfer_for_each_size(do_writev, 8, BUF_SZ);
+}
+
+Test(rdm_rma, writev_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_writev, 8, BUF_SZ);
 }
 
@@ -381,6 +406,12 @@ void do_writemsg(int len)
 
 Test(rdm_rma, writemsg)
 {
+	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma, writemsg_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_writemsg, 8, BUF_SZ);
 }
 
@@ -458,6 +489,12 @@ Test(rdm_rma, write_fence)
 	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
 }
 
+Test(rdm_rma, write_fence_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_write_fence, 8, BUF_SZ);
+}
+
 #define INJECT_SIZE 64
 void do_inject_write(int len)
 {
@@ -486,6 +523,12 @@ void do_inject_write(int len)
 
 Test(rdm_rma, inject_write)
 {
+	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma, inject_write_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_inject_write, 8, INJECT_SIZE);
 }
 
@@ -533,6 +576,12 @@ Test(rdm_rma, writedata)
 	xfer_for_each_size(do_writedata, 8, BUF_SZ);
 }
 
+Test(rdm_rma, writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_writedata, 8, BUF_SZ);
+}
+
 #define INJECTWRITE_DATA 0xdededadadeadbeaf
 void do_inject_writedata(int len)
 {
@@ -543,11 +592,11 @@ void do_inject_writedata(int len)
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
-	sz = fi_inject_writedata(ep[0], source, INJECT_SIZE, INJECTWRITE_DATA,
+	sz = fi_inject_writedata(ep[0], source, len, INJECTWRITE_DATA,
 				 gni_addr[1], (uint64_t)target, mr_key);
 	cr_assert_eq(sz, 0);
 
-	for (i = 0; i < INJECT_SIZE; i++) {
+	for (i = 0; i < len; i++) {
 		loops = 0;
 		while (source[i] != target[i]) {
 			ret = fi_cq_read(send_cq, &cqe, 1); /* for progress */
@@ -575,7 +624,13 @@ void do_inject_writedata(int len)
 
 Test(rdm_rma, inject_writedata)
 {
-	xfer_for_each_size(do_inject_writedata, 8, BUF_SZ);
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
+}
+
+Test(rdm_rma, inject_writedata_retrans)
+{
+	err_inject_enable();
+	xfer_for_each_size(do_inject_writedata, 8, INJECT_SIZE);
 }
 
 void do_read(int len)
@@ -606,6 +661,12 @@ void do_read(int len)
 
 Test(rdm_rma, read)
 {
+	xfer_for_each_size(do_read, 8, BUF_SZ);
+}
+
+Test(rdm_rma, read_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_read, 8, BUF_SZ);
 }
 
@@ -640,6 +701,12 @@ void do_readv(int len)
 
 Test(rdm_rma, readv)
 {
+	xfer_for_each_size(do_readv, 8, BUF_SZ);
+}
+
+Test(rdm_rma, readv_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_readv, 8, BUF_SZ);
 }
 
@@ -687,6 +754,12 @@ void do_readmsg(int len)
 
 Test(rdm_rma, readmsg)
 {
+	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
+}
+
+Test(rdm_rma, readmsg_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_readmsg, 8, BUF_SZ);
 }
 
@@ -749,6 +822,12 @@ void do_readmsgdata(int len)
 
 Test(rdm_rma, readmsgdata)
 {
+	xfer_for_each_size(do_readmsgdata, 8, BUF_SZ);
+}
+
+Test(rdm_rma, readmsgdata_retrans)
+{
+	err_inject_enable();
 	xfer_for_each_size(do_readmsgdata, 8, BUF_SZ);
 }
 
@@ -859,3 +938,67 @@ Test(rdm_rma, write_autoreg_uncached)
 {
 	xfer_for_each_size(do_write_autoreg_uncached, 8, BUF_SZ);
 }
+
+void do_write_error(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_entry cqe;
+	struct fi_cq_err_entry err_cqe;
+
+	init_data(source, len, 0xab);
+	init_data(target, len, 0);
+	sz = fi_write(ep[0], source, len,
+			 loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			 target);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+#if 0
+	struct fi_cq_err_entry {
+		void     *op_context; /* operation context */
+		uint64_t flags;       /* completion flags */
+		size_t   len;         /* size of received data */
+		void     *buf;        /* receive data buffer */
+		uint64_t data;        /* completion data */
+		uint64_t tag;         /* message tag */
+		size_t   olen;        /* overflow length */
+		int      err;         /* positive error code */
+		int      prov_errno;  /* provider error code */
+		void    *err_data;    /*  error data */
+	};
+#endif
+	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
+		  "Bad error context");
+	cr_assert(err_cqe.flags == (FI_RMA | FI_WRITE));
+	cr_assert(err_cqe.len == 0, "Bad error len");
+	cr_assert(err_cqe.buf == 0, "Bad error buf");
+	cr_assert(err_cqe.data == 0, "Bad error data");
+	cr_assert(err_cqe.tag == 0, "Bad error tag");
+	cr_assert(err_cqe.olen == 0, "Bad error olen");
+	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
+	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+		  "Bad prov errno");
+	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+}
+
+Test(rdm_rma, write_error)
+{
+	int ret, max_retrans_val = 1;
+
+	ret = gni_domain_ops->set_val(&dom->fid, GNI_MAX_RETRANSMITS,
+				      &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+	err_inject_enable();
+
+	xfer_for_each_size(do_write_error, 8, BUF_SZ);
+}
+

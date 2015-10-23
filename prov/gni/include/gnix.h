@@ -170,6 +170,12 @@ extern "C" {
 				 FI_FENCE)
 
 /*
+ * Valid completion event flags.  See fi_cq.3.
+ */
+#define GNIX_RMA_COMPLETION_FLAGS	(FI_RMA | FI_READ | FI_WRITE | \
+					 FI_REMOTE_CQ_DATA)
+
+/*
  * GNI provider fabric default values
  */
 #define GNIX_TX_SIZE_DEFAULT	500
@@ -436,12 +442,11 @@ struct gnix_fab_req {
 	void                      *user_context;
 	struct gnix_vc            *vc;
 	int                       (*send_fn)(void *);
-	void                      *completer_data;
-	int                       (*completer_fn)(void *);
 	int                       modes;
 	int                       retries;
 	uint64_t                  flags;
 	void                      *txd;
+	uint32_t                  tx_failures;
 
 	/* common to rma/amo/msg */
 	union {
@@ -450,6 +455,19 @@ struct gnix_fab_req {
 	};
 	char inject_buf[GNIX_INJECT_SIZE];
 };
+
+static inline int _gnix_req_inject_err(struct gnix_fab_req *req)
+{
+	int max = req->gnix_ep->domain->params.err_inject_count;
+
+	if (likely(!max)) {
+		return 0;
+	} else if (max > 0) {
+		return req->tx_failures < max;
+	} else { /* (max < 0) */
+		return req->tx_failures < (rand() % (-max));
+	}
+}
 
 /*
  * work queue struct, used for handling delay ops, etc. in a generic wat

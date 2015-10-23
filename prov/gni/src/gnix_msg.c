@@ -154,7 +154,7 @@ static int __gnix_send_completion(struct gnix_fid_ep *ep,
 	return FI_SUCCESS;
 }
 
-static int __gnix_rndzv_req_complete(void *arg)
+static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
 	struct gnix_fab_req *req = txd->req;
@@ -220,7 +220,7 @@ static int __gnix_rndzv_req_send_fin(void *arg)
 	txd->completer_fn = NULL;
 	txd->req = req;
 
-	return __gnix_rndzv_req_complete(txd);
+	return __gnix_rndzv_req_complete(txd, GNI_RC_SUCCESS);
 }
 
 static int __gnix_rndzv_req(void *arg)
@@ -287,7 +287,7 @@ static int __gnix_rndzv_req(void *arg)
  * GNI SMSG callbacks invoked upon completion of an SMSG message at the sender.
  ******************************************************************************/
 
-static int __comp_eager_msg_w_data(void *data)
+static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *tdesc;
@@ -314,48 +314,48 @@ static int __comp_eager_msg_w_data(void *data)
 	return ret;
 }
 
-static int __comp_eager_msg_w_data_ack(void *data)
+static int __comp_eager_msg_w_data_ack(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_eager_msg_data_at_src(void *data)
+static int __comp_eager_msg_data_at_src(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_eager_msg_data_at_src_ack(void *data)
+static int __comp_eager_msg_data_at_src_ack(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_rndzv_msg_rts(void *data)
+static int __comp_rndzv_msg_rts(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_rndzv_msg_rtr(void *data)
+static int __comp_rndzv_msg_rtr(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_rndzv_msg_cookie(void *data)
+static int __comp_rndzv_msg_cookie(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_rndzv_msg_send_done(void *data)
+static int __comp_rndzv_msg_send_done(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
-static int __comp_rndzv_msg_recv_done(void *data)
+static int __comp_rndzv_msg_recv_done(void *data, gni_return_t tx_status)
 {
 	return -FI_ENOSYS;
 }
 
 /* Completed request to start rendezvous send. */
-static int __comp_rndzv_start(void *data)
+static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)data;
 
@@ -375,7 +375,7 @@ static int __comp_rndzv_start(void *data)
 
 /* Notified sender that rendezvous data has been moved.  Rendezvous send
  * complete.  Generate Completions. */
-static int __comp_rndzv_fin(void *data)
+static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 {
 	int ret = FI_SUCCESS;
 	struct gnix_tx_descriptor *tdesc;

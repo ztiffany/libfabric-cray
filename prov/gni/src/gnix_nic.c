@@ -206,6 +206,94 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 	return ret;
 }
 
+void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
+			      struct gnix_tx_descriptor *txd)
+{
+	slist_insert_tail(&txd->err_list, &nic->err_txds);
+}
+
+static int __gnix_nic_txd_err_get(struct gnix_nic *nic,
+				  struct gnix_tx_descriptor **txd)
+{
+	struct slist_entry *list_entry;
+	struct gnix_tx_descriptor *txd_p;
+
+	list_entry = slist_remove_head(&nic->err_txds);
+	if (list_entry) {
+		txd_p = container_of(list_entry,
+				     struct gnix_tx_descriptor,
+				     err_list);
+		*txd = txd_p;
+		return 1;
+	}
+
+	return 0;
+}
+
+static int __nic_get_completed_txd(struct gnix_nic *nic,
+				   struct gnix_tx_descriptor **txd,
+				   gni_return_t *tx_status)
+{
+	gni_post_descriptor_t *gni_desc;
+	struct gnix_tx_descriptor *txd_p = NULL;
+	gni_return_t status;
+	int msg_id;
+	gni_cq_entry_t cqe;
+	uint32_t recov;
+
+	if (__gnix_nic_txd_err_get(nic, &txd_p)) {
+		*txd = txd_p;
+		*tx_status = GNI_RC_TRANSACTION_ERROR;
+		return 1;
+	}
+
+	status = GNI_CqGetEvent(nic->tx_cq, &cqe);
+	if (status == GNI_RC_NOT_DONE) {
+		return 0;
+	}
+
+	assert(status == GNI_RC_SUCCESS ||
+	       status == GNI_RC_TRANSACTION_ERROR);
+
+	if (status == GNI_RC_TRANSACTION_ERROR) {
+		status = GNI_CqErrorRecoverable(cqe, &recov);
+		if (status != GNI_RC_SUCCESS || !recov) {
+			char ebuf[512];
+			GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
+			GNIX_WARN(FI_LOG_EP_DATA,
+					"CQ error status - %s\n",
+					ebuf);
+			/* fatal */
+			assert(0);
+		}
+	}
+
+	if (GNI_CQ_GET_TYPE(cqe) == GNI_CQ_EVENT_TYPE_POST) {
+		status = GNI_GetCompleted(nic->tx_cq, cqe, &gni_desc);
+
+		assert(status == GNI_RC_SUCCESS ||
+		       status == GNI_RC_TRANSACTION_FAILURE);
+
+		txd_p = container_of(gni_desc,
+				   struct gnix_tx_descriptor,
+				   gni_desc);
+	} else if (GNI_CQ_GET_TYPE(cqe) == GNI_CQ_EVENT_TYPE_SMSG) {
+		msg_id = GNI_CQ_GET_MSG_ID(cqe);
+		txd_p = __desc_lkup_by_id(nic, msg_id);
+	}
+
+	if (!txd_p) {
+		GNIX_WARN(FI_LOG_EP_DATA, "Unexpected CQE: 0x%lx", cqe);
+		/* fatal */
+		assert(0);
+	}
+
+	*tx_status = status;
+	*txd = txd_p;
+
+	return 1;
+}
+
 /*
  * function to process GNI CQ TX CQES to progress a gnix_nic
  */
@@ -213,109 +301,27 @@ static int __nic_rx_progress(struct gnix_nic *nic)
 static int __nic_tx_progress(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS;
-	int msg_id=0;
-	gni_return_t  status = GNI_RC_NOT_DONE, status2;
-	gni_post_descriptor_t  *gni_desc=NULL;
-	gni_cq_entry_t cqe;
-	struct gnix_tx_descriptor *gnix_tdesc = NULL;
-	unsigned int recov;
+	gni_return_t tx_status;
+	struct gnix_tx_descriptor *txd = NULL;
 
-try_again:
-	fastlock_acquire(&nic->lock);
-        status = GNI_CqGetEvent(nic->tx_cq, &cqe);
-        if (status  == GNI_RC_NOT_DONE) {
+	do {
+		fastlock_acquire(&nic->lock);
+		if (!__nic_get_completed_txd(nic, &txd, &tx_status)) {
+			fastlock_release(&nic->lock);
+			ret = FI_SUCCESS;
+			break;
+		}
 		fastlock_release(&nic->lock);
-		return FI_SUCCESS;
-	}
 
-	switch (status) {
-	case GNI_RC_SUCCESS:
-		assert(GNI_CQ_STATUS_OK(cqe));
-		/*
-		 * check whether CQE from SMSG or a Post
-		 * transaction
-		 */
-		if (GNI_CQ_GET_TYPE(cqe)
-				== GNI_CQ_EVENT_TYPE_POST) {
-			status2 = GNI_GetCompleted(nic->tx_cq, cqe, &gni_desc);
-			if ((status2 != GNI_RC_SUCCESS) &&
-				(status2 != GNI_RC_TRANSACTION_ERROR)) {
-				ret = gnixu_to_fi_errno(status2);
-			}
-			gnix_tdesc = container_of(gni_desc,
-						struct gnix_tx_descriptor,
-						gni_desc);
-		}  else if (GNI_CQ_GET_TYPE(cqe)
-			    == GNI_CQ_EVENT_TYPE_SMSG) {
-			msg_id = GNI_CQ_GET_MSG_ID(cqe);
-			gnix_tdesc = __desc_lkup_by_id(nic, msg_id);
-			if (gnix_tdesc == NULL)
-				ret = -FI_ENOENT;
-		} else {
-			assert(0);   /* TODO: something better -unexpected event type */
+		if (txd->completer_fn) {
+			ret = txd->completer_fn(txd, tx_status);
+			if (ret != FI_SUCCESS)
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "TXD completer failed: %d", ret);
 		}
+	} while (1);
 
-		fastlock_release(&nic->lock);
-		if (ret == FI_SUCCESS) {
-			if (gnix_tdesc->completer_fn) {
-				ret =
-				   gnix_tdesc->completer_fn(gnix_tdesc);
-				if (ret)
-					goto err;
-			}
-		}
-		break;
-
-	case GNI_RC_TRANSACTION_ERROR: /* uh oh, a hiccup in the network,
-					stupid user, etc. */
-		/* this shouldn't happen SMSG */
-		if (GNI_CQ_GET_TYPE(cqe) == GNI_CQ_EVENT_TYPE_SMSG) {
-			char ebuf[512];
-			GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "CQ error statusfor GNI_SmsgSend - %s\n",
-				  ebuf);
-			goto err1;
-		}
-		status2 = GNI_GetCompleted(nic->tx_cq, cqe, &gni_desc);
-		fastlock_release(&nic->lock);
-		gnix_tdesc = container_of(gni_desc,
-					struct gnix_tx_descriptor,
-					gni_desc);
-		if ((status2 != GNI_RC_SUCCESS) &&
-			(status2 != GNI_RC_TRANSACTION_ERROR)) {
-			ret = gnixu_to_fi_errno(status2);
-			goto err;
-		}
-		/*
- 		 * TODO: need to allow for recover of failed transactions
- 		 */
-		status = GNI_CqErrorRecoverable(cqe,&recov);
-		if ((status == GNI_RC_SUCCESS) && !recov) {
-			char ebuf[512];
-			GNI_CqErrorStr(cqe, ebuf, sizeof(ebuf));
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "CQ error statusfor GNI_Post - %s\n",
-				  ebuf);
-			goto err;
-		}
-
-		break;
-
-	default:
-		assert(0);  /* TODO: better error later */
-	}
-
-	/*
-	 * keep on dequeuing until we get GNI_RC_NOT_DONE
-	 */
-
-	goto try_again;
-err1:
-	fastlock_release(&nic->lock);
-err:
 	return ret;
-
 }
 
 int __nic_vc_progress(struct gnix_nic *nic)
