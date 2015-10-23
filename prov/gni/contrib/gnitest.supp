@@ -23,6 +23,14 @@
    ...
 }
 {
+   ioctl_gni_fma_assign
+   Memcheck:Param
+   ioctl(generic)
+   fun:ioctl
+   fun:gni_fma_assign
+   ...
+}
+{
    GNI_EpPostDataTestById__gnix_dgram_poll
    Memcheck:Addr4
    fun:GNI_EpPostDataTestById
