@@ -943,7 +943,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 			req->msg.recv_md = md;
 		}
 		req->msg.recv_flags = flags;
-		req->msg.tag = r_tag;
 		req->msg.ignore = r_ignore;
 
 		if (req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
