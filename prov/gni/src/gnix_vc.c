@@ -1032,7 +1032,7 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	 */
 
 	fastlock_acquire(&cm_nic->wq_lock);
-	list_add_tail(&cm_nic->cm_nic_wq, &work_req->list);
+	dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
 	fastlock_release(&cm_nic->wq_lock);
 
 	ret = _gnix_cm_nic_progress(cm_nic);
