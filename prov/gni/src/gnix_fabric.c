@@ -153,7 +153,7 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	fab->fab_fid.fid.ops = &gnix_fab_fi_ops;
 	fab->fab_fid.ops = &gnix_fab_ops;
 	_gnix_ref_init(&fab->ref_cnt, 1, __fabric_destruct);
-	list_head_init(&fab->domain_list);
+	dlist_init(&fab->domain_list);
 
 	*fabric = &fab->fab_fid;
 

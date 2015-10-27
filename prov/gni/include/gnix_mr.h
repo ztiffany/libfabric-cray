@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Cray Inc. All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -64,7 +65,6 @@
 
 #include "rdma/fi_domain.h"
 #include "gnix_util.h"
-#include "ccan/list.h"
 #include "common/rbtree.h"
 
 #define GNIX_MR_PAGE_SHIFT 12

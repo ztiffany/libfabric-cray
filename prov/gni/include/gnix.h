@@ -62,7 +62,6 @@ extern "C" {
 #include <fi_rbuf.h>
 #include <fi_list.h>
 #include "gni_pub.h"
-#include "ccan/list.h"
 #include "gnix_util.h"
 #include "gnix_freelist.h"
 #include "gnix_mr.h"
@@ -248,7 +247,7 @@ enum gnix_progress_type {
 struct gnix_fid_fabric {
 	struct fid_fabric fab_fid;
 	/* llist of domains's opened from fabric */
-	struct list_head domain_list;
+	struct dlist_entry domain_list;
 	/* number of bound datagrams for domains opened from
 	 * this fabric object - used by cm nic*/
 	int n_bnd_dgrams;
@@ -271,8 +270,8 @@ extern struct fi_ops_cm gnix_cm_ops;
  */
 struct gnix_fid_domain {
 	struct fid_domain domain_fid;
-	/* used for fabric object llist of domains*/
-	struct list_node list;
+	/* used for fabric object dlist of domains*/
+	struct dlist_entry list;
 	/* list nics this domain is attached to, TODO: thread safety */
 	struct dlist_entry nic_list;
 	struct gnix_fid_fabric *fabric;
@@ -281,8 +280,6 @@ struct gnix_fid_domain {
 	uint32_t cdm_id_seed;
 	/* user tunable parameters accessed via open_ops functions */
 	struct gnix_ops_domain params;
-	/* work queue for domain */
-	struct list_head domain_wq;
 	/* size of gni tx cqs for this domain */
 	uint32_t gni_tx_cq_size;
 	/* size of gni rx cqs for this domain */
@@ -456,7 +453,7 @@ struct gnix_fab_req {
  */
 
 struct gnix_work_req {
-	struct list_node list;
+	struct dlist_entry list;
 	/* function to be invoked to progress this work queue req.
 	   first element is pointer to data needec by the func, second
 	   is a pointer to an int which will be set to 1 if progress
@@ -482,17 +479,6 @@ extern atomic_t gnix_id_counter;
 /*
  * linked list helpers
  */
-
-static inline void gnix_list_node_init(struct list_node *node)
-{
-	node->prev = node->next = NULL;
-}
-
-static inline void gnix_list_del_init(struct list_node *node)
-{
-	list_del(node);
-	node->prev = node->next = node;
-}
 
 static inline void gnix_slist_insert_tail(struct slist_entry *item,
 					  struct slist *list)

@@ -85,7 +85,7 @@ int _gnix_cm_nic_progress(struct gnix_cm_nic *cm_nic)
 	 */
 
 check_again:
-	if (list_empty(&cm_nic->cm_nic_wq))
+	if (dlist_empty(&cm_nic->cm_nic_wq))
 		return ret;
 
 	/*
@@ -96,13 +96,14 @@ check_again:
 	 */
 
 	fastlock_acquire(&cm_nic->wq_lock);
-	p = list_top(&cm_nic->cm_nic_wq, struct gnix_work_req, list);
+	p = dlist_first_entry(&cm_nic->cm_nic_wq, struct gnix_work_req,
+			      list);
 	if (p == NULL) {
 		fastlock_release(&cm_nic->wq_lock);
 		return ret;
 	}
 
-	gnix_list_del_init(&p->list);
+	dlist_remove_init(&p->list);
 	fastlock_release(&cm_nic->wq_lock);
 
 	assert(p->progress_fn);
@@ -124,7 +125,7 @@ check_again:
 		goto check_again;
 	} else {
 		fastlock_acquire(&cm_nic->wq_lock);
-		list_add_tail(&cm_nic->cm_nic_wq, &p->list);
+		dlist_insert_before(&cm_nic->cm_nic_wq, &p->list);
 		fastlock_release(&cm_nic->wq_lock);
 	}
 
@@ -233,7 +234,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 	cm_nic->control_progress = domain->control_progress;
 	fastlock_init(&cm_nic->lock);
 	fastlock_init(&cm_nic->wq_lock);
-	list_head_init(&cm_nic->cm_nic_wq);
+	dlist_init(&cm_nic->cm_nic_wq);
 
 	/*
 	 * prep the cm nic's dgram component

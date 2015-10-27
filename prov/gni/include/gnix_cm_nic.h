@@ -65,7 +65,7 @@ struct gnix_cm_nic {
 	struct gnix_dgram_hndl *dgram_hndl;
 	struct gnix_fid_domain *domain;
 	fastlock_t wq_lock;
-	struct list_head cm_nic_wq;
+	struct dlist_entry cm_nic_wq;
 	enum fi_progress control_progress;
 	uint32_t cdm_id;
 	uint8_t ptag;

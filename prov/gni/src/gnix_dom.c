@@ -84,12 +84,12 @@ static void __domain_destruct(void *obj)
 		_gnix_ref_put(p);
 	}
 
-	_gnix_ref_put(domain->fabric);
-
 	/*
 	 * remove from the list of cdms attached to fabric
 	 */
-	gnix_list_del_init(&domain->list);
+	dlist_remove_init(&domain->list);
+
+	_gnix_ref_put(domain->fabric);
 
 	memset(domain, 0, sizeof *domain);
 	free(domain);
@@ -352,11 +352,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 
 	dlist_init(&domain->nic_list);
-	gnix_list_node_init(&domain->list);
+	dlist_init(&domain->list);
 
-	list_add_tail(&fabric_priv->domain_list, &domain->list);
-
-	list_head_init(&domain->domain_wq);
+	dlist_insert_after(&domain->list, &fabric_priv->domain_list);
 
 	domain->fabric = fabric_priv;
 	_gnix_ref_get(domain->fabric);
