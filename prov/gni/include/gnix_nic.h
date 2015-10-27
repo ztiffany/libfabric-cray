@@ -73,7 +73,7 @@ typedef int (*smsg_callback_fn_t)(void  *ptr, void *msg);
  * typedef for completer functions invoked
  * at initiator when local CQE (tx) is processed
  */
-typedef int (*smsg_completer_fn_t)(void  *desc);
+typedef int (*smsg_completer_fn_t)(void  *desc, gni_return_t);
 
 /**
  * Set of attributes that can be passed to the gnix_alloc_nic.
@@ -176,6 +176,7 @@ struct gnix_nic {
 	struct gnix_mbox_alloc_handle *r_rdma_buf_hndl;
 	struct gnix_reference ref_cnt;
 	smsg_callback_fn_t const *smsg_callbacks;
+	struct slist err_txds;
 };
 
 
@@ -259,8 +260,9 @@ struct gnix_tx_descriptor {
 		struct gnix_smsg_rma_data_hdr    rma_data_hdr;
 	};
 	struct gnix_fab_req *req;
-	int  (*completer_fn)(void *);
+	int  (*completer_fn)(void *, gni_return_t);
 	int id;
+	struct slist_entry err_list;
 };
 
 /*
@@ -377,6 +379,9 @@ static inline void *__gnix_nic_elem_by_rem_id(struct gnix_nic *nic, int rem_id)
 	return nic->vc_id_table[rem_id];
 	return 0;
 }
+
+void _gnix_nic_txd_err_inject(struct gnix_nic *nic,
+			      struct gnix_tx_descriptor *txd);
 
 #ifdef __cplusplus
 } /* extern "C" */

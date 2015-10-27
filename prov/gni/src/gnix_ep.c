@@ -321,11 +321,15 @@ ssize_t gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
  * EP RMA API function implementations.
  ******************************************************************************/
 
+#define GNIX_RMA_READ_FLAGS_DEF		(FI_RMA | FI_READ)
+#define GNIX_RMA_WRITE_FLAGS_DEF	(FI_RMA | FI_WRITE)
+
 static ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 			    void *desc, fi_addr_t src_addr, uint64_t addr,
 			    uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
+	uint64_t flags;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -334,10 +338,12 @@ static ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = gnix_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_READ,
 			 (uint64_t)buf, len, desc,
 			 src_addr, addr, key,
-			 context, gnix_ep->op_flags, 0);
+			 context, flags, 0);
 }
 
 static ssize_t gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov,
@@ -345,6 +351,7 @@ static ssize_t gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov,
 			     uint64_t addr, uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
+	uint64_t flags;
 
 	if (!ep || !iov || !desc || count != 1) {
 		return -FI_EINVAL;
@@ -353,10 +360,12 @@ static ssize_t gnix_ep_readv(struct fid_ep *ep, const struct iovec *iov,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = gnix_ep->op_flags | GNIX_RMA_READ_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_READ,
 			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
 			 src_addr, addr, key,
-			 context, gnix_ep->op_flags, 0);
+			 context, flags, 0);
 }
 
 static ssize_t gnix_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -373,11 +382,13 @@ static ssize_t gnix_ep_readmsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = (flags & GNIX_READMSG_FLAGS) | GNIX_RMA_READ_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_READ,
 			 (uint64_t)msg->msg_iov[0].iov_base,
 			 msg->msg_iov[0].iov_len, msg->desc[0],
 			 msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			 msg->context, flags & GNIX_READMSG_FLAGS, msg->data);
+			 msg->context, flags, msg->data);
 }
 
 static ssize_t gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len,
@@ -385,6 +396,7 @@ static ssize_t gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len,
 			     uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
+	uint64_t flags;
 
 	if (!ep) {
 		return -FI_EINVAL;
@@ -393,10 +405,11 @@ static ssize_t gnix_ep_write(struct fid_ep *ep, const void *buf, size_t len,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = gnix_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
-			 (uint64_t)buf, len, desc,
-			 dest_addr, addr, key,
-			 context, gnix_ep->op_flags, 0);
+			 (uint64_t)buf, len, desc, dest_addr, addr, key,
+			 context, flags, 0);
 }
 
 static ssize_t gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov,
@@ -404,6 +417,7 @@ static ssize_t gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov,
 			      uint64_t addr, uint64_t key, void *context)
 {
 	struct gnix_fid_ep *gnix_ep;
+	uint64_t flags;
 
 	if (!ep || !iov || !desc || count != 1) {
 		return -FI_EINVAL;
@@ -412,10 +426,11 @@ static ssize_t gnix_ep_writev(struct fid_ep *ep, const struct iovec *iov,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = gnix_ep->op_flags | GNIX_RMA_WRITE_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)iov[0].iov_base, iov[0].iov_len, desc[0],
-			 dest_addr, addr, key,
-			 context, gnix_ep->op_flags, 0);
+			 dest_addr, addr, key, context, flags, 0);
 }
 
 static ssize_t gnix_ep_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
@@ -432,11 +447,13 @@ static ssize_t gnix_ep_writemsg(struct fid_ep *ep, const struct fi_msg_rma *msg,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
+	flags = (flags & GNIX_WRITEMSG_FLAGS) | GNIX_RMA_WRITE_FLAGS_DEF;
+
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)msg->msg_iov[0].iov_base,
 			 msg->msg_iov[0].iov_len, msg->desc[0],
 			 msg->addr, msg->rma_iov[0].addr, msg->rma_iov[0].key,
-			 msg->context, flags & GNIX_WRITEMSG_FLAGS, msg->data);
+			 msg->context, flags, msg->data);
 }
 
 static ssize_t gnix_ep_rma_inject(struct fid_ep *ep, const void *buf,
@@ -453,7 +470,8 @@ static ssize_t gnix_ep_rma_inject(struct fid_ep *ep, const void *buf,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
-	flags = gnix_ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION;
+	flags = gnix_ep->op_flags | FI_INJECT | GNIX_SUPPRESS_COMPLETION |
+			GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)buf, len, NULL,
@@ -476,7 +494,8 @@ static ssize_t gnix_ep_writedata(struct fid_ep *ep, const void *buf,
 	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
-	flags = gnix_ep->op_flags | FI_REMOTE_CQ_DATA;
+	flags = gnix_ep->op_flags | FI_REMOTE_CQ_DATA |
+			GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)buf, len, desc,
@@ -500,7 +519,7 @@ static ssize_t gnix_ep_rma_injectdata(struct fid_ep *ep, const void *buf,
 	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
 
 	flags = gnix_ep->op_flags | FI_INJECT | FI_REMOTE_CQ_DATA |
-			GNIX_SUPPRESS_COMPLETION;
+			GNIX_SUPPRESS_COMPLETION | GNIX_RMA_WRITE_FLAGS_DEF;
 
 	return _gnix_rma(gnix_ep, GNIX_FAB_RQ_RDMA_WRITE,
 			 (uint64_t)buf, len, NULL,

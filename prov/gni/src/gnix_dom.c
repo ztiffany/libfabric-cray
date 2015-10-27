@@ -159,6 +159,8 @@ static const uint32_t default_mbox_msg_maxsize = 16384;
 /* rx cq bigger to avoid having to deal with rx overruns so much */
 static const uint32_t default_rx_cq_size = 16384;
 static const uint32_t default_tx_cq_size = 2048;
+static const uint32_t default_max_retransmits = 5;
+static const int32_t default_err_inject_count; /* static var is zeroed */
 
 static int
 __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
@@ -211,6 +213,12 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_TX_CQ_SIZE:
 		*(uint32_t *)val = domain->params.tx_cq_size;
+		break;
+	case GNI_MAX_RETRANSMITS:
+		*(uint32_t *)val = domain->params.max_retransmits;
+		break;
+	case GNI_ERR_INJECT_COUNT:
+		*(int32_t *)val = domain->params.err_inject_count;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -271,6 +279,12 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_TX_CQ_SIZE:
 		domain->params.tx_cq_size = *(uint32_t *)val;
+		break;
+	case GNI_MAX_RETRANSMITS:
+		domain->params.max_retransmits = *(uint32_t *)val;
+		break;
+	case GNI_ERR_INJECT_COUNT:
+		domain->params.err_inject_count = *(int32_t *)val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -374,6 +388,8 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	domain->params.mbox_num_per_slab = default_mbox_num_per_slab;
 	domain->params.mbox_maxcredit = default_mbox_maxcredit;
 	domain->params.mbox_msg_maxsize = default_mbox_msg_maxsize;
+	domain->params.max_retransmits = default_max_retransmits;
+	domain->params.err_inject_count = default_err_inject_count;
 
 	domain->gni_tx_cq_size = default_tx_cq_size;
 	domain->gni_rx_cq_size = default_rx_cq_size;
