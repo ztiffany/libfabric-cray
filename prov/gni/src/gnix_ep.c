@@ -536,7 +536,7 @@ static ssize_t gnix_ep_trecv(struct fid_ep *ep, void *buf, size_t len,
 			     uint64_t ignore, void *context)
 {
 	return __ep_recv(ep, buf, len, desc, src_addr, context,
-			GNIX_MSG_TAGGED, tag, ignore);
+			FI_TAGGED, tag, ignore);
 }
 
 static ssize_t gnix_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
@@ -544,7 +544,7 @@ static ssize_t gnix_ep_trecvv(struct fid_ep *ep, const struct iovec *iov,
 			      uint64_t tag, uint64_t ignore, void *context)
 {
 	return __ep_recvv(ep, iov, desc, count, src_addr, context,
-			GNIX_MSG_TAGGED, tag, ignore);
+			FI_TAGGED, tag, ignore);
 }
 
 static ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
@@ -561,7 +561,7 @@ static ssize_t gnix_ep_trecvmsg(struct fid_ep *ep,
 			.data = msg->data
 	};
 
-	clean_flags = (flags & (GNIX_TRECVMSG_FLAGS)) | GNIX_MSG_TAGGED;
+	clean_flags = (flags & (GNIX_TRECVMSG_FLAGS)) | FI_TAGGED;
 
 	/* From the fi_tagged man page regarding the use of FI_CLAIM:
 	 *
@@ -592,7 +592,7 @@ static ssize_t gnix_ep_tsend(struct fid_ep *ep, const void *buf, size_t len, voi
 			     fi_addr_t dest_addr, uint64_t tag, void *context)
 {
 	return __ep_send(ep, buf, len, desc, dest_addr, context,
-			GNIX_MSG_TAGGED, tag);
+			FI_TAGGED, tag);
 }
 
 static ssize_t gnix_ep_tsendv(struct fid_ep *ep, const struct iovec *iov,
@@ -600,7 +600,7 @@ static ssize_t gnix_ep_tsendv(struct fid_ep *ep, const struct iovec *iov,
 			      uint64_t tag, void *context)
 {
 	return __ep_sendv(ep, iov, desc, count, dest_addr, context,
-			GNIX_MSG_TAGGED, tag);
+			FI_TAGGED, tag);
 }
 
 static ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
@@ -617,7 +617,7 @@ static ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
 			.data = msg->data
 	};
 
-	clean_flags = (flags & GNIX_SENDMSG_FLAGS) | GNIX_MSG_TAGGED;
+	clean_flags = (flags & GNIX_SENDMSG_FLAGS) | FI_TAGGED;
 
 	return __ep_sendmsg(ep, &_msg, clean_flags, msg->tag);
 }
@@ -625,7 +625,7 @@ static ssize_t gnix_ep_tsendmsg(struct fid_ep *ep,
 static ssize_t gnix_ep_tinject(struct fid_ep *ep, const void *buf, size_t len,
 			       fi_addr_t dest_addr, uint64_t tag)
 {
-	return __ep_inject(ep, buf, len, dest_addr, GNIX_MSG_TAGGED, tag);
+	return __ep_inject(ep, buf, len, dest_addr, FI_TAGGED, tag);
 }
 
 ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
@@ -633,7 +633,7 @@ ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 			  uint64_t tag, void *context)
 {
 	return __ep_senddata(ep, buf, len, desc, data, dest_addr, context,
-			GNIX_MSG_TAGGED, tag);
+			FI_TAGGED, tag);
 }
 
 /*******************************************************************************
