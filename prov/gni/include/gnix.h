@@ -117,7 +117,6 @@ extern "C" {
 #define GNIX_SUPPRESS_COMPLETION	(1ULL << 60)	/* TX only flag */
 #define GNIX_RMA_RDMA			(1ULL << 61)	/* RMA only flag */
 #define GNIX_MSG_RENDEZVOUS		(1ULL << 61)	/* MSG only flag */
-#define GNIX_MSG_TAGGED			(1ULL << 62)	/* MSG only flag */
 
 /*
  * Cray gni provider supported flags for fi_getinfo argument for now, needs
@@ -171,8 +170,7 @@ extern "C" {
 /*
  * Valid completion event flags.  See fi_cq.3.
  */
-#define GNIX_RMA_COMPLETION_FLAGS	(FI_RMA | FI_READ | FI_WRITE | \
-					 FI_REMOTE_CQ_DATA)
+#define GNIX_RMA_COMPLETION_FLAGS	(FI_RMA | FI_READ | FI_WRITE)
 
 /*
  * GNI provider fabric default values
@@ -455,14 +453,28 @@ struct gnix_fab_req {
 
 static inline int _gnix_req_inject_err(struct gnix_fab_req *req)
 {
-	int max = req->gnix_ep->domain->params.err_inject_count;
+	int err_cnt = req->gnix_ep->domain->params.err_inject_count;
 
-	if (likely(!max)) {
+	if (likely(!err_cnt)) {
 		return 0;
-	} else if (max > 0) {
-		return req->tx_failures < max;
-	} else { /* (max < 0) */
-		return req->tx_failures < (rand() % (-max));
+	} else if (err_cnt > 0) {
+		return req->tx_failures < err_cnt;
+	} else { /* (err_cnt < 0) */
+		return req->tx_failures < (rand() % (-err_cnt));
+	}
+}
+
+static inline int _gnix_req_inject_smsg_err(struct gnix_fab_req *req)
+{
+	int err_cnt = req->gnix_ep->domain->params.err_inject_count;
+	int retrans_cnt = req->gnix_ep->domain->params.max_retransmits;
+
+	if (likely(!err_cnt)) {
+		return 0;
+	} else if (retrans_cnt <= err_cnt) {
+		return 1;
+	} else {
+		return 0;
 	}
 }
 

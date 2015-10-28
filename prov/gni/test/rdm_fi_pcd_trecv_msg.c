@@ -602,27 +602,38 @@ static void build_peek_message(
 	peek_iov.iov_len = msg->msg_iov[0].iov_len;
 }
 
+#define TSEND_FLAGS (FI_MSG | FI_SEND | FI_TAGGED)
+#define TRECV_FLAGS (FI_MSG | FI_RECV | FI_TAGGED)
+
 static void validate_cqe_contents(
 		struct fi_cq_tagged_entry *entry,
+		uint64_t flags,
 		void *buf,
 		size_t len,
 		uint64_t tag,
 		void *context)
 {
-
-	/* the buffer entry may be valid if null. Provider specific */
-	if (entry->buf != NULL)
-		cr_assert_eq(entry->buf, buf);
-	cr_assert_eq(entry->len, len);
-	cr_assert_eq(entry->tag, tag);
 	cr_assert_eq(entry->op_context, context);
+	cr_assert_eq(entry->flags, flags);
+	cr_assert_eq(entry->data, 0);
+
+	if (flags & FI_RECV) {
+		cr_assert_eq(entry->len, len);
+		cr_assert_eq(entry->tag, tag);
+		if (entry->buf != NULL)
+			cr_assert_eq(entry->buf, buf);
+	} else {
+		cr_assert_eq(entry->len, 0);
+		cr_assert_eq(entry->tag, 0);
+		cr_assert_eq(entry->buf, 0);
+	}
 }
 
 static void validate_cqe_with_message(
 		struct fi_cq_tagged_entry *entry,
 		struct fi_msg_tagged *msg)
 {
-	validate_cqe_contents(entry, msg->msg_iov[0].iov_base,
+	validate_cqe_contents(entry, TRECV_FLAGS, msg->msg_iov[0].iov_base,
 			msg->msg_iov[0].iov_len, msg->tag, msg->context);
 }
 
@@ -799,7 +810,7 @@ static void pdc_peek_event_present_buffer_provided(int len)
 	ASSERT_SEND_RECV_DONE;
 
 	/* validate the expected results */
-	validate_cqe_contents(&s_cqe, source, len, len, target);
+	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
 	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
 
 	/* if CQE provided a buffer back, the data was copied.
@@ -926,7 +937,7 @@ static void pdc_peek_event_present_no_buff_provided(int len)
 	ASSERT_SEND_RECV_DONE;
 
 	/* verify test execution correctness */
-	validate_cqe_contents(&s_cqe, source, len, len, target);
+	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
 	validate_cqe_with_message(&d_cqe, &msg);
 
 	/* a pointer should never be returned */
@@ -1084,9 +1095,9 @@ static void pdc_peek_claim_same_tag(int len)
 	map_src_cqes_to_src_context(s_cqe, src_cqe, src_context);
 
 	/* verify test execution correctness */
-	validate_cqe_contents(src_cqe[0],
+	validate_cqe_contents(src_cqe[0], TSEND_FLAGS,
 			src_buf[0], len, len, dst_buf[0]);
-	validate_cqe_contents(src_cqe[1],
+	validate_cqe_contents(src_cqe[1], TSEND_FLAGS,
 			src_buf[1], len, len, dst_buf[1]);
 	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
 	validate_cqe_with_message(&d_cqe[1], &msg[1]);
@@ -1257,7 +1268,7 @@ static void pdc_peek_claim_unique_tag(int len)
 
 	/* verify test execution correctness */
 	for (i = 0; i < 2; i++)
-		validate_cqe_contents(src_cqe[i],
+		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
 	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
@@ -1384,7 +1395,7 @@ static void pdc_peek_discard(int len)
 	ASSERT_SEND_RECV_DONE;
 
 	/* verify test execution correctness */
-	validate_cqe_contents(&s_cqe, source, len, len, target);
+	validate_cqe_contents(&s_cqe, TSEND_FLAGS, source, len, len, target);
 	validate_cqe_with_message(&d_peek_cqe, &peek_msg);
 
 	cr_assert(rdm_fi_pdc_check_data_pattern(target, 0, len),
@@ -1538,7 +1549,7 @@ static void pdc_peek_discard_unique_tags(int len)
 
 	/* verify test execution correctness */
 	for (i = 0; i < 2; i++)
-		validate_cqe_contents(src_cqe[i],
+		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
 	validate_cqe_with_message(&d_cqe[1], &msg[1]);
@@ -1706,7 +1717,7 @@ static void pdc_peek_claim_then_claim_discard(int len)
 
 	/* verify test execution correctness */
 	for (i = 0; i < 2; i++)
-		validate_cqe_contents(src_cqe[i],
+		validate_cqe_contents(src_cqe[i], TSEND_FLAGS,
 				src_buf[i], len, len + i, dst_buf[i]);
 
 	validate_cqe_with_message(&d_peek_cqe, &peek_msg);

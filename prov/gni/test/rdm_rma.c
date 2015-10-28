@@ -87,6 +87,13 @@ char *uc_source;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
 
+static struct fid_cntr *write_cntr, *read_cntr;
+static struct fi_cntr_attr cntr_attr = {
+	.events = FI_CNTR_EVENTS_COMP,
+	.flags = 0
+};
+static uint64_t writes, reads, write_errs, read_errs;
+
 void rdm_rma_setup(void)
 {
 	int ret = 0;
@@ -122,7 +129,7 @@ void rdm_rma_setup(void)
 	ret = fi_endpoint(dom, fi, &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	cq_attr.format = FI_CQ_FORMAT_CONTEXT;
+	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	cq_attr.size = 1024;
 	cq_attr.wait_obj = 0;
 
@@ -151,7 +158,7 @@ void rdm_rma_setup(void)
 	ret = fi_endpoint(dom, fi, &ep[1], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
-	cq_attr.format = FI_CQ_FORMAT_DATA;
+	cq_attr.format = FI_CQ_FORMAT_TAGGED;
 	ret = fi_cq_open(dom, &cq_attr, &recv_cq, 0);
 	cr_assert(!ret, "fi_cq_open");
 
@@ -199,11 +206,28 @@ void rdm_rma_setup(void)
 	assert(uc_source);
 
 	mr_key = fi_mr_key(rem_mr);
+
+	ret = fi_cntr_open(dom, &cntr_attr, &write_cntr, 0);
+	cr_assert(!ret, "fi_cntr_open");
+
+	ret = fi_ep_bind(ep[0], &write_cntr->fid, FI_WRITE);
+	cr_assert(!ret, "fi_ep_bind");
+
+	ret = fi_cntr_open(dom, &cntr_attr, &read_cntr, 0);
+	cr_assert(!ret, "fi_cntr_open");
+
+	ret = fi_ep_bind(ep[0], &read_cntr->fid, FI_READ);
+	cr_assert(!ret, "fi_ep_bind");
+
+	writes = reads = write_errs = read_errs = 0;
 }
 
 void rdm_rma_teardown(void)
 {
 	int ret = 0;
+
+	fi_close(&read_cntr->fid);
+	fi_close(&write_cntr->fid);
 
 	free(uc_source);
 
@@ -261,6 +285,38 @@ int check_data(char *buf1, char *buf2, int len)
 	return 1;
 }
 
+void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
+			uint64_t flags, uint64_t data)
+{
+	cr_assert(tcqe->op_context == ctx, "CQE Context mismatch");
+	cr_assert(tcqe->flags == flags, "CQE flags mismatch");
+
+	if (flags & FI_REMOTE_CQ_DATA) {
+		cr_assert(tcqe->data == data, "CQE data invalid");
+	} else {
+		cr_assert(tcqe->data == 0, "CQE data invalid");
+	}
+
+	cr_assert(tcqe->len == 0, "CQE length mismatch");
+	cr_assert(tcqe->buf == 0, "CQE address mismatch");
+	cr_assert(tcqe->tag == 0, "CQE tag invalid");
+}
+
+void rdm_rma_check_cntrs(uint64_t w, uint64_t r, uint64_t w_e, uint64_t r_e)
+{
+	writes += w;
+	reads += r;
+	write_errs += w_e;
+	read_errs += r_e;
+
+	cr_assert(fi_cntr_read(write_cntr) == writes, "Bad write count");
+	cr_assert(fi_cntr_read(read_cntr) == reads, "Bad read count");
+	cr_assert(fi_cntr_readerr(write_cntr) == write_errs,
+		  "Bad write err count");
+	cr_assert(fi_cntr_readerr(read_cntr) == read_errs,
+		  "Bad read err count");
+}
+
 void xfer_for_each_size(void (*xfer)(int len), int slen, int elen)
 {
 	int i;
@@ -290,7 +346,7 @@ void do_write(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
@@ -304,7 +360,8 @@ void do_write(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -326,7 +383,7 @@ void do_writev(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 
 	iov.iov_base = source;
@@ -344,7 +401,8 @@ void do_writev(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -366,7 +424,7 @@ void do_writemsg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -397,7 +455,8 @@ void do_writemsg(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -431,7 +490,7 @@ void do_write_fence(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -469,7 +528,7 @@ void do_write_fence(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
 
 	/* event B */
 	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
@@ -477,7 +536,8 @@ void do_write_fence(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(2, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -500,7 +560,7 @@ void do_inject_write(int len)
 {
 	ssize_t sz;
 	int ret, i, loops = 0;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
@@ -536,8 +596,7 @@ void do_writedata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
-	struct fi_cq_data_entry dcqe;
+	struct fi_cq_tagged_entry cqe, dcqe;
 
 #define WRITE_DATA 0x5123da1a145
 	init_data(source, len, 0x23);
@@ -552,7 +611,8 @@ void do_writedata(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -563,12 +623,9 @@ void do_writedata(int len)
 	}
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
 
-	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
-	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-		  "Bad dcqe flags");
-	cr_assert(dcqe.len == 0, "Bad dcqe length");
-	cr_assert(dcqe.buf == 0, "Bad dcqe address");
-	cr_assert(dcqe.data == WRITE_DATA, "Bad immediate data");
+	rdm_rma_check_tcqe(&dcqe, NULL,
+			   (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
+			   WRITE_DATA);
 }
 
 Test(rdm_rma, writedata)
@@ -587,8 +644,7 @@ void do_inject_writedata(int len)
 {
 	ssize_t sz;
 	int ret, i, loops = 0;
-	struct fi_cq_entry cqe;
-	struct fi_cq_data_entry dcqe;
+	struct fi_cq_tagged_entry cqe, dcqe;
 
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
@@ -614,12 +670,9 @@ void do_inject_writedata(int len)
 	}
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
 
-	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
-	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-		  "Bad dcqe flags");
-	cr_assert(dcqe.len == 0, "Bad dcqe length");
-	cr_assert(dcqe.buf == 0, "Bad dcqe address");
-	cr_assert(dcqe.data == INJECTWRITE_DATA, "Bad immediate data");
+	rdm_rma_check_tcqe(&dcqe, NULL,
+			   (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
+			   INJECTWRITE_DATA);
 }
 
 Test(rdm_rma, inject_writedata)
@@ -637,7 +690,7 @@ void do_read(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 #define READ_CTX 0x4e3dda1aULL
 	init_data(source, len, 0);
@@ -652,7 +705,8 @@ void do_read(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, READ_CTX);
+	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+	rdm_rma_check_cntrs(0, 1, 0, 0);
 
 	dbg_printf("got read context event!\n");
 
@@ -674,7 +728,7 @@ void do_readv(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 
 	iov.iov_base = source;
@@ -692,7 +746,8 @@ void do_readv(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	rdm_rma_check_cntrs(0, 1, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -714,7 +769,7 @@ void do_readmsg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -745,7 +800,8 @@ void do_readmsg(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	rdm_rma_check_cntrs(0, 1, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -768,11 +824,10 @@ void do_readmsgdata(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe, dcqe;
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
-	struct fi_cq_data_entry dcqe;
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -800,7 +855,8 @@ void do_readmsgdata(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	rdm_rma_check_cntrs(0, 1, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -812,12 +868,9 @@ void do_readmsgdata(int len)
 	}
 	cr_assert(ret != FI_SUCCESS, "Missing remote data");
 
-	cr_assert(dcqe.op_context == NULL, "Bad dcqe context value");
-	cr_assert(dcqe.flags == (FI_RMA | FI_REMOTE_READ | FI_REMOTE_CQ_DATA),
-		  "Bad dcqe flags");
-	cr_assert(dcqe.len == 0, "Bad dcqe length");
-	cr_assert(dcqe.buf == 0, "Bad dcqe address");
-	cr_assert(dcqe.data == READ_DATA, "Bad immediate data");
+	rdm_rma_check_tcqe(&dcqe, NULL,
+			   (FI_RMA | FI_REMOTE_READ | FI_REMOTE_CQ_DATA),
+			   READ_DATA);
 }
 
 Test(rdm_rma, readmsgdata)
@@ -835,7 +888,7 @@ Test(rdm_rma, inject)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct iovec iov;
 	struct fi_msg_rma msg;
 	struct fi_rma_iov rma_iov;
@@ -871,7 +924,8 @@ Test(rdm_rma, inject)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -883,7 +937,7 @@ void do_write_autoreg(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
@@ -897,7 +951,8 @@ void do_write_autoreg(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -913,7 +968,7 @@ void do_write_autoreg_uncached(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 
 	init_data(uc_source, len, 0xab);
 	init_data(target, len, 0);
@@ -927,7 +982,8 @@ void do_write_autoreg_uncached(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	cr_assert_eq((uint64_t)cqe.op_context, (uint64_t)target);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_cntrs(1, 0, 0, 0);
 
 	dbg_printf("got write context event!\n");
 
@@ -943,7 +999,7 @@ void do_write_error(int len)
 {
 	int ret;
 	ssize_t sz;
-	struct fi_cq_entry cqe;
+	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
 
 	init_data(source, len, 0xab);
@@ -962,20 +1018,6 @@ void do_write_error(int len)
 	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
 	cr_assert_eq(ret, 1);
 
-#if 0
-	struct fi_cq_err_entry {
-		void     *op_context; /* operation context */
-		uint64_t flags;       /* completion flags */
-		size_t   len;         /* size of received data */
-		void     *buf;        /* receive data buffer */
-		uint64_t data;        /* completion data */
-		uint64_t tag;         /* message tag */
-		size_t   olen;        /* overflow length */
-		int      err;         /* positive error code */
-		int      prov_errno;  /* provider error code */
-		void    *err_data;    /*  error data */
-	};
-#endif
 	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)target,
 		  "Bad error context");
 	cr_assert(err_cqe.flags == (FI_RMA | FI_WRITE));
@@ -988,6 +1030,8 @@ void do_write_error(int len)
 	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
+	rdm_rma_check_cntrs(0, 0, 1, 0);
 }
 
 Test(rdm_rma, write_error)
@@ -1000,5 +1044,56 @@ Test(rdm_rma, write_error)
 	err_inject_enable();
 
 	xfer_for_each_size(do_write_error, 8, BUF_SZ);
+}
+
+void do_read_error(int len)
+{
+	int ret;
+	ssize_t sz;
+	struct fi_cq_tagged_entry cqe;
+	struct fi_cq_err_entry err_cqe;
+
+	init_data(source, len, 0);
+	init_data(target, len, 0xad);
+	sz = fi_read(ep[0], source, len,
+			loc_mr, gni_addr[1], (uint64_t)target, mr_key,
+			(void *)READ_CTX);
+	cr_assert_eq(sz, 0);
+
+	while ((ret = fi_cq_read(send_cq, &cqe, 1)) == -FI_EAGAIN) {
+		pthread_yield();
+	}
+
+	cr_assert_eq(ret, -FI_EAVAIL);
+
+	ret = fi_cq_readerr(send_cq, &err_cqe, 0);
+	cr_assert_eq(ret, 1);
+
+	cr_assert((uint64_t)err_cqe.op_context == (uint64_t)READ_CTX,
+		  "Bad error context");
+	cr_assert(err_cqe.flags == (FI_RMA | FI_READ));
+	cr_assert(err_cqe.len == 0, "Bad error len");
+	cr_assert(err_cqe.buf == 0, "Bad error buf");
+	cr_assert(err_cqe.data == 0, "Bad error data");
+	cr_assert(err_cqe.tag == 0, "Bad error tag");
+	cr_assert(err_cqe.olen == 0, "Bad error olen");
+	cr_assert(err_cqe.err == FI_ECANCELED, "Bad error errno");
+	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
+		  "Bad prov errno");
+	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
+	rdm_rma_check_cntrs(0, 0, 0, 1);
+}
+
+Test(rdm_rma, read_error)
+{
+	int ret, max_retrans_val = 1;
+
+	ret = gni_domain_ops->set_val(&dom->fid, GNI_MAX_RETRANSMITS,
+				      &max_retrans_val);
+	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
+	err_inject_enable();
+
+	xfer_for_each_size(do_read_error, 8, BUF_SZ);
 }
 

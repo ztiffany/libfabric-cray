@@ -69,6 +69,19 @@ static void __gnix_msg_queues(struct gnix_fid_ep *ep,
 	}
 }
 
+static void __gnix_msg_fr_complete(struct gnix_fab_req *req,
+				   struct gnix_tx_descriptor *txd)
+{
+	atomic_dec(&req->vc->outstanding_tx_reqs);
+
+	_gnix_nic_tx_free(req->gnix_ep->nic, txd);
+
+	/* We could have requests waiting for TXDs or FI_FENCE operations.
+	 * Schedule this VC to push any such requests. */
+	_gnix_vc_schedule_reqs(req->vc);
+
+	_gnix_fr_free(req->gnix_ep, req);
+}
 
 static int __recv_completion(
 		struct gnix_fid_ep *ep,
@@ -82,11 +95,11 @@ static int __recv_completion(
 {
 	int rc;
 
-	if (ep->recv_cq) {
+	if ((req->msg.recv_flags & FI_COMPLETION) && ep->recv_cq) {
 		rc = _gnix_cq_add_event(ep->recv_cq, context, flags, len,
 					addr, data, tag);
 		if (rc != FI_SUCCESS)  {
-			GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+			GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_cq_add_event returned %d\n",
 					rc);
 		}
@@ -95,7 +108,7 @@ static int __recv_completion(
 	if (ep->recv_cntr) {
 		rc = _gnix_cntr_inc(ep->recv_cntr);
 		if (rc != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_CQ,
+			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cntr_inc() failed: %d\n",
 				  rc);
 	}
@@ -120,24 +133,49 @@ static inline int __gnix_recv_completion(struct gnix_fid_ep *ep,
 			req->msg.tag);
 }
 
-static int __gnix_send_completion(struct gnix_fid_ep *ep,
-				  struct gnix_fab_req *req)
+static int __gnix_send_err(struct gnix_fid_ep *ep, struct gnix_fab_req *req)
 {
-	uint64_t flags = FI_RECV | FI_MSG;
+	uint64_t flags = FI_SEND | FI_MSG;
 	int rc;
 
 	flags |= req->msg.send_flags & FI_TAGGED;
 
 	if (ep->send_cq) {
+		rc = _gnix_cq_add_error(ep->send_cq, req->user_context,
+					flags, 0, 0, 0, 0, 0, FI_ECANCELED,
+					GNI_RC_TRANSACTION_ERROR, NULL);
+		if (rc != FI_SUCCESS)  {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				   "_gnix_cq_add_error() returned %d\n",
+				   rc);
+		}
+	}
+
+	if (ep->send_cntr) {
+		rc = _gnix_cntr_inc_err(ep->send_cntr);
+		if (rc != FI_SUCCESS)
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_cntr_inc() failed: %d\n",
+				  rc);
+	}
+
+	return FI_SUCCESS;
+}
+
+static int __gnix_send_completion(struct gnix_fid_ep *ep,
+				  struct gnix_fab_req *req)
+{
+	uint64_t flags = FI_SEND | FI_MSG;
+	int rc;
+
+	flags |= req->msg.send_flags & FI_TAGGED;
+
+	if ((req->msg.send_flags & FI_COMPLETION) && ep->send_cq) {
 		rc = _gnix_cq_add_event(ep->send_cq,
 				req->user_context,
-				FI_SEND | FI_MSG,
-				req->msg.send_len,
-				(void *)req->msg.send_addr,
-				req->msg.imm,
-				req->msg.tag);
+				flags, 0, 0, 0, 0);
 		if (rc != FI_SUCCESS)  {
-			GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+			GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_cq_add_event returned %d\n",
 					rc);
 		}
@@ -146,12 +184,46 @@ static int __gnix_send_completion(struct gnix_fid_ep *ep,
 	if (ep->send_cntr) {
 		rc = _gnix_cntr_inc(ep->send_cntr);
 		if (rc != FI_SUCCESS)
-			GNIX_WARN(FI_LOG_CQ,
+			GNIX_WARN(FI_LOG_EP_DATA,
 				  "_gnix_cntr_inc() failed: %d\n",
 				  rc);
 	}
 
 	return FI_SUCCESS;
+}
+
+static int __gnix_send_smsg_err(struct gnix_tx_descriptor *txd)
+{
+	struct gnix_fab_req *req = txd->req;
+	int rc;
+
+	/* SMSG is auto-retransmitting.  If GNI returned error, we're done. */
+
+	GNIX_INFO(FI_LOG_EP_DATA, "Failed transaction: %p\n", req);
+	rc = __gnix_send_err(req->gnix_ep, req);
+	if (rc != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_send_err() failed: %d\n",
+			  rc);
+
+	__gnix_msg_fr_complete(req, txd);
+	return FI_SUCCESS;
+}
+
+static int __gnix_send_post_err(struct gnix_tx_descriptor *txd)
+{
+	struct gnix_fab_req *req = txd->req;
+
+	req->tx_failures++;
+	if (req->tx_failures < req->gnix_ep->domain->params.max_retransmits) {
+		GNIX_INFO(FI_LOG_EP_DATA,
+			  "Requeueing failed request: %p\n", req);
+		return _gnix_vc_queue_req(req);
+	}
+
+	/* TODO should this be fatal? A request will sit waiting at the
+	 * peer. */
+	return __gnix_send_smsg_err(txd);
 }
 
 static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
@@ -161,6 +233,10 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	struct gnix_nic *nic;
 	struct gnix_fid_ep *ep;
 	gni_return_t status;
+
+	if (tx_status != GNI_RC_SUCCESS) {
+		return __gnix_send_post_err(txd);
+	}
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV GET, req: %p\n", req);
 
@@ -232,6 +308,7 @@ static int __gnix_rndzv_req(void *arg)
 	gni_return_t status;
 	int rc;
 	struct fid_mr *auto_mr = NULL;
+	int inject_err = _gnix_req_inject_err(req);
 
 	if (!req->msg.recv_md) {
 		rc = gnix_mr_reg(&ep->domain->domain_fid.fid,
@@ -271,11 +348,15 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.rdma_mode = 0;
 	txd->gni_desc.src_cq_hndl = nic->tx_cq;
 
-	/* TODO NIC lock is held for now */
-	status = GNI_PostRdma(req->vc->gni_ep, &txd->gni_desc);
-	if (status != GNI_RC_SUCCESS) {
-		GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
-			  gni_err_str[status]);
+	if (inject_err) {
+		_gnix_nic_txd_err_inject(nic, txd);
+		status = GNI_RC_SUCCESS;
+	} else {
+		status = GNI_PostRdma(req->vc->gni_ep, &txd->gni_desc);
+		if (status != GNI_RC_SUCCESS) {
+			GNIX_INFO(FI_LOG_EP_DATA, "GNI_PostRdma failed: %s\n",
+				  gni_err_str[status]);
+		}
 	}
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Initiated RNDZV GET, req: %p\n", req);
@@ -289,29 +370,24 @@ static int __gnix_rndzv_req(void *arg)
 
 static int __comp_eager_msg_w_data(void *data, gni_return_t tx_status)
 {
+	struct gnix_tx_descriptor *tdesc = (struct gnix_tx_descriptor *)data;
+	struct gnix_fab_req *req = tdesc->req;
 	int ret = FI_SUCCESS;
-	struct gnix_tx_descriptor *tdesc;
-	struct gnix_fid_ep *ep;
-	struct gnix_fab_req *req;
 
-	tdesc = (struct gnix_tx_descriptor *)data;
-	req = tdesc->req;
+	if (tx_status != GNI_RC_SUCCESS) {
+		return __gnix_send_smsg_err(tdesc);
+	}
 
-	ep = req->gnix_ep;
-	assert(ep != NULL);
+	/* Successful delivery.  Generate completions. */
+	ret = __gnix_send_completion(req->gnix_ep, req);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_send_completion() failed: %d\n",
+			  ret);
 
-	__gnix_send_completion(ep, req);
+	__gnix_msg_fr_complete(req, tdesc);
 
-	atomic_dec(&req->vc->outstanding_tx_reqs);
-	_gnix_nic_tx_free(req->gnix_ep->nic, tdesc);
-
-	/* We could have requests waiting for TXDs or FI_FENCE operations.
-	 * Schedule this VC to push any such requests. */
-	_gnix_vc_schedule_reqs(req->vc);
-
-	_gnix_fr_free(ep, req);
-
-	return ret;
+	return FI_SUCCESS;
 }
 
 static int __comp_eager_msg_w_data_ack(void *data, gni_return_t tx_status)
@@ -359,6 +435,10 @@ static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 {
 	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)data;
 
+	if (tx_status != GNI_RC_SUCCESS) {
+		return __gnix_send_smsg_err(txd);
+	}
+
 	/* Just free the TX descriptor for now.  The request remains active
 	 * until the remote peer notifies us that they're done with the send
 	 * buffer. */
@@ -378,30 +458,26 @@ static int __comp_rndzv_start(void *data, gni_return_t tx_status)
 static int __comp_rndzv_fin(void *data, gni_return_t tx_status)
 {
 	int ret = FI_SUCCESS;
-	struct gnix_tx_descriptor *tdesc;
-	struct gnix_fid_ep *ep;
-	struct gnix_fab_req *req;
+	struct gnix_tx_descriptor *tdesc = (struct gnix_tx_descriptor *)data;
+	struct gnix_fab_req *req = tdesc->req;
 
-	tdesc = (struct gnix_tx_descriptor *)data;
-	req = tdesc->req;
+	if (tx_status != GNI_RC_SUCCESS) {
+		/* TODO should this be fatal? A request will sit waiting at the
+		 * peer. */
+		return __gnix_send_smsg_err(tdesc);
+	}
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV_FIN, req: %p\n", req);
 
-	ep = req->gnix_ep;
-	assert(ep != NULL);
+	ret = __gnix_recv_completion(req->gnix_ep, req);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_DATA,
+			  "__gnix_recv_completion() failed: %d\n",
+			  ret);
 
-	__gnix_recv_completion(ep, req);
+	__gnix_msg_fr_complete(req, tdesc);
 
-	atomic_dec(&req->vc->outstanding_reqs);
-	_gnix_nic_tx_free(ep->nic, tdesc);
-
-	/* We could have requests waiting for TXDs.  Schedule this VC to push
-	 * any such requests. */
-	_gnix_vc_schedule_reqs(req->vc);
-
-	_gnix_fr_free(ep, req);
-
-	return ret;
+	return FI_SUCCESS;
 }
 
 smsg_completer_fn_t gnix_ep_smsg_completers[] = {
@@ -448,7 +524,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 	data_ptr = (void *)((char *)msg + sizeof(*hdr));
 
-	tagged = !!(hdr->flags & GNIX_MSG_TAGGED);
+	tagged = !!(hdr->flags & FI_TAGGED);
 	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
 
 	fastlock_acquire(queue_lock);
@@ -505,6 +581,9 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 
 		memcpy((void *)req->msg.recv_addr, data_ptr, hdr->len);
 		req->addr = vc->peer_addr;
+
+		/* Init recv_flags to FI_COMPLETION so peeks generate CQEs */
+		req->msg.recv_flags = FI_COMPLETION;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 	}
@@ -593,7 +672,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	ep = vc->ep;
 	assert(ep);
 
-	tagged = !!(hdr->flags & GNIX_MSG_TAGGED);
+	tagged = !!(hdr->flags & FI_TAGGED);
 	__gnix_msg_queues(ep, tagged, &queue_lock, &posted_queue, &unexp_queue);
 
 	fastlock_acquire(queue_lock);
@@ -643,6 +722,9 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.imm = hdr->imm;
 		req->msg.rma_mdh = hdr->mdh;
 		req->msg.rma_id = hdr->req_addr;
+
+		/* Init recv_flags to FI_COMPLETION so peeks generate CQEs */
+		req->msg.recv_flags = FI_COMPLETION;
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 	}
@@ -721,7 +803,7 @@ static int __smsg_rma_data(void *data, void *msg)
 		ret = _gnix_cq_add_event(ep->recv_cq, NULL, hdr->flags, 0,
 					 0, hdr->data, 0);
 		if (ret != FI_SUCCESS)  {
-			GNIX_WARN((FI_LOG_CQ | FI_LOG_EP_DATA),
+			GNIX_WARN(FI_LOG_EP_DATA,
 					"_gnix_cq_add_event returned %d\n",
 					ret);
 		}
@@ -753,12 +835,13 @@ smsg_callback_fn_t gnix_ep_smsg_callbacks[] = {
 	[GNIX_SMSG_T_RMA_DATA] = __smsg_rma_data
 };
 
+#define GNIX_TAGGED_PCD_COMPLETION_FLAGS	(FI_MSG | FI_RECV | FI_TAGGED)
+
 static int __gnix_peek_request(struct gnix_fid_ep *ep,
 		struct gnix_fab_req *req,
 		void *addr,
 		size_t len,
 		void *context,
-		uint64_t flags,
 		uint64_t tag)
 {
 	struct gnix_fid_cq *recv_cq = ep->recv_cq;
@@ -787,8 +870,9 @@ static int __gnix_peek_request(struct gnix_fid_ep *ep,
 	else
 		peek_addr = NULL;
 
-	return __recv_completion(ep, req, context, flags, len,
-			peek_addr, req->msg.imm, tag);
+	return __recv_completion(ep, req, context,
+				 GNIX_TAGGED_PCD_COMPLETION_FLAGS,
+				 len, peek_addr, req->msg.imm, tag);
 }
 
 static int  __gnix_discard_request(struct gnix_fid_ep *ep,
@@ -796,7 +880,6 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 		void *addr,
 		size_t len,
 		void *context,
-		uint64_t flags,
 		uint64_t tag,
 		uint64_t src_addr)
 {
@@ -834,8 +917,9 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 		/* data has already been delivered, so just discard it and
 		 * generate cqe
 		 */
-		ret = __recv_completion(ep, req, context, flags, len,
-				addr, req->msg.imm, tag);
+		ret = __recv_completion(ep, req, context,
+					GNIX_TAGGED_PCD_COMPLETION_FLAGS, len,
+					addr, req->msg.imm, tag);
 
 		/* data has already been delivered, so just discard it */
 		_gnix_fr_free(ep, req);
@@ -865,7 +949,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 	struct gnix_tag_storage *unexp_queue = NULL;
 	uint64_t r_tag = tag, r_ignore = ignore, r_flags;
 	struct gnix_fid_mem_desc *md = NULL;
-	int tagged = !!(flags & GNIX_MSG_TAGGED);
+	int tagged = !!(flags & FI_TAGGED);
 	void *tmp_buf;
 
 	r_flags = flags & (FI_CLAIM | FI_DISCARD | FI_PEEK);
@@ -913,7 +997,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 					(void *)buf,
 					MIN(req->msg.send_len, len),
 					context,
-					req->flags,
 					r_tag,
 					src_addr);
 			goto pdc_exit;
@@ -923,7 +1006,6 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 					(void *) buf,
 					MIN(req->msg.send_len, len),
 					context,
-					req->flags,
 					r_tag);
 			goto pdc_exit;
 		}
@@ -944,6 +1026,14 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		}
 		req->msg.recv_flags = flags;
 		req->msg.ignore = r_ignore;
+
+		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
+		    (ep->recv_selective_completion &&
+		    !(flags & FI_COMPLETION))) {
+			req->msg.recv_flags &= ~FI_COMPLETION;
+		} else {
+			req->msg.recv_flags |= FI_COMPLETION;
+		}
 
 		if (req->msg.send_flags & GNIX_MSG_RENDEZVOUS) {
 			/* Matched rendezvous request.  Start data movement. */
@@ -1032,6 +1122,14 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		req->msg.tag = r_tag;
 		req->msg.ignore = r_ignore;
 
+		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
+		    (ep->recv_selective_completion &&
+		    !(flags & FI_COMPLETION))) {
+			req->msg.recv_flags &= ~FI_COMPLETION;
+		} else {
+			req->msg.recv_flags |= FI_COMPLETION;
+		}
+
 		_gnix_insert_tag(posted_queue, r_tag, req, r_ignore);
 	}
 
@@ -1058,6 +1156,7 @@ static int _gnix_send_req(void *arg)
 	int hdr_len, data_len;
 	void *hdr, *data;
 	int tag;
+	int inject_err = _gnix_req_inject_smsg_err(req);
 
 	ep = req->gnix_ep;
 	assert(ep != NULL);
@@ -1106,9 +1205,14 @@ static int _gnix_send_req(void *arg)
 
 	fastlock_acquire(&nic->lock);
 
-	status = GNI_SmsgSendWTag(req->vc->gni_ep,
-				  hdr, hdr_len, data, data_len,
-				  tdesc->id, tag);
+	if (inject_err) {
+		_gnix_nic_txd_err_inject(nic, tdesc);
+		status = GNI_RC_SUCCESS;
+	} else {
+		status = GNI_SmsgSendWTag(req->vc->gni_ep,
+					  hdr, hdr_len, data, data_len,
+					  tdesc->id, tag);
+	}
 
 	fastlock_release(&nic->lock);
 
@@ -1183,7 +1287,12 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	req->user_context = context;
 	req->send_fn = _gnix_send_req;
 
-	req->msg.tag = tag;
+	if (flags & FI_TAGGED) {
+		req->msg.tag = tag;
+	} else {
+		/* Make sure zeroed tag ends up in the send CQE. */
+		req->msg.tag = 0;
+	}
 
 	if (mdesc) {
 		md = container_of(mdesc, struct gnix_fid_mem_desc, mr_fid);
@@ -1199,6 +1308,14 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 		req->msg.send_addr = (uint64_t)req->inject_buf;
 	} else {
 		req->msg.send_addr = loc_addr;
+	}
+
+	if ((flags & GNIX_SUPPRESS_COMPLETION) ||
+	    (ep->send_selective_completion &&
+	    !(flags & FI_COMPLETION))) {
+		req->msg.send_flags &= ~FI_COMPLETION;
+	} else {
+		req->msg.send_flags |= FI_COMPLETION;
 	}
 
 	if (rendezvous) {
