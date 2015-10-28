@@ -82,6 +82,7 @@ static int using_bnd_ep = 0;
 #define BUF_SZ (1<<20)
 char *target;
 char *source;
+char *uc_target;
 char *uc_source;
 struct fid_mr *rem_mr, *loc_mr;
 uint64_t mr_key;
@@ -114,6 +115,9 @@ void rdm_sr_setup_common(void)
 	ret = fi_av_open(dom, &attr, &av, NULL);
 	cr_assert(!ret, "fi_av_open");
 
+	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
+	cr_assert(!ret, "fi_endpoint");
+
 	ret = fi_endpoint(dom, fi[0], &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
@@ -138,9 +142,6 @@ void rdm_sr_setup_common(void)
 
 	ret = fi_getname(&ep[0]->fid, ep_name[0], &addrlen);
 	cr_assert(ret == FI_SUCCESS);
-
-	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
-	cr_assert(!ret, "fi_endpoint");
 
 	ret = fi_ep_bind(ep[1], &msg_cq[1]->fid, FI_SEND | FI_RECV);
 	cr_assert(!ret, "fi_ep_bind");
@@ -184,6 +185,9 @@ void rdm_sr_setup_common(void)
 	ret = fi_mr_reg(dom, source, BUF_SZ,
 			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
+
+	uc_target = malloc(BUF_SZ);
+	assert(uc_source);
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
@@ -263,6 +267,7 @@ void rdm_sr_teardown(void)
 	fi_close(&send_cntr->fid);
 
 	free(uc_source);
+	free(uc_target);
 
 	fi_close(&loc_mr->fid);
 	fi_close(&rem_mr->fid);
@@ -970,12 +975,12 @@ void do_send_autoreg_uncached(int len)
 	ssize_t sz;
 
 	rdm_sr_init_data(uc_source, len, 0xab);
-	rdm_sr_init_data(target, len, 0);
+	rdm_sr_init_data(uc_target, len, 0);
 
-	sz = fi_send(ep[0], uc_source, len, NULL, gni_addr[1], target);
+	sz = fi_send(ep[0], uc_source, len, NULL, gni_addr[1], uc_target);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], target, len, NULL, gni_addr[0], uc_source);
+	sz = fi_recv(ep[1], uc_target, len, NULL, gni_addr[0], uc_source);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -990,13 +995,15 @@ void do_send_autoreg_uncached(int len)
 		}
 	} while (!(source_done && dest_done));
 
-	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV), target, len, 0);
+	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
+			 uc_target, len, 0);
 	rdm_sr_check_cntrs(1, 1, 0, 0);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(uc_source, target, len), "Data mismatch");
+	cr_assert(rdm_sr_check_data(uc_source, uc_target, len),
+		  "Data mismatch");
 }
 
 Test(rdm_sr, send_autoreg_uncached)

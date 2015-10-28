@@ -765,6 +765,8 @@ static int __mr_cache_register(
 
 		__mr_cache_entry_get(cache, entry);
 
+		GNIX_INFO(FI_LOG_MR, "Using existing MR\n");
+
 		/* Done, go to the end */
 		goto success;
 	}
