@@ -148,6 +148,34 @@ static inline int __mr_cache_key_comp(
 }
 
 /**
+ * Key comparison function to find exact match for cache flushes
+ *
+ * @param[in] x key to be found
+ * @param[in] y key to be compared against
+ *
+ * @return    1 if match, else 0
+ */
+static inline int __mr_exact_match(struct dlist_entry *entry,
+				   const void *match)
+{
+	gnix_mr_cache_entry_t *x = container_of(entry,
+						gnix_mr_cache_entry_t,
+						lru_entry);
+
+	gnix_mr_cache_entry_t *y = (gnix_mr_cache_entry_t *) match;
+
+	if (x->key.address != y->key.address) {
+		return 0;
+	}
+
+	if (x->key.length != y->key.length) {
+		return 0;
+	}
+
+	return 1;
+}
+
+/**
  * Pushes an entry into the LRU cache. No limits are maintained here as
  *   the hard_stale_limit attr value will directly limit the lru size
  *
@@ -190,6 +218,31 @@ static inline int __mr_cache_lru_dequeue(
 	/* remove entry from the list */
 	*entry = ret;
 	dlist_remove(&ret->lru_entry);
+
+	return FI_SUCCESS;
+}
+
+/**
+ * Removes a specific registration cache entry from the lru list
+ *
+ * @param[in] cache  a memory registration cache
+ * @param[in] entry  a memory registration cache entry
+ *
+ * @return           FI_SUCCESS, on success
+ * @return           -FI_ENOENT, on empty LRU
+ */
+static inline int __mr_cache_lru_remove(
+		gnix_mr_cache_t       *cache,
+		gnix_mr_cache_entry_t *entry)
+{
+	struct dlist_entry *ret;
+
+	ret = dlist_remove_first_match(&cache->lru_head,
+				       __mr_exact_match, entry);
+
+	if (unlikely(!ret)) { /* we check list_empty before calling */
+		return -FI_ENOENT;
+	}
 
 	return FI_SUCCESS;
 }
@@ -580,7 +633,8 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 	int rc;
 	RbtIterator iter;
-	gnix_mr_cache_entry_t *entry;
+	gnix_mr_cache_key_t *e_key;
+	gnix_mr_cache_entry_t *entry, *e_entry;
 	int destroyed = 0;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
@@ -611,6 +665,24 @@ int __mr_cache_flush(gnix_mr_cache_t *cache, int flush_count) {
 					"lru entries MUST be present in the cache,"
 					" could not find key in stale tree");
 			break;
+		}
+
+		rbtKeyValue(cache->stale, iter, (void **) &e_key,
+			    (void **) &e_entry);
+		if (e_entry != entry) {
+			/* If not an exact match, remove the found entry,
+			 and then put the original entry back on the LRU list */
+			GNIX_INFO(FI_LOG_MR,
+				  "Flushing non-lru entry %llu:%llu\n",
+				  e_entry->key.address, e_entry->key.length);
+			rc = __mr_cache_lru_remove(cache, e_entry);
+			if (unlikely(rc != FI_SUCCESS)) {
+				GNIX_ERR(FI_LOG_MR,
+					 "list may be corrupt, no entry from lru remove");
+			}
+			dlist_insert_tail(&entry->lru_entry, &cache->lru_head);
+			/* Destroy the actual entry below */
+			entry = e_entry;
 		}
 
 		rc = rbtErase(cache->stale, iter);

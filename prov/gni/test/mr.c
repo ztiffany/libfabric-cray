@@ -633,7 +633,6 @@ Test(memory_registration_cache, same_addr_incr_size)
 	cr_assert(cache->state == GNIX_MRC_STATE_READY);
 
 	for (i = 2; i <= buf_len; i *= 2) {
-		printf("i=%d\n", i);
 		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
 				default_offset, default_req_key,
 				default_flags, &mr, NULL);

@@ -47,7 +47,9 @@
  *             application consistently sends messages from the same buffers
  *             but continually registers and deregisters those regions. The
  *             LRU is implemented as a queue using a doubly linked list for
- *             fast removal/insertion .
+ *             fast removal/insertion.  Note that this is an
+ *             approximate LRU scheme, because the find function may
+ *             return a larger entry in the stale tree.
  *         - By default, there is no limit to the number of 'inuse'
  *             registrations in the cache. This can be changed by passing
  *             in a set of attributes during _gnix_mr_cache_init.
