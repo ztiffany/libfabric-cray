@@ -67,7 +67,7 @@
 
 #include "rdma/fi_domain.h"
 #include "gnix_util.h"
-#include "common/rbtree.h"
+#include "rbtree.h"
 
 #define GNIX_MR_PAGE_SHIFT 12
 #define GNIX_MR_PFN_BITS 37
