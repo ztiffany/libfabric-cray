@@ -628,8 +628,8 @@ Test(rdm_tagged_sr, multi_tsend_trecv) {
 				cr_assert((ret == 1) || (ret == -FI_EAGAIN));
 			} while (ret == -FI_EAGAIN);
 
-			cr_assert(cqe.len == strlen(msg[i]));
-			cr_assert(cqe.tag == tags[i]);
+			cr_assert(cqe.len == 0);
+			cr_assert(cqe.tag == 0);
 		}
 
 		for (i = 0; i < num_msgs; i++) {
