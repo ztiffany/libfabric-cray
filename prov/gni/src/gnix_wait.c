@@ -180,8 +180,8 @@ static int gnix_verify_wait_attr(struct fi_wait_attr *attr)
 	case FI_WAIT_MUTEX_COND:
 		break;
 	default:
-		GNIX_ERR(WAIT_SUB, "wait type: %d not supported.\n",
-			 attr->wait_obj);
+		GNIX_WARN(WAIT_SUB, "wait type: %d not supported.\n",
+			  attr->wait_obj);
 		return -FI_EINVAL;
 	}
 
@@ -258,8 +258,8 @@ int gnix_wait_close(struct fid *wait)
 	wait_priv = container_of(wait, struct gnix_fid_wait, wait.fid);
 
 	if (!slist_empty(&wait_priv->set)) {
-		GNIX_ERR(WAIT_SUB,
-			 "resources still connected to wait set.\n");
+		GNIX_WARN(WAIT_SUB,
+			  "resources still connected to wait set.\n");
 		return -FI_EBUSY;
 	}
 

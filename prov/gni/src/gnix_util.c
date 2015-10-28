@@ -136,26 +136,26 @@ static int gnix_alps_init(void)
 	 */
 	ret = alps_app_lli_put_request(ALPS_APP_LLI_ALPS_REQ_APID, NULL, 0);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC, "lli put failed, ret=%d(%s)\n", ret,
-			       strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "lli put failed, ret=%d(%s)\n", ret,
+			  strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response(&alps_status, &alps_count);
 	if (alps_status != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC, "lli get response failed, "
-			       "alps_status=%d(%s)\n",alps_status,
-			       strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "lli get response failed, "
+			  "alps_status=%d(%s)\n", alps_status,
+			  strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response_bytes(&gnix_apid, sizeof(gnix_apid));
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC,
-			 "lli get response failed, ret=%d(%s)\n",
-			 ret, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "lli get response failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -165,17 +165,17 @@ static int gnix_alps_init(void)
 	 */
 	ret = alps_app_lli_put_request(ALPS_APP_LLI_ALPS_REQ_GNI, NULL, 0);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC, "lli put failed, ret=%d(%s)\n",
-			       ret, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "lli put failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
 
 	ret = alps_app_lli_get_response(&alps_status, &alps_count);
 	if (alps_status != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC,
-			 "lli get response failed, alps_status=%d(%s)\n",
-			 alps_status, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "lli get response failed, alps_status=%d(%s)\n",
+			  alps_status, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -190,9 +190,9 @@ static int gnix_alps_init(void)
 
 	ret = alps_app_lli_get_response_bytes(rdmacred_rsp, alps_count);
 	if (ret != ALPS_APP_LLI_ALPS_STAT_OK) {
-		GNIX_ERR(FI_LOG_FABRIC,
-			 "lli get response failed, ret=%d(%s)\n",
-			 ret, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "lli get response failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -223,9 +223,9 @@ static int gnix_alps_init(void)
 				      &gnix_app_nodePes,
 				      &gnix_app_peCpus);
 	if (ret != 1) {
-		GNIX_ERR(FI_LOG_FABRIC,
-			 "alps_get_placement_info failed, ret=%d(%s)\n",
-			 ret, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "alps_get_placement_info failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
 		ret = -FI_EIO;
 		goto err;
 	}
@@ -253,8 +253,9 @@ int gnixu_get_rdma_credentials(void *addr, uint8_t *ptag, uint32_t *cookie)
 
 	ret = gnix_alps_init();
 	if (ret) {
-		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
-			       ret, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "gnix_alps_init() failed, ret=%d(%s)\n",
+			  ret, strerror(errno));
 		return ret;
 	}
 
@@ -311,15 +312,15 @@ int _gnix_task_is_not_app(void)
 		      syscall(SYS_gettid));
 	fd = open(filename, O_WRONLY);
 	if (fd < 0) {
-		GNIX_ERR(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
-			 filename, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
+			  filename, strerror(errno));
 		return -errno;
 	}
 
 	count = write(fd, val_str, val_str_len);
 	if (count != val_str_len) {
-		GNIX_ERR(FI_LOG_FABRIC, "write(%s, %s) failed, errno=%s\n",
-			 filename, val_str, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "write(%s, %s) failed, errno=%s\n",
+			  filename, val_str, strerror(errno));
 		rc = -errno;
 	}
 	close(fd);
@@ -337,15 +338,15 @@ static int gnix_write_proc_job(char *val_str)
 
 	fd = open(filename, O_WRONLY);
 	if (fd < 0) {
-		GNIX_ERR(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
-			 filename, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "open(%s) failed, errno=%s\n",
+			  filename, strerror(errno));
 		return -errno;
 	}
 
 	count = write(fd, val_str, val_str_len);
 	if (count != val_str_len) {
-		GNIX_ERR(FI_LOG_FABRIC, "write(%s) failed, errno=%s\n",
-			 val_str, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC, "write(%s) failed, errno=%s\n",
+			  val_str, strerror(errno));
 		rc = -errno;
 	}
 	close(fd);
@@ -392,8 +393,9 @@ int _gnix_job_fma_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit)
 
 	status = GNI_GetJobResInfo(dev_id, ptag, GNI_JOB_RES_FMA, &job_res_desc);
 	if (status) {
-		GNIX_ERR(FI_LOG_FABRIC, "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
-			 dev_id, ptag, gni_err_str[status]);
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
+			  dev_id, ptag, gni_err_str[status]);
 		return -FI_EINVAL;
 	}
 
@@ -414,8 +416,9 @@ int _gnix_job_cq_limit(uint32_t dev_id, uint8_t ptag, uint32_t *limit)
 
 	status = GNI_GetJobResInfo(dev_id, ptag, GNI_JOB_RES_CQ, &job_res_desc);
 	if (status) {
-		GNIX_ERR(FI_LOG_FABRIC, "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
-			 dev_id, ptag, gni_err_str[status]);
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "GNI_GetJobResInfo(%d, %d) failed, status=%s\n",
+			  dev_id, ptag, gni_err_str[status]);
 		return -FI_EINVAL;
 	}
 
@@ -435,8 +438,9 @@ int _gnix_pes_on_node(uint32_t *num_pes)
 
 	rc = gnix_alps_init();
 	if (rc) {
-		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
-			       rc, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "gnix_alps_init() failed, ret=%d(%s)\n",
+			  rc, strerror(errno));
 		return rc;
 	}
 
@@ -457,8 +461,9 @@ int _gnix_nics_per_rank(uint32_t *nics_per_rank)
 
 	rc = gnix_alps_init();
 	if (rc) {
-		GNIX_ERR(FI_LOG_FABRIC, "gnix_alps_init() failed, ret=%d(%s)\n",
-			       rc, strerror(errno));
+		GNIX_WARN(FI_LOG_FABRIC,
+			  "gnix_alps_init() failed, ret=%d(%s)\n",
+			  rc, strerror(errno));
 		return rc;
 	}
 
