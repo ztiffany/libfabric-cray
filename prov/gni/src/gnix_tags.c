@@ -129,7 +129,7 @@ static int __req_matches_context(struct slist_entry *entry, const void *arg)
 	struct gnix_tag_list_element *tle;
 	struct gnix_fab_req *req;
 
-	tle = (struct gnix_tag_list_element *) entry;
+	tle = container_of(entry, struct gnix_tag_list_element, free);
 	req = __to_gnix_fab_req(tle);
 
 	return req->user_context == arg;
@@ -142,7 +142,7 @@ int _gnix_match_posted_tag(struct slist_entry *entry, const void *arg)
 	struct gnix_tag_list_element *tle;
 	struct gnix_fab_req *req;
 
-	tle = (struct gnix_tag_list_element *) entry;
+	tle = container_of(entry, struct gnix_tag_list_element, free);
 	req = __to_gnix_fab_req(tle);
 
 	return _gnix_req_matches_params(req, s_elem->tag, req->msg.ignore,
@@ -158,7 +158,7 @@ int _gnix_match_unexpected_tag(struct slist_entry *entry, const void *arg)
 	struct gnix_tag_list_element *tle;
 	struct gnix_fab_req *req;
 
-	tle = (struct gnix_tag_list_element *) entry;
+	tle = container_of(entry, struct gnix_tag_list_element, free);
 	req = __to_gnix_fab_req(tle);
 
 	return _gnix_req_matches_params(req, s_elem->tag, s_elem->ignore,
