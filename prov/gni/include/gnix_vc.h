@@ -222,6 +222,7 @@ struct gnix_vc *_gnix_nic_next_pending_vc(struct gnix_nic *nic);
 int _gnix_vc_dequeue_smsg(struct gnix_vc *vc);
 int _gnix_vc_progress(struct gnix_vc *vc);
 int _gnix_vc_queue_tx_req(struct gnix_fab_req *req);
+int _gnix_vc_force_queue_req(struct gnix_fab_req *req);
 int _gnix_vc_queue_req(struct gnix_fab_req *req);
 
 /**

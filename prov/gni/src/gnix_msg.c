@@ -348,6 +348,8 @@ static int __gnix_rndzv_req(void *arg)
 	txd->gni_desc.rdma_mode = 0;
 	txd->gni_desc.src_cq_hndl = nic->tx_cq;
 
+	fastlock_acquire(&nic->lock);
+
 	if (inject_err) {
 		_gnix_nic_txd_err_inject(nic, txd);
 		status = GNI_RC_SUCCESS;
@@ -358,6 +360,8 @@ static int __gnix_rndzv_req(void *arg)
 				  gni_err_str[status]);
 		}
 	}
+
+	fastlock_release(&nic->lock);
 
 	GNIX_INFO(FI_LOG_EP_DATA, "Initiated RNDZV GET, req: %p\n", req);
 
@@ -696,9 +700,11 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rma_mdh = hdr->mdh;
 		req->msg.rma_id = hdr->req_addr;
 
-		/* Initiate pull of source data. */
+		/* Initiate pull of source data.  We already hold the NIC lock
+		 * here in the SMSG RX callback.  Force this operation to be
+		 * queued to avoid locking issues. */
 		req->send_fn = __gnix_rndzv_req;
-		ret = _gnix_vc_queue_req(req);
+		ret = _gnix_vc_force_queue_req(req);
 	} else {
 		/* Add new unexpected receive request. */
 		req = _gnix_fr_alloc(ep);

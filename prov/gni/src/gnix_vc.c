@@ -1365,6 +1365,19 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 	return fi_rc;
 }
 
+/* Force the request to be queued, do not allow an inline send. */
+int _gnix_vc_force_queue_req(struct gnix_fab_req *req)
+{
+	struct gnix_vc *vc = req->vc;
+
+	fastlock_acquire(&vc->req_queue_lock);
+	slist_insert_tail(&req->slist, &vc->req_queue);
+	_gnix_vc_schedule(vc);
+	fastlock_release(&vc->req_queue_lock);
+
+	return FI_SUCCESS;
+}
+
 int _gnix_vc_queue_req(struct gnix_fab_req *req)
 {
 	int rc, queue_req = 0;
