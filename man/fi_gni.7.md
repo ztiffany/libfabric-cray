@@ -92,7 +92,7 @@ values are:
   connections.
 
 *GNI_CONN_TABLE_STEP_SIZE*
-: Step size for increasing the size of the the internal table data
+: Step size for increasing the size of the internal table data
   structure used to manage connections.
 
 *GNI_VC_ID_TABLE_CAPACITY*
