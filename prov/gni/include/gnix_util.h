@@ -52,6 +52,8 @@ extern struct fi_provider gnix_prov;
 #define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
 	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
 
+#define FI_PRINT(prov, subsystem, ...)
+
 #else
 
 /* defined in gnix_init.c */
