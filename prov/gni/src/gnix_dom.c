@@ -61,19 +61,16 @@ static void __domain_destruct(void *obj)
 	struct gnix_fid_domain *domain = (struct gnix_fid_domain *) obj;
 
 	/* if the domain isn't being destructed by close, we need to check the
-	 * cache again. This isn't a likely case. Both the flush and destroy
-	 * must succeed since we are in the destruct path */
-	ret = _gnix_mr_cache_flush(&domain->mr_cache);
-	if (ret != FI_SUCCESS)
-		GNIX_ERR(FI_LOG_DOMAIN, "failed to flush mr cache "
-				"during domain destruct, dom=%p", domain);
-	assert(ret == FI_SUCCESS);
-
-	ret = _gnix_mr_cache_destroy(&domain->mr_cache);
-	if (ret != FI_SUCCESS)
-		GNIX_ERR(FI_LOG_DOMAIN, "failed to destroy mr cache "
-				"during domain destruct, dom=%p", domain);
-	assert(ret == FI_SUCCESS);
+	 * cache again. This isn't a likely case. Destroy must succeed since we
+	 * are in the destruct path */
+	if (domain->mr_cache) {
+		ret = _gnix_mr_cache_destroy(domain->mr_cache);
+		if (ret != FI_SUCCESS)
+			GNIX_ERR(FI_LOG_DOMAIN, "failed to destroy mr cache "
+					"during domain destruct, dom=%p",
+					domain);
+		assert(ret == FI_SUCCESS);
+	}
 
 	/*
 	 * Drop a reference to each NIC used by this domain.
@@ -113,11 +110,16 @@ static int gnix_domain_close(fid_t fid)
 	}
 
 	/* before checking the refcnt, flush the memory registration cache */
-	ret = _gnix_mr_cache_flush(&domain->mr_cache);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_DOMAIN,
-			  "failed to flush memory cache on domain close\n");
-		goto err;
+	if (domain->mr_cache) {
+		fastlock_acquire(&domain->mr_cache_lock);
+		ret = _gnix_mr_cache_flush(domain->mr_cache);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_DOMAIN,
+				  "failed to flush memory cache on domain close\n");
+			fastlock_release(&domain->mr_cache_lock);
+			goto err;
+		}
+		fastlock_release(&domain->mr_cache_lock);
 	}
 
 	/*
@@ -361,9 +363,9 @@ int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 		goto err;
 	}
 
-	ret = _gnix_mr_cache_init(&domain->mr_cache, NULL);
-	if (ret != FI_SUCCESS)
-		goto err;
+	domain->mr_cache_attr = __default_mr_cache_attr;
+	domain->mr_cache = NULL;
+	fastlock_init(&domain->mr_cache_lock);
 
 	dlist_init(&domain->nic_list);
 	dlist_init(&domain->list);

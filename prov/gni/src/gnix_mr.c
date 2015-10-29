@@ -90,11 +90,11 @@ static struct fi_ops fi_gnix_mr_ops = {
 };
 
 /* default attributes for new caches */
-static gnix_mr_cache_attr_t __default_mr_cache_attr = {
+gnix_mr_cache_attr_t __default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
-		.lazy_deregistration = 1
+		.lazy_deregistration = 0
 };
 
 /**
@@ -386,6 +386,10 @@ uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl)
 	return key.value;
 }
 
+static int __gnix_mr_cache_init(
+		gnix_mr_cache_t **cache,
+		gnix_mr_cache_attr_t *attr);
+
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context)
@@ -432,16 +436,24 @@ int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		if (rc) {
 			GNIX_WARN(FI_LOG_MR, "could not allocate nic to do mr_reg,"
 					" ret=%i\n", rc);
-
-			return rc;
+			goto err;
 		}
 	}
 
 	/* call cache register op to retrieve the right entry */
-	fastlock_acquire(&domain->mr_cache.lock);
-	rc = __mr_cache_register(&domain->mr_cache, mr, domain, (uint64_t) buf,
+	fastlock_acquire(&domain->mr_cache_lock);
+	if (unlikely(!domain->mr_cache)) {
+		rc = __gnix_mr_cache_init(&domain->mr_cache,
+				&domain->mr_cache_attr);
+		if (rc != FI_SUCCESS) {
+			fastlock_release(&domain->mr_cache_lock);
+			goto err;
+		}
+	}
+
+	rc = __mr_cache_register(domain->mr_cache, mr, domain, (uint64_t) buf,
 			len, NULL, fi_gnix_access, -1, &mr->mem_hndl);
-	fastlock_release(&domain->mr_cache.lock);
+	fastlock_release(&domain->mr_cache_lock);
 
 	/* check retcode */
 	if (unlikely(rc != FI_SUCCESS))
@@ -496,9 +508,9 @@ static int fi_gnix_mr_close(fid_t fid)
 	mr = container_of(fid, struct gnix_fid_mem_desc, mr_fid.fid);
 
 	/* call cache deregister op */
-	fastlock_acquire(&mr->domain->mr_cache.lock);
-	ret = __mr_cache_deregister(&mr->domain->mr_cache, mr);
-	fastlock_release(&mr->domain->mr_cache.lock);
+	fastlock_acquire(&mr->domain->mr_cache_lock);
+	ret = __mr_cache_deregister(mr->domain->mr_cache, mr);
+	fastlock_release(&mr->domain->mr_cache_lock);
 
 	/* check retcode */
 	if (likely(ret == FI_SUCCESS)) {
@@ -533,17 +545,16 @@ static inline int __check_mr_cache_attr_sanity(gnix_mr_cache_attr_t *attr)
 	return FI_SUCCESS;
 }
 
-int _gnix_mr_cache_init(
-		gnix_mr_cache_t      *cache,
+static int __gnix_mr_cache_init(
+		gnix_mr_cache_t      **cache,
 		gnix_mr_cache_attr_t *attr)
 {
 	gnix_mr_cache_attr_t *cache_attr = &__default_mr_cache_attr;
+	gnix_mr_cache_t *cache_p;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
-	/* ensure we have a relatively clean pointer */
-	if (!cache || cache->state == GNIX_MRC_STATE_READY ||
-			cache->state > GNIX_MRC_STATE_DEAD)
+	if (!cache)
 		return -FI_EINVAL;
 
 	/* if the provider asks us to use their attributes, are they sane? */
@@ -554,26 +565,30 @@ int _gnix_mr_cache_init(
 		cache_attr = attr;
 	}
 
+	cache_p = (gnix_mr_cache_t *)calloc(1, sizeof(gnix_mr_cache_t));
+	if (!cache_p)
+		return -FI_ENOMEM;
+
 	/* save the attribute values */
-	memcpy(&cache->attr, cache_attr, sizeof(*cache_attr));
+	memcpy(&cache_p->attr, cache_attr, sizeof(*cache_attr));
 
 	/* list is used because entries can be removed from the stale list if
 	 *   a user might call register on a stale entry's memory region
 	 */
-	dlist_init(&cache->lru_head);
+	dlist_init(&cache_p->lru_head);
 
 	/* set up inuse tree */
-	cache->inuse = rbtNew(__mr_cache_key_comp);
-	if (!cache->inuse)
+	cache_p->inuse = rbtNew(__mr_cache_key_comp);
+	if (!cache_p->inuse)
 		return -FI_ENOMEM;
 
 	/* if using lazy deregistration, set up stale tree */
-	if (cache->attr.lazy_deregistration) {
-		cache->stale = rbtNew(__mr_cache_key_comp);
-		if (!cache->stale) {
+	if (cache_p->attr.lazy_deregistration) {
+		cache_p->stale = rbtNew(__mr_cache_key_comp);
+		if (!cache_p->stale) {
 			/* destroy inuse cache */
-			rbtDelete(cache->inuse);
-			cache->inuse = NULL;
+			rbtDelete(cache_p->inuse);
+			cache_p->inuse = NULL;
 
 			return -FI_ENOMEM;
 		}
@@ -582,14 +597,13 @@ int _gnix_mr_cache_init(
 	/* initialize the element counts. If we are reinitializing a dead cache,
 	 *   destroy will have already set the element counts
 	 */
-	if (cache->state == GNIX_MRC_STATE_UNINITIALIZED) {
-		atomic_initialize(&cache->inuse_elements, 0);
-		atomic_initialize(&cache->stale_elements, 0);
-
-		fastlock_init(&cache->lock);
+	if (cache_p->state == GNIX_MRC_STATE_UNINITIALIZED) {
+		atomic_initialize(&cache_p->inuse_elements, 0);
+		atomic_initialize(&cache_p->stale_elements, 0);
 	}
 
-	cache->state = GNIX_MRC_STATE_READY;
+	cache_p->state = GNIX_MRC_STATE_READY;
+	*cache = cache_p;
 
 	return FI_SUCCESS;
 }
@@ -626,6 +640,7 @@ int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)
 	}
 
 	cache->state = GNIX_MRC_STATE_DEAD;
+	free(cache);
 
 	return FI_SUCCESS;
 }
