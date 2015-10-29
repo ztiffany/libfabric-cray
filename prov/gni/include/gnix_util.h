@@ -52,6 +52,8 @@ extern struct fi_provider gnix_prov;
 #define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
 	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
 
+#define FI_PRINT(prov, subsystem, ...)
+
 #else
 
 /* defined in gnix_init.c */
@@ -59,6 +61,13 @@ extern struct fi_provider gnix_prov;
 extern __thread pid_t gnix_debug_pid;
 extern __thread uint32_t gnix_debug_tid;
 extern atomic_t gnix_debug_next_tid;
+
+#define FI_PRINT(prov, subsystem, ...)				\
+	do {								\
+		fi_log(prov, FI_LOG_WARN, subsystem,			\
+				__func__, __LINE__, __VA_ARGS__);	\
+	} while (0)
+
 
 /* These macros are used to prepend the log message with the pid and
  * unique thread id.  Do not use them directly.  Rather use the normal
@@ -90,7 +99,10 @@ extern atomic_t gnix_debug_next_tid;
 #define GNIX_DEBUG(subsystem, ...)                                             \
 	GNIX_LOG_INTERNAL(FI_DBG, subsystem, __VA_ARGS__)
 #define GNIX_ERR(subsystem, ...)                                               \
-	GNIX_LOG_INTERNAL(FI_WARN, subsystem, __VA_ARGS__)
+	do { \
+		GNIX_LOG_INTERNAL(FI_PRINT, subsystem, __VA_ARGS__); \
+		abort(); \
+	} while (0)
 
 /* dlist utilities */
 #include "fi_list.h"
