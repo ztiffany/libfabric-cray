@@ -45,6 +45,10 @@
 #include "gnix_priv.h"
 
 /* forward declarations */
+static int __gnix_mr_cache_init(
+		gnix_mr_cache_t      **cache,
+		gnix_mr_cache_attr_t *attr);
+
 static int __mr_cache_register(
 		gnix_mr_cache_t          *cache,
 		struct gnix_fid_mem_desc *mr,
@@ -94,7 +98,7 @@ gnix_mr_cache_attr_t __default_mr_cache_attr = {
 		.soft_reg_limit      = 4096,
 		.hard_reg_limit      = -1,
 		.hard_stale_limit    = 128,
-		.lazy_deregistration = 0
+		.lazy_deregistration = 1
 };
 
 /**
@@ -386,10 +390,6 @@ uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl)
 	return key.value;
 }
 
-static int __gnix_mr_cache_init(
-		gnix_mr_cache_t **cache,
-		gnix_mr_cache_attr_t *attr);
-
 int gnix_mr_reg(struct fid *fid, const void *buf, size_t len,
 		uint64_t access, uint64_t offset, uint64_t requested_key,
 		uint64_t flags, struct fid_mr **mr_o, void *context)
@@ -551,6 +551,7 @@ static int __gnix_mr_cache_init(
 {
 	gnix_mr_cache_attr_t *cache_attr = &__default_mr_cache_attr;
 	gnix_mr_cache_t *cache_p;
+	int rc;
 
 	GNIX_TRACE(FI_LOG_MR, "\n");
 
@@ -565,7 +566,7 @@ static int __gnix_mr_cache_init(
 		cache_attr = attr;
 	}
 
-	cache_p = (gnix_mr_cache_t *)calloc(1, sizeof(gnix_mr_cache_t));
+	cache_p = (gnix_mr_cache_t *) calloc(1, sizeof(*cache_p));
 	if (!cache_p)
 		return -FI_ENOMEM;
 
@@ -579,18 +580,17 @@ static int __gnix_mr_cache_init(
 
 	/* set up inuse tree */
 	cache_p->inuse = rbtNew(__mr_cache_key_comp);
-	if (!cache_p->inuse)
-		return -FI_ENOMEM;
+	if (!cache_p->inuse) {
+		rc = -FI_ENOMEM;
+		goto err_inuse;
+	}
 
 	/* if using lazy deregistration, set up stale tree */
 	if (cache_p->attr.lazy_deregistration) {
 		cache_p->stale = rbtNew(__mr_cache_key_comp);
 		if (!cache_p->stale) {
-			/* destroy inuse cache */
-			rbtDelete(cache_p->inuse);
-			cache_p->inuse = NULL;
-
-			return -FI_ENOMEM;
+			rc = -FI_ENOMEM;
+			goto err_stale;
 		}
 	}
 
@@ -606,6 +606,14 @@ static int __gnix_mr_cache_init(
 	*cache = cache_p;
 
 	return FI_SUCCESS;
+
+err_stale:
+	rbtDelete(cache_p->inuse);
+	cache_p->inuse = NULL;
+err_inuse:
+	free(cache_p);
+
+	return rc;
 }
 
 int _gnix_mr_cache_destroy(gnix_mr_cache_t *cache)

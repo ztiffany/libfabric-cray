@@ -222,6 +222,9 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_ERR_INJECT_COUNT:
 		*(int32_t *)val = domain->params.err_inject_count;
 		break;
+	case GNI_MR_CACHE_LAZY_DEREG:
+		*(int32_t *)val = domain->mr_cache_attr.lazy_deregistration;
+		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -287,6 +290,9 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_ERR_INJECT_COUNT:
 		domain->params.err_inject_count = *(int32_t *)val;
+		break;
+	case GNI_MR_CACHE_LAZY_DEREG:
+		domain->mr_cache_attr.lazy_deregistration = *(int32_t *)val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));

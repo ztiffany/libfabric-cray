@@ -106,7 +106,6 @@ static void mr_setup(void)
 	cr_assert(buf, "buffer allocation");
 
 	domain = container_of(dom, struct gnix_fid_domain, domain_fid.fid);
-	cache = &domain->mr_cache;
 	regions = 1024;
 }
 
@@ -224,12 +223,13 @@ Test(memory_registration_cache, basic_init)
 {
 	int ret;
 
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
+	cache = domain->mr_cache;
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
 
 	cr_assert(atomic_get(&cache->inuse_elements) == 1);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
@@ -250,13 +250,13 @@ Test(memory_registration_cache, duplicate_registration)
 	int ret;
 	struct fid_mr *f_mr;
 
-
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
 	ret = fi_mr_reg(dom, (void *) buf, buf_len, default_access,
 			default_offset, default_req_key,
 			default_flags, &mr, NULL);
 	cr_assert(ret == FI_SUCCESS);
+
+	cache = domain->mr_cache;
+	cr_assert(cache->state == GNIX_MRC_STATE_READY);
 
 	cr_assert(atomic_get(&cache->inuse_elements) == 1);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
@@ -307,6 +307,7 @@ Test(memory_registration_cache, register_1024_distinct_regions)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
+	cache = domain->mr_cache;
 	cr_assert(atomic_get(&cache->inuse_elements) == regions);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
 
@@ -369,6 +370,7 @@ Test(memory_registration_cache, register_1024_non_unique_regions)
 		cr_assert(ret == FI_SUCCESS);
 	}
 
+	cache = domain->mr_cache;
 	cr_assert(atomic_get(&cache->inuse_elements) == 1);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
 
@@ -425,6 +427,7 @@ Test(memory_registration_cache, cyclic_register_128_distinct_regions)
 	}
 
 	/* all registrations should now be 'in-use' */
+	cache = domain->mr_cache;
 	cr_assert(atomic_get(&cache->inuse_elements) == regions);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
 
@@ -480,7 +483,7 @@ Test(memory_registration_cache, lru_evict_first_entry)
 	int i;
 	int buf_size = __BUF_LEN * sizeof(char);
 
-	regions = cache->attr.hard_stale_limit << 1;
+	regions = domain->mr_cache_attr.hard_stale_limit << 1;
 	cr_assert(regions > 0);
 	mr_arr = calloc(regions, sizeof(struct fid_mr *));
 	cr_assert(mr_arr);
@@ -502,6 +505,7 @@ Test(memory_registration_cache, lru_evict_first_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
+	cache = domain->mr_cache;
 	cr_assert(atomic_get(&cache->inuse_elements) == regions);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
 
@@ -553,7 +557,7 @@ Test(memory_registration_cache, lru_evict_middle_entry)
 	int i;
 	int buf_size = __BUF_LEN * sizeof(char);
 
-	regions = cache->attr.hard_stale_limit << 1;
+	regions = domain->mr_cache_attr.hard_stale_limit << 1;
 	cr_assert(regions > 0);
 	mr_arr = calloc(regions, sizeof(struct fid_mr *));
 	cr_assert(mr_arr);
@@ -575,6 +579,7 @@ Test(memory_registration_cache, lru_evict_middle_entry)
 	}
 
 	/* all registrations should now be 'in-use' */
+	cache = domain->mr_cache;
 	cr_assert(atomic_get(&cache->inuse_elements) == regions);
 	cr_assert(atomic_get(&cache->stale_elements) == 0);
 
@@ -630,13 +635,14 @@ Test(memory_registration_cache, same_addr_incr_size)
 	int i;
 	int num_stale = 0;
 
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
 	for (i = 2; i <= buf_len; i *= 2) {
 		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
 				default_offset, default_req_key,
 				default_flags, &mr, NULL);
 		cr_assert(ret == FI_SUCCESS);
+
+		cache = domain->mr_cache;
+		cr_assert(cache->state == GNIX_MRC_STATE_READY);
 
 		cr_assert(atomic_get(&cache->inuse_elements) == 1);
 		cr_assert(atomic_get(&cache->stale_elements) == num_stale);
@@ -657,13 +663,14 @@ Test(memory_registration_cache, same_addr_decr_size)
 	int ret;
 	int i;
 
-	cr_assert(cache->state == GNIX_MRC_STATE_READY);
-
 	for (i = buf_len; i >= 2; i /= 2) {
 		ret = fi_mr_reg(dom, (void *) buf, i, default_access,
 				default_offset, default_req_key,
 				default_flags, &mr, NULL);
 		cr_assert(ret == FI_SUCCESS);
+
+		cache = domain->mr_cache;
+		cr_assert(cache->state == GNIX_MRC_STATE_READY);
 
 		cr_assert(atomic_get(&cache->inuse_elements) == 1);
 		cr_assert(atomic_get(&cache->stale_elements) == 0);
