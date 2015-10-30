@@ -674,6 +674,8 @@ int _gnix_mbox_allocator_destroy(struct gnix_mbox_alloc_handle *alloc_handle)
 
 	fastlock_destroy(&alloc_handle->lock);
 
+	free(alloc_handle);
+
 	return FI_SUCCESS;
 }
 
