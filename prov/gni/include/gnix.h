@@ -374,6 +374,11 @@ struct gnix_fid_av {
 	size_t count;
 	/* Hash table for mapping FI_AV_MAP */
 	struct gnix_hashtable *map_ht;
+	/*
+	 * linked list of blocks used for allocating entries
+	 *  for FI_AV_MAP
+	 */
+	struct slist block_list;
 	struct gnix_reference ref_cnt;
 };
 
