@@ -579,6 +579,12 @@ static void __nic_destruct(void *obj)
 		}
 	}
 
+	if (nic->vc_id_table != NULL) {
+		free(nic->vc_id_table);
+	} else {
+		GNIX_WARN(FI_LOG_EP_CTRL, "vc_id_table was NULL\n");
+	}
+
 	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
@@ -603,6 +609,8 @@ static void __nic_destruct(void *obj)
 	 */
 
 err:
+	_gnix_free_bitmap(&nic->vc_id_bitmap);
+
 	pthread_mutex_lock(&gnix_nic_list_lock);
 
 	dlist_remove(&nic->gnix_nic_list);
