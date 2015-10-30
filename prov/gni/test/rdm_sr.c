@@ -94,7 +94,7 @@ static struct fi_cntr_attr cntr_attr = {
 };
 static uint64_t sends, recvs, send_errs, recv_errs;
 
-void rdm_sr_setup_common(void)
+void rdm_sr_setup_common_eps(void)
 {
 	int ret = 0;
 	struct fi_av_attr attr;
@@ -115,9 +115,6 @@ void rdm_sr_setup_common(void)
 	ret = fi_av_open(dom, &attr, &av, NULL);
 	cr_assert(!ret, "fi_av_open");
 
-	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
-	cr_assert(!ret, "fi_endpoint");
-
 	ret = fi_endpoint(dom, fi[0], &ep[0], NULL);
 	cr_assert(!ret, "fi_endpoint");
 
@@ -127,6 +124,9 @@ void rdm_sr_setup_common(void)
 
 	ret = fi_cq_open(dom, &cq_attr, &msg_cq[0], 0);
 	cr_assert(!ret, "fi_cq_open");
+
+	ret = fi_endpoint(dom, fi[1], &ep[1], NULL);
+	cr_assert(!ret, "fi_endpoint");
 
 	ret = fi_cq_open(dom, &cq_attr, &msg_cq[1], 0);
 	cr_assert(!ret, "fi_cq_open");
@@ -178,21 +178,11 @@ void rdm_sr_setup_common(void)
 	source = malloc(BUF_SZ);
 	assert(source);
 
-	ret = fi_mr_reg(dom, target, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
-	cr_assert_eq(ret, 0);
-
-	ret = fi_mr_reg(dom, source, BUF_SZ,
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
-	cr_assert_eq(ret, 0);
-
 	uc_target = malloc(BUF_SZ);
-	assert(uc_source);
+	assert(uc_target);
 
 	uc_source = malloc(BUF_SZ);
 	assert(uc_source);
-
-	mr_key = fi_mr_key(rem_mr);
 
 	ret = fi_cntr_open(dom, &cntr_attr, &send_cntr, 0);
 	cr_assert(!ret, "fi_cntr_open");
@@ -207,6 +197,23 @@ void rdm_sr_setup_common(void)
 	cr_assert(!ret, "fi_ep_bind");
 
 	sends = recvs = send_errs = recv_errs = 0;
+}
+
+void rdm_sr_setup_common(void)
+{
+	int ret = 0;
+
+	rdm_sr_setup_common_eps();
+
+	ret = fi_mr_reg(dom, target, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+	cr_assert_eq(ret, 0);
+
+	ret = fi_mr_reg(dom, source, BUF_SZ,
+			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+	cr_assert_eq(ret, 0);
+
+	mr_key = fi_mr_key(rem_mr);
 }
 
 void rdm_sr_setup(void)
@@ -226,7 +233,25 @@ void rdm_sr_setup(void)
 	fi[1] = fi[0];
 
 	rdm_sr_setup_common();
+}
 
+void rdm_sr_setup_noreg(void)
+{
+	int ret = 0;
+
+	hints = fi_allocinfo();
+	cr_assert(hints, "fi_allocinfo");
+
+	hints->domain_attr->cq_data_size = 4;
+	hints->mode = ~0;
+
+	hints->fabric_attr->name = strdup("gni");
+
+	ret = fi_getinfo(FI_VERSION(1, 0), NULL, 0, 0, hints, &fi[0]);
+	cr_assert(!ret, "fi_getinfo");
+	fi[1] = fi[0];
+
+	rdm_sr_setup_common_eps();
 }
 
 void rdm_sr_bnd_ep_setup(void)
@@ -383,11 +408,23 @@ void rdm_sr_err_inject_enable(void)
 	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 }
 
+void rdm_sr_lazy_dereg_disable(void)
+{
+	int ret, lazy_dereg_val = 0;
+
+	ret = gni_domain_ops->set_val(&dom->fid, GNI_MR_CACHE_LAZY_DEREG,
+				      &lazy_dereg_val);
+	cr_assert(!ret, "setval(GNI_MR_CACHE_LAZY_DEREG)");
+}
+
 /*******************************************************************************
  * Test MSG functions
  ******************************************************************************/
 
 TestSuite(rdm_sr, .init = rdm_sr_setup, .fini = rdm_sr_teardown,
+	  .disabled = false);
+
+TestSuite(rdm_sr_noreg, .init = rdm_sr_setup_noreg, .fini = rdm_sr_teardown,
 	  .disabled = false);
 
 TestSuite(rdm_sr_bnd_ep, .init = rdm_sr_bnd_ep_setup, .fini = rdm_sr_teardown,
@@ -1067,3 +1104,48 @@ Test(rdm_sr, send_err)
 	rdm_sr_xfer_for_each_size(do_send_err, 1, BUF_SZ);
 }
 
+void do_send_autoreg_uncached_nolazydereg(int len)
+{
+	int ret;
+	int source_done = 0, dest_done = 0;
+	struct fi_cq_tagged_entry s_cqe, d_cqe;
+	ssize_t sz;
+
+	rdm_sr_init_data(uc_source, len, 0xab);
+	rdm_sr_init_data(uc_target, len, 0);
+
+	sz = fi_send(ep[0], uc_source, len, NULL, gni_addr[1], uc_target);
+	cr_assert_eq(sz, 0);
+
+	sz = fi_recv(ep[1], uc_target, len, NULL, gni_addr[0], uc_source);
+	cr_assert_eq(sz, 0);
+
+	/* need to progress both CQs simultaneously for rendezvous */
+	do {
+		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
+		if (ret == 1) {
+			source_done = 1;
+		}
+		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
+		if (ret == 1) {
+			dest_done = 1;
+		}
+	} while (!(source_done && dest_done));
+
+	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
+			 uc_target, len, 0);
+	rdm_sr_check_cntrs(1, 1, 0, 0);
+
+	dbg_printf("got context events!\n");
+
+	cr_assert(rdm_sr_check_data(uc_source, uc_target, len),
+		  "Data mismatch");
+}
+
+Test(rdm_sr_noreg, send_autoreg_uncached_nolazydereg)
+{
+	rdm_sr_lazy_dereg_disable();
+	rdm_sr_xfer_for_each_size(do_send_autoreg_uncached_nolazydereg,
+				  1, BUF_SZ);
+}

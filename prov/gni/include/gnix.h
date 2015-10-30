@@ -294,7 +294,9 @@ struct gnix_fid_domain {
 	enum fi_progress control_progress;
 	enum fi_progress data_progress;
 	struct gnix_reference ref_cnt;
-	gnix_mr_cache_t mr_cache;
+	gnix_mr_cache_attr_t mr_cache_attr;
+	gnix_mr_cache_t *mr_cache;
+	fastlock_t mr_cache_lock;
 };
 
 #define GNIX_CQS_PER_EP		8

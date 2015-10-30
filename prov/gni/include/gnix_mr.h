@@ -167,6 +167,8 @@ typedef struct gnix_mr_cache_attr {
 	int lazy_deregistration;
 } gnix_mr_cache_attr_t;
 
+extern gnix_mr_cache_attr_t __default_mr_cache_attr;
+
 typedef enum {
 	GNIX_MRC_STATE_UNINITIALIZED = 0,
 	GNIX_MRC_STATE_READY,
@@ -191,7 +193,6 @@ typedef struct gnix_mr_cache {
 	atomic_t inuse_elements;
 	atomic_t stale_elements;
 	struct dlist_entry lru_head;
-	fastlock_t lock;
 } gnix_mr_cache_t;
 
 /**
@@ -222,22 +223,6 @@ void _gnix_convert_key_to_mhdl(
  * @return              fi_mr_key to be used by remote EPs.
  */
 uint64_t _gnix_convert_mhdl_to_key(gni_mem_handle_t *mhdl);
-
-/**
- * @brief Initializes a gnix memory registration cache
- *
- * @param[in] cache  a gnix memory registration cache
- * @param[in] attr   a set of attributes to apply to the cache
- *
- * @return           FI_SUCCESS on success
- *                   -FI_EINVAL if an invalid cache pointer, or invalid set of
- *                     attributes has been passed into the function
- *                   -FI_ENOMEM if there wasn't sufficient memory to allocate
- *                     internal data structures
- */
-int _gnix_mr_cache_init(
-		gnix_mr_cache_t      *cache,
-		gnix_mr_cache_attr_t *attr);
 
 /**
  * @brief Destroys a gnix memory registration cache. Flushes stale memory

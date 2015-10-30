@@ -748,6 +748,18 @@ static int __smsg_rndzv_start(void *data, void *msg)
 	return ret;
 }
 
+static int __gnix_rndzv_fin_cleanup(void *arg)
+{
+	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
+
+	GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+		  req->msg.send_md);
+	fi_close(&req->msg.send_md->mr_fid.fid);
+	_gnix_fr_free(req->gnix_ep, req);
+
+	return FI_SUCCESS;
+}
+
 /* Received SMSG rendezvous fin message.  The peer has finished pulling send
  * data.  Free the send request and generate completions. */
 static int __smsg_rndzv_fin(void *data, void *msg)
@@ -768,12 +780,6 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 
-	if (req->msg.send_flags & FI_LOCAL_MR) {
-		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
-			  req->msg.send_md);
-		fi_close(&req->msg.send_md->mr_fid.fid);
-	}
-
 	__gnix_send_completion(ep, req);
 
 	atomic_dec(&req->vc->outstanding_tx_reqs);
@@ -782,7 +788,15 @@ static int __smsg_rndzv_fin(void *data, void *msg)
 	 * Schedule this VC to push any such requests. */
 	_gnix_vc_schedule_reqs(req->vc);
 
-	_gnix_fr_free(ep, req);
+	if (req->msg.send_flags & FI_LOCAL_MR) {
+		/* We cannot close the auto-MR here in the SMSG RX completer,
+		 * with the NIC lock held.  Queue the request to be freed
+		 * immediately after SMSG processing */
+		req->send_fn = __gnix_rndzv_fin_cleanup;
+		ret = _gnix_vc_force_queue_req(req);
+	} else {
+		_gnix_fr_free(ep, req);
+	}
 
 	status = GNI_SmsgRelease(vc->gni_ep);
 	if (unlikely(status != GNI_RC_SUCCESS)) {
