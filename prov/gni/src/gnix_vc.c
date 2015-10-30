@@ -973,6 +973,8 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 
 	_gnix_ref_put(vc->ep);
 
+	_gnix_free_bitmap(&vc->flags);
+
 	free(vc);
 
 	return ret;
