@@ -526,6 +526,12 @@ static void __av_destruct(void *obj)
 				  "_gnix_ht_destroy failed %d\n",
 				  ret);
 	}
+	if (av->valid_entry_vec) {
+		free(av->valid_entry_vec);
+	} else {
+		GNIX_WARN(FI_LOG_AV, "valid_entry_vec is NULL\n");
+	}
+
 	free(av);
 }
 
@@ -606,10 +612,13 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 	int_av->addrlen = sizeof(struct gnix_address);
 
 	int_av->capacity = count;
-	int_av->table = calloc(count, sizeof(struct gnix_av_addr_entry));
-	if (!int_av->table) {
-		ret = -FI_ENOMEM;
-		goto cleanup;
+	if (type == FI_AV_TABLE) {
+		int_av->table = calloc(count,
+				       sizeof(struct gnix_av_addr_entry));
+		if (!int_av->table) {
+			ret = -FI_ENOMEM;
+			goto cleanup;
+		}
 	}
 
 	int_av->valid_entry_vec = calloc(count, sizeof(int));
