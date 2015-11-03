@@ -518,6 +518,26 @@ static void __nic_destruct(void *obj)
 	gni_return_t status = GNI_RC_SUCCESS;
 	struct gnix_nic *nic = (struct gnix_nic *) obj;
 
+	/* Must free mboxes first, because the MR has a pointer to the
+	 * nic handles below */
+	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
+	ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
+	ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "_gnix_mbox_allocator_destroy returned %d\n",
+			  ret);
+
 	if (!nic->gni_cdm_hndl) {
 		GNIX_ERR(FI_LOG_EP_CTRL, "No CDM attached to nic, nic=%p");
 	}
@@ -584,24 +604,6 @@ static void __nic_destruct(void *obj)
 	} else {
 		GNIX_WARN(FI_LOG_EP_CTRL, "vc_id_table was NULL\n");
 	}
-
-	ret = _gnix_mbox_allocator_destroy(nic->mbox_hndl);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
-
-	ret = _gnix_mbox_allocator_destroy(nic->s_rdma_buf_hndl);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
-
-	ret = _gnix_mbox_allocator_destroy(nic->r_rdma_buf_hndl);
-	if (ret != FI_SUCCESS)
-		GNIX_WARN(FI_LOG_EP_CTRL,
-			  "_gnix_mbox_allocator_destroy returned %d\n",
-			  ret);
 
 	/*
 	 * remove the nic from the linked lists
