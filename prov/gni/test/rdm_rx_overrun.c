@@ -57,7 +57,7 @@
 
 #include <criterion/criterion.h>
 
-#define NUM_EPS 11
+#define NUM_EPS 11 /* 5 usually works, but sometimes hangs */
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
@@ -146,11 +146,11 @@ static void setup(void)
 	}
 
 	ret = fi_mr_reg(dom, target, NUM_EPS*sizeof(int),
-			FI_REMOTE_WRITE, 0, 0, 0, &rem_mr, &target);
+			FI_RECV, 0, 0, 0, &rem_mr, &target);
 	cr_assert_eq(ret, 0);
 
 	ret = fi_mr_reg(dom, source, NUM_EPS*sizeof(int),
-			FI_REMOTE_WRITE, 0, 0, 0, &loc_mr, &source);
+			FI_SEND, 0, 0, 0, &loc_mr, &source);
 	cr_assert_eq(ret, 0);
 
 	mr_key = fi_mr_key(rem_mr);
@@ -194,6 +194,8 @@ Test(rdm_rx_overrun, all_to_one)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_entry s_cqe, d_cqe;
 	ssize_t sz;
+	int ctx[NUM_EPS];
+
 	/*
 	 * This test doesn't work even when the rx_cq_size is left at
 	 * the default.  Changed to reduce the size when the bug is found.
@@ -208,26 +210,28 @@ Test(rdm_rx_overrun, all_to_one)
 	for (i = 0; i < NUM_EPS; i++) {
 		source[i] = i;
 		target[i] = -1;
+		ctx[i] = -1;
 	}
 
 	for (i = 1; i < NUM_EPS; i++) {
-		sz = fi_send(ep[i], &source[i], 1, loc_mr,
-			     gni_addr[0], target+i);
+		sz = fi_send(ep[i], &source[i], sizeof(int), loc_mr,
+			     gni_addr[0], ctx+i);
 		cr_assert_eq(sz, 0);
 	}
 
 	do {
 		for (i = 1; i < NUM_EPS; i++) {
 			if (fi_cq_read(msg_cq[i], &s_cqe, 1) == 1) {
-				cr_assert_eq((uint64_t)s_cqe.op_context,
-					     (uint64_t) (target+i));
+				cr_assert_eq((uint64_t) s_cqe.op_context,
+					     (uint64_t) (ctx+i));
 				source_done += 1;
 			}
 		}
 	} while (source_done != NUM_EPS-1);
 
 	for (i = 1; i < NUM_EPS; i++) {
-		sz = fi_recv(ep[i], target, 1, rem_mr, gni_addr[i], source);
+		sz = fi_recv(ep[0], &target[i], sizeof(int), rem_mr,
+			     gni_addr[i], ctx+i);
 		cr_assert_eq(sz, 0);
 	}
 
@@ -235,13 +239,22 @@ Test(rdm_rx_overrun, all_to_one)
 		for (i = 1; i < NUM_EPS; i++) {
 			if (fi_cq_read(msg_cq[0], &d_cqe, 1) == 1) {
 				cr_assert_eq((uint64_t)d_cqe.op_context,
-					     (uint64_t)(source+1));
+					     (uint64_t)(ctx+i));
 				dest_done += 1;
 			}
 		}
 	} while (dest_done != NUM_EPS-1);
 
 
-	for (i = 1; i < NUM_EPS; i++)
-		cr_assert(target[i] == i);
+	/* error checking */
+	for (i = 1; i < NUM_EPS; i++) {
+		cr_assert(target[i] < NUM_EPS);
+		ctx[target[i]] = target[i];
+	}
+
+	for (i = 1; i < NUM_EPS; i++) {
+		cr_assert(ctx[i] == i);
+	}
+
 }
+
