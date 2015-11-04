@@ -171,6 +171,7 @@ extern "C" {
  * Valid completion event flags.  See fi_cq.3.
  */
 #define GNIX_RMA_COMPLETION_FLAGS	(FI_RMA | FI_READ | FI_WRITE)
+#define GNIX_AMO_COMPLETION_FLAGS	(FI_ATOMIC | FI_READ | FI_WRITE)
 
 /*
  * GNI provider fabric default values
@@ -400,7 +401,10 @@ enum gnix_fab_req_type {
 	GNIX_FAB_RQ_RDMA_WRITE,
 	GNIX_FAB_RQ_RDMA_READ,
 	GNIX_FAB_RQ_RECV,
-	GNIX_FAB_RQ_TRECV
+	GNIX_FAB_RQ_TRECV,
+	GNIX_FAB_RQ_AMO,
+	GNIX_FAB_RQ_FAMO,
+	GNIX_FAB_RQ_CAMO
 };
 
 struct gnix_fab_req_rma {
@@ -429,6 +433,20 @@ struct gnix_fab_req_msg {
 	uint64_t                     rma_id;
 };
 
+struct gnix_fab_req_amo {
+	uint64_t                 loc_addr;
+	struct gnix_fid_mem_desc *loc_md;
+	size_t                   len;
+	uint64_t                 rem_addr;
+	uint64_t                 rem_mr_key;
+	uint64_t                 imm;
+	enum fi_datatype         datatype;
+	enum fi_op               op;
+	uint64_t                 first_operand;
+	uint64_t                 second_operand;
+	void                     *read_buf;
+};
+
 /*
  * Fabric request layout, there is a one to one
  * correspondence between an application's invocation of fi_send, fi_recv
@@ -453,6 +471,7 @@ struct gnix_fab_req {
 	union {
 		struct gnix_fab_req_rma rma;
 		struct gnix_fab_req_msg msg;
+		struct gnix_fab_req_amo amo;
 	};
 	char inject_buf[GNIX_INJECT_SIZE];
 };
