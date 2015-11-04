@@ -300,7 +300,9 @@ static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 }
 
 /*
- * TODO: slab should be freed when entries in the slab drop to zero
+ * TODO: slab should be freed when entries in the slab drop to zero,
+ * or as an alternative, have a free list for slabs so they can be
+ * reused if new fi_av_insert operations are performed.
  */
 static int map_remove(struct gnix_fid_av *int_av, fi_addr_t *fi_addr,
 		      size_t count, uint64_t flags)
