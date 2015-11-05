@@ -755,9 +755,14 @@ static void __ep_destruct(void *obj)
 		ret =  _gnix_ht_remove(ep->cm_nic->addr_to_ep_ht,
 				       *key_ptr);
 		if (ep->vc_ht != NULL) {
-			_gnix_ht_destroy(ep->vc_ht);
-			free(ep->vc_ht);
-			ep->vc_ht = NULL;
+			ret = _gnix_ht_destroy(ep->vc_ht);
+			if (ret == FI_SUCCESS) {
+				free(ep->vc_ht);
+				ep->vc_ht = NULL;
+			} else
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					"_gnix_ht_destroy returned %d\n",
+					ret);
 		}
 	}
 
