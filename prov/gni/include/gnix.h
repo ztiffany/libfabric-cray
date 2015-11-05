@@ -279,6 +279,7 @@ struct gnix_fid_domain {
 	/* list nics this domain is attached to, TODO: thread safety */
 	struct dlist_entry nic_list;
 	struct gnix_fid_fabric *fabric;
+	struct gnix_cm_nic *cm_nic;
 	uint8_t ptag;
 	uint32_t cookie;
 	uint32_t cdm_id_seed;
@@ -321,7 +322,7 @@ struct gnix_fid_ep {
 	struct gnix_fid_cntr *read_cntr;
 	struct gnix_fid_cntr *write_cntr;
 	struct gnix_fid_av *av;
-	/* cm nic bound to this ep (FID_EP_RDM only) */
+	struct gnix_ep_name my_name;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
 	union {
@@ -329,8 +330,6 @@ struct gnix_fid_ep {
 		struct gnix_vc **vc_table;      /* used for FI_AV_TABLE */
 		struct gnix_vc *vc;
 	};
-	fastlock_t vc_list_lock;
-	struct dlist_entry wc_vc_list;
 	/* lock for unexp and posted recv queue */
 	fastlock_t recv_queue_lock;
 	/* used for unexpected receives */
