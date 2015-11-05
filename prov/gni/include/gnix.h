@@ -325,6 +325,7 @@ struct gnix_fid_ep {
 	struct gnix_ep_name my_name;
 	struct gnix_cm_nic *cm_nic;
 	struct gnix_nic *nic;
+	fastlock_t vc_ht_lock;
 	union {
 		struct gnix_hashtable *vc_ht;
 		struct gnix_vc **vc_table;      /* used for FI_AV_TABLE */
