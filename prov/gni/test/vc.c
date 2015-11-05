@@ -265,15 +265,12 @@ Test(vc_management_auto, vc_connect)
 	int ret;
 	struct gnix_vc *vc_conn;
 	struct gnix_fid_ep *ep_priv[2];
-	struct gnix_cm_nic *cm_nic[2];
 	gnix_ht_key_t key;
 	enum gnix_vc_conn_state state;
 
 	ep_priv[0] = container_of(ep[0], struct gnix_fid_ep, ep_fid);
-	cm_nic[0] = ep_priv[0]->cm_nic;
 
 	ep_priv[1] = container_of(ep[1], struct gnix_fid_ep, ep_fid);
-	cm_nic[1] = ep_priv[1]->cm_nic;
 
 	ret = _gnix_vc_alloc(ep_priv[0], gnix_addr[1], &vc_conn);
 	cr_assert_eq(ret, FI_SUCCESS);
