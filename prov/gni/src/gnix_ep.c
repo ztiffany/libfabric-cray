@@ -765,13 +765,15 @@ static void __ep_destruct(void *obj)
 		}
 	}
 
-	_gnix_cm_nic_free(cm_nic);
-
 	/* There is no other choice here, we need to assert if we can't free */
 	ret = _gnix_nic_free(nic);
 	assert(ret == FI_SUCCESS);
 
 	ep->nic = NULL;
+
+	/* This currently always returns FI_SUCCESS */
+	ret = _gnix_cm_nic_free(cm_nic);
+	assert(ret == FI_SUCCESS);
 
 	/*
 	 * Free fab_reqs
