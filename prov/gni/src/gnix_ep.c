@@ -735,7 +735,6 @@ static void __ep_destruct(void *obj)
 
 	cm_nic = ep->cm_nic;
 	assert(cm_nic != NULL);
-	_gnix_cm_nic_free(cm_nic);
 
 	nic = ep->nic;
 	assert(nic != NULL);
@@ -765,6 +764,8 @@ static void __ep_destruct(void *obj)
 					ret);
 		}
 	}
+
+	_gnix_cm_nic_free(cm_nic);
 
 	/* There is no other choice here, we need to assert if we can't free */
 	ret = _gnix_nic_free(nic);
