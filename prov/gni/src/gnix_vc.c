@@ -709,7 +709,6 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 
 
 		fastlock_acquire(&cm_nic->wq_lock);
-		vc->modes |= GNIX_VC_MODE_IN_CM_WQ;
 		dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
 		fastlock_release(&cm_nic->wq_lock);
 
@@ -1042,14 +1041,6 @@ err:
  */
 static int __gnix_vc_conn_ack_comp_fn(void *data)
 {
-	struct gnix_vc *vc;
-	struct wq_hndl_conn_req *work_req_data;
-
-	work_req_data = (struct wq_hndl_conn_req *)data;
-	vc = work_req_data->vc;
-
-	vc->modes &= ~GNIX_VC_MODE_IN_CM_WQ;
-
 	free(data);
 	return FI_SUCCESS;
 }
@@ -1061,8 +1052,6 @@ static int __gnix_vc_conn_ack_comp_fn(void *data)
 static int __gnix_vc_conn_req_comp_fn(void *data)
 {
 	struct gnix_vc *vc = (struct gnix_vc *)data;
-
-	vc->modes &= ~GNIX_VC_MODE_IN_CM_WQ;
 
 	return FI_SUCCESS;
 }
@@ -1306,7 +1295,6 @@ int _gnix_vc_connect(struct gnix_vc *vc)
 	 */
 
 	fastlock_acquire(&cm_nic->wq_lock);
-	vc->modes |= GNIX_VC_MODE_IN_CM_WQ;
 	dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
 	fastlock_release(&cm_nic->wq_lock);
 
