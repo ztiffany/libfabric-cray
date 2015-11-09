@@ -226,31 +226,21 @@ static int __gnix_send_post_err(struct gnix_tx_descriptor *txd)
 	return __gnix_send_smsg_err(txd);
 }
 
-static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
+static int __gnix_rndzv_req_snd_comp(void *arg)
 {
-	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
-	struct gnix_fab_req *req = txd->req;
+	struct gnix_fab_req *req = (struct gnix_fab_req *)arg;
+	struct gnix_tx_descriptor *txd = req->txd;
 	struct gnix_nic *nic;
 	struct gnix_fid_ep *ep;
 	gni_return_t status;
 
-	if (tx_status != GNI_RC_SUCCESS) {
-		return __gnix_send_post_err(txd);
-	}
-
-	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV GET, req: %p\n", req);
+	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
 
 	ep = req->gnix_ep;
 	assert(ep != NULL);
 
 	nic = ep->nic;
 	assert(nic != NULL);
-
-	if (req->msg.recv_flags & FI_LOCAL_MR) {
-		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
-			  req->msg.recv_md);
-		fi_close(&req->msg.recv_md->mr_fid.fid);
-	}
 
 	txd->rndzv_fin_hdr.req_addr = req->msg.rma_id;
 
@@ -276,6 +266,33 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 	GNIX_INFO(FI_LOG_EP_DATA, "Initiated RNDZV_FIN, req: %p\n", req);
 
 	return gnixu_to_fi_errno(status);
+}
+
+static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
+{
+	int ret = FI_SUCCESS;
+	struct gnix_tx_descriptor *txd = (struct gnix_tx_descriptor *)arg;
+	struct gnix_fab_req *req = txd->req;
+
+	GNIX_TRACE(FI_LOG_EP_DATA, "\n");
+
+	if (tx_status != GNI_RC_SUCCESS)
+		return __gnix_send_post_err(txd);
+
+	GNIX_INFO(FI_LOG_EP_DATA, "Completed RNDZV GET, req: %p\n", req);
+
+	if (req->msg.recv_flags & FI_LOCAL_MR) {
+		GNIX_INFO(FI_LOG_EP_DATA, "freeing auto-reg MR: %p\n",
+			  req->msg.recv_md);
+		fi_close(&req->msg.recv_md->mr_fid.fid);
+	}
+
+	req->send_fn = __gnix_rndzv_req_snd_comp;
+	req->txd = txd;
+
+	ret = _gnix_vc_queue_tx_req(req);
+
+	return ret;
 }
 
 static int __gnix_rndzv_req_send_fin(void *arg)

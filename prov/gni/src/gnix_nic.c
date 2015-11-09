@@ -149,6 +149,8 @@ static int process_rx_cqe(struct gnix_nic *nic, gni_cq_entry_t cqe)
 					"_gnix_vc_dqueue_smsg returned %d\n",
 					ret);
 		}
+		ret = _gnix_vc_schedule(vc);
+		assert(ret == FI_SUCCESS);
 	}
 #else /* Defer RX processing until after the RX CQ is cleared. */
 	_gnix_set_bit(&vc->flags, GNIX_VC_FLAG_RX_PENDING);
