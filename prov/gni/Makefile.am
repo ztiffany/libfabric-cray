@@ -12,6 +12,7 @@ AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni/common -I
 _gni_files = \
 	prov/gni/common/rbtree.c \
 	prov/gni/common/fasthash/fasthash.c \
+	prov/gni/src/gnix_atomic.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_bitmap.c \
 	prov/gni/src/gnix_cm.c \
@@ -59,6 +60,7 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/nic.c \
 	prov/gni/test/pmi_utils.c \
 	prov/gni/test/queue.c \
+	prov/gni/test/rdm_atomic.c \
 	prov/gni/test/rdm_fi_pcd_trecv_msg.c \
 	prov/gni/test/rdm_rma.c \
 	prov/gni/test/rdm_rx_overrun.c \
@@ -67,7 +69,7 @@ prov_gni_test_gnitest_SOURCES = \
 	prov/gni/test/tags.c \
 	prov/gni/test/utils.c \
 	prov/gni/test/vc.c \
-	prov/gni/test/wait.c 
+	prov/gni/test/wait.c
 
 prov_gni_test_gnitest_LDFLAGS = $(CRAY_PMI_LIBS) -static
 prov_gni_test_gnitest_CPPFLAGS = $(AM_CPPFLAGS) $(CRAY_PMI_CFLAGS)

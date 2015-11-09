@@ -47,6 +47,7 @@
 #include "gnix_vc.h"
 #include "gnix_msg.h"
 #include "gnix_rma.h"
+#include "gnix_atomic.h"
 #include "gnix_cntr.h"
 
 
@@ -85,6 +86,7 @@ static struct fi_ops_ep gnix_ep_ops;
 static struct fi_ops_msg gnix_ep_msg_ops;
 static struct fi_ops_rma gnix_ep_rma_ops;
 struct fi_ops_tagged gnix_ep_tagged_ops;
+struct fi_ops_atomic gnix_ep_atomic_ops;
 
 /*******************************************************************************
  * EP common messaging wrappers.
@@ -636,6 +638,188 @@ ssize_t gnix_ep_tsenddata(struct fid_ep *ep, const void *buf, size_t len,
 			FI_TAGGED, tag);
 }
 
+
+/*******************************************************************************
+ * EP atomic API implementation.
+ ******************************************************************************/
+
+#define GNIX_ATOMIC_WRITE_FLAGS_DEF	(FI_ATOMIC | FI_WRITE)
+#define GNIX_ATOMIC_READ_FLAGS_DEF	(FI_ATOMIC | FI_READ)
+
+static int gnix_ep_atomic_valid(struct fid_ep *ep,
+				enum fi_datatype datatype,
+				enum fi_op op, size_t *count)
+{
+	if (count)
+		*count = 1;
+
+	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_AMO) >= 0 ?
+			0 : -FI_ENOENT;
+}
+
+static int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
+				      enum fi_datatype datatype,
+				      enum fi_op op, size_t *count)
+{
+	if (count)
+		*count = 1;
+
+	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_FAMO) >= 0 ?
+			0 : -FI_ENOENT;
+}
+
+static int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
+				    enum fi_datatype datatype,
+				    enum fi_op op, size_t *count)
+{
+	if (count)
+		*count = 1;
+
+	return _gnix_atomic_cmd(datatype, op, GNIX_FAB_RQ_CAMO) >= 0 ?
+			0 : -FI_ENOENT;
+}
+
+ssize_t gnix_ep_atomic_write(struct fid_ep *ep,
+			     const void *buf, size_t count, void *desc,
+			     fi_addr_t dest_addr,
+			     uint64_t addr, uint64_t key,
+			     enum fi_datatype datatype, enum fi_op op, void *context)
+{
+	struct gnix_fid_ep *gnix_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	uint64_t flags;
+
+	if (gnix_ep_atomic_valid(ep, datatype, op, NULL))
+		return -FI_ENOENT;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+
+	flags = gnix_ep->op_flags | GNIX_ATOMIC_WRITE_FLAGS_DEF;
+
+	return _gnix_atomic(gnix_ep, GNIX_FAB_RQ_AMO, &msg,
+			    NULL, NULL, 0, NULL, NULL, 0, flags);
+}
+
+ssize_t gnix_ep_atomic_readwrite(struct fid_ep *ep,
+				 const void *buf, size_t count, void *desc,
+				 void *result, void *result_desc,
+				 fi_addr_t dest_addr,
+				 uint64_t addr, uint64_t key,
+				 enum fi_datatype datatype, enum fi_op op,
+				 void *context)
+{
+	struct gnix_fid_ep *gnix_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	struct fi_ioc result_iov;
+	uint64_t flags;
+
+	if (gnix_ep_fetch_atomic_valid(ep, datatype, op, NULL))
+		return -FI_ENOENT;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+	result_iov.addr = result;
+	result_iov.count = 1;
+
+	flags = gnix_ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(gnix_ep, GNIX_FAB_RQ_FAMO, &msg,
+			    NULL, NULL, 0,
+			    &result_iov, &result_desc, 1,
+			    flags);
+}
+
+ssize_t gnix_ep_atomic_compwrite(struct fid_ep *ep,
+				 const void *buf, size_t count, void *desc,
+				 const void *compare, void *compare_desc,
+				 void *result, void *result_desc,
+				 fi_addr_t dest_addr,
+				 uint64_t addr, uint64_t key,
+				 enum fi_datatype datatype, enum fi_op op,
+				 void *context)
+{
+	struct gnix_fid_ep *gnix_ep;
+	struct fi_msg_atomic msg;
+	struct fi_ioc msg_iov;
+	struct fi_rma_ioc rma_iov;
+	struct fi_ioc result_iov;
+	struct fi_ioc compare_iov;
+	uint64_t flags;
+
+	if (gnix_ep_cmp_atomic_valid(ep, datatype, op, NULL))
+		return -FI_ENOENT;
+
+	if (!ep)
+		return -FI_EINVAL;
+
+	gnix_ep = container_of(ep, struct gnix_fid_ep, ep_fid);
+	assert((gnix_ep->type == FI_EP_RDM) || (gnix_ep->type == FI_EP_MSG));
+
+	msg_iov.addr = (void *)buf;
+	msg_iov.count = count;
+	msg.msg_iov = &msg_iov;
+	msg.desc = &desc;
+	msg.iov_count = 1;
+	msg.addr = dest_addr;
+	rma_iov.addr = addr;
+	rma_iov.count = 1;
+	rma_iov.key = key;
+	msg.rma_iov = &rma_iov;
+	msg.datatype = datatype;
+	msg.op = op;
+	msg.context = context;
+	result_iov.addr = result;
+	result_iov.count = 1;
+	compare_iov.addr = (void *)compare;
+	compare_iov.count = 1;
+
+	flags = gnix_ep->op_flags | GNIX_ATOMIC_READ_FLAGS_DEF;
+
+	return _gnix_atomic(gnix_ep, GNIX_FAB_RQ_CAMO, &msg,
+			    &compare_iov, &compare_desc, 1,
+			    &result_iov, &result_desc, 1,
+			    flags);
+}
+
 /*******************************************************************************
  * Base EP API function implementations.
  ******************************************************************************/
@@ -1034,7 +1218,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep_fid.msg = &gnix_ep_msg_ops;
 	ep_priv->ep_fid.rma = &gnix_ep_rma_ops;
 	ep_priv->ep_fid.tagged = &gnix_ep_tagged_ops;
-	ep_priv->ep_fid.atomic = NULL;
+	ep_priv->ep_fid.atomic = &gnix_ep_atomic_ops;
 
 	ep_priv->ep_fid.cm = &gnix_cm_ops;
 
@@ -1369,3 +1553,21 @@ struct fi_ops_tagged gnix_ep_tagged_ops = {
 	.senddata = gnix_ep_tsenddata,
 	.injectdata = fi_no_tagged_injectdata,
 };
+
+struct fi_ops_atomic gnix_ep_atomic_ops = {
+	.size = sizeof(struct fi_ops_atomic),
+	.write = gnix_ep_atomic_write,
+//	.writev = sock_ep_atomic_writev,
+//	.writemsg = sock_ep_atomic_writemsg,
+//	.inject = sock_ep_atomic_inject,
+	.readwrite = gnix_ep_atomic_readwrite,
+//	.readwritev = sock_ep_atomic_readwritev,
+//	.readwritemsg = sock_ep_atomic_readwritemsg,
+	.compwrite = gnix_ep_atomic_compwrite,
+//	.compwritev = sock_ep_atomic_compwritev,
+//	.compwritemsg = sock_ep_atomic_compwritemsg,
+	.writevalid = gnix_ep_atomic_valid,
+	.readwritevalid = gnix_ep_fetch_atomic_valid,
+	.compwritevalid = gnix_ep_cmp_atomic_valid,
+};
+
