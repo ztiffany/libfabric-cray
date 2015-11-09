@@ -1278,7 +1278,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		gnix_ht_attr.ht_increase_type = GNIX_HT_INCREASE_MULT;
 		gnix_ht_attr.ht_collision_thresh = 500;
 		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
-		gnix_ht_attr.ht_internal_locking = 1;
+		gnix_ht_attr.ht_internal_locking = 0;
 
 		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
 		if (ep_priv->vc_ht == NULL)
@@ -1290,6 +1290,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 				     ret);
 			goto err;
 		}
+		fastlock_init(&ep_priv->vc_ht_lock);
 
 	} else {
 		ep_priv->cm_nic = NULL;
