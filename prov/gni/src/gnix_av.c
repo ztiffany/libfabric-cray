@@ -238,10 +238,7 @@ static int table_lookup(struct gnix_fid_av *int_av, fi_addr_t fi_addr,
 /*******************************************************************************
  * FI_AV_MAP specific implementations.
  ******************************************************************************/
-/*
- * TODO:
- * Store inserted address in some data structure.
- */
+
 static int map_insert(struct gnix_fid_av *int_av, const void *addr,
 		      size_t count, fi_addr_t *fi_addr, uint64_t flags,
 		      void *context)

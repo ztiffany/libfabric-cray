@@ -97,8 +97,7 @@ static int gnix_getname(fid_t fid, void *addr, size_t *addrlen)
 	if (ep->type == FI_EP_RDM) {
 		name = ep->my_name;
 	} else {
-		return -FI_ENOSYS;  /*TODO: something different needed for
-				      FI_EP_MSG */
+		return -FI_ENOSYS;  /*TODO: need to implement FI_EP_MSG */
 	}
 
 	memcpy(addr, &name, copy_size);

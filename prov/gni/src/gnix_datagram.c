@@ -72,10 +72,6 @@ static void *_gnix_dgram_prog_thread_fn(void *the_arg)
 	struct gnix_dgram_hndl *the_hndl = (struct gnix_dgram_hndl *)the_arg;
 	sigset_t  sigmask;
 
-	/*
-	 * TODO: need to add a lock?
-	 */
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/*

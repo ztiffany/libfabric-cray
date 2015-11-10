@@ -892,7 +892,6 @@ static int __mr_cache_create_registration(
 	if (!current_entry)
 		return -FI_ENOMEM;
 
-	/* TODO: should we just try the first nic we find? */
 	/* NOTE: Can we assume the list is safe for access without a lock? */
 	dlist_for_each(&domain->nic_list, nic, dom_nic_list)
 	{
