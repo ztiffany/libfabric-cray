@@ -574,6 +574,7 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		gnix_ht_attr.ht_collision_thresh = 500;
 		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
 		gnix_ht_attr.ht_internal_locking = 1;
+		gnix_ht_attr.destructor = NULL;
 
 		ret = _gnix_ht_init(cm_nic->addr_to_ep_ht, &gnix_ht_attr);
 		if (ret != FI_SUCCESS) {

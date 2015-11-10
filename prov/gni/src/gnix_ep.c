@@ -942,10 +942,11 @@ static void __ep_destruct(void *obj)
 			if (ret == FI_SUCCESS) {
 				free(ep->vc_ht);
 				ep->vc_ht = NULL;
-			} else
+			} else {
 				GNIX_WARN(FI_LOG_EP_CTRL,
-					"_gnix_ht_destroy returned %d\n",
-					ret);
+					"_gnix_ht_destroy returned %s\n",
+					  fi_strerror(-ret));
+			}
 		}
 	}
 
@@ -1129,6 +1130,13 @@ err:
 	return ret;
 }
 
+static void __gnix_vc_destroy_ht_entry(void *val)
+{
+	struct gnix_vc *vc = (struct gnix_vc *) val;
+
+	_gnix_vc_destroy(vc);
+}
+
 int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		 struct fid_ep **ep, void *context)
 {
@@ -1279,6 +1287,7 @@ int gnix_ep_open(struct fid_domain *domain, struct fi_info *info,
 		gnix_ht_attr.ht_collision_thresh = 500;
 		gnix_ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
 		gnix_ht_attr.ht_internal_locking = 0;
+		gnix_ht_attr.destructor = __gnix_vc_destroy_ht_entry;
 
 		ep_priv->vc_ht = calloc(1, sizeof(struct gnix_hashtable));
 		if (ep_priv->vc_ht == NULL)

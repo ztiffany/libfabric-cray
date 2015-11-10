@@ -552,6 +552,7 @@ static void __av_destruct(void *obj)
 			GNIX_WARN(FI_LOG_AV,
 				  "_gnix_ht_destroy failed %d\n",
 				  ret);
+		free(av->map_ht);
 	}
 	if (av->valid_entry_vec) {
 		free(av->valid_entry_vec);
@@ -562,9 +563,6 @@ static void __av_destruct(void *obj)
 	free(av);
 }
 
-/*
- * TODO: Free memory for data structures when FI_AV_MAP is fully supported.
- */
 static int gnix_av_close(fid_t fid)
 {
 	struct gnix_fid_av *av = NULL;
@@ -675,6 +673,7 @@ int gnix_av_open(struct fid_domain *domain, struct fi_av_attr *attr,
 		ht_attr.ht_collision_thresh = 500;
 		ht_attr.ht_hash_seed = 0xdeadbeefbeefdead;
 		ht_attr.ht_internal_locking = 1;
+		ht_attr.destructor = NULL;
 
 		ret = _gnix_ht_init(int_av->map_ht,
 				    &ht_attr);
