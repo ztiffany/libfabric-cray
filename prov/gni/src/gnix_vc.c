@@ -1057,8 +1057,6 @@ static int __gnix_vc_conn_ack_comp_fn(void *data)
  */
 static int __gnix_vc_conn_req_comp_fn(void *data)
 {
-	struct gnix_vc *vc = (struct gnix_vc *)data;
-
 	return FI_SUCCESS;
 }
 
