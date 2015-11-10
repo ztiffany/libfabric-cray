@@ -369,13 +369,13 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 				       &mbox);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err;
 		}
 		vc->smsg_mbox = mbox;
-	} else {
+	} else
 		mbox = vc->smsg_mbox;
-	}
 
 	smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr.msg_buffer = mbox->base;
@@ -415,7 +415,8 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 				     &vc_peer);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_vc_alloc returned %d\n", ret);
+				"_gnix_vc_alloc returned %s\n",
+				fi_strerror(-ret));
 			goto err;
 		}
 
@@ -424,8 +425,8 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 				      vc_peer);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_ht_insert returned %d\n",
-				  ret);
+				  "_gnix_ht_insert returned %s\n",
+				  fi_strerror(-ret));
 			goto err;
 		}
 		vc_peer->modes |= GNIX_VC_MODE_IN_HT;
@@ -440,13 +441,13 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 				       &mbox_peer);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_mbox_alloc returned %d\n", ret);
+				  "_gnix_mbox_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err;
 		}
 		vc_peer->smsg_mbox = mbox_peer;
-	} else {
+	} else 
 		mbox_peer = vc_peer->smsg_mbox;
-	}
 
 	smsg_mbox_attr_peer.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr_peer.msg_buffer = mbox_peer->base;
@@ -459,14 +460,16 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	ret = __gnix_vc_smsg_init(vc, vc_peer->vc_id, &smsg_mbox_attr_peer);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_vc_smsg_init returned %d\n", ret);
+			  "_gnix_vc_smsg_init returned %s\n",
+			  fi_strerror(-ret));
 		goto err;
 	}
 
 	ret = __gnix_vc_smsg_init(vc_peer, vc->vc_id, &smsg_mbox_attr);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_vc_smsg_init returned %d\n", ret);
+			  "_gnix_vc_smsg_init returned %s\n",
+			  fi_strerror(-ret));
 		goto err;
 	}
 
@@ -632,7 +635,6 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	/*
 	 * look to see if there is a VC already for the
 	 * address of the connecting EP.
-	 * TODO: probably need a lock here.
 	 */
 
 	key_ptr = (gnix_ht_key_t *)&src_addr;
@@ -657,8 +659,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 					     &vc_try);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
-					  "_gnix_vc_alloc returned %d\n",
-					  ret);
+					  "_gnix_vc_alloc returned %s\n",
+					  fi_strerror(-ret));
 				goto err;
 			}
 
@@ -673,8 +675,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				_gnix_vc_destroy(vc_try);
 			} else {
 				GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_ht_insert returned %d\n",
-				   ret);
+				  "_gnix_ht_insert returned %s\n",
+				   fi_strerror(-ret));
 				goto err;
 			}
 		} else
@@ -733,7 +735,8 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		 */
 		if (vc->conn_state != GNIX_VC_CONNECTING) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "vc %p not in connecting state nor in cm wq\n", vc, vc->conn_state);
+				 "vc %p not in connecting state nor in cm wq\n",
+				  vc, vc->conn_state);
 			ret = -FI_EINVAL;
 			goto err;
 		}
@@ -1211,7 +1214,8 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		ret = _gnix_mbox_free(vc->smsg_mbox);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			      "_gnix_mbox_free returned %d\n", ret);
+			      "_gnix_mbox_free returned %s\n",
+			      fi_strerror(-ret));
 		vc->smsg_mbox = NULL;
 	}
 
@@ -1219,14 +1223,16 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		ret = _gnix_dgram_free(vc->dgram);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-			      "_gnix_dgram_free returned %d\n", ret);
+			      "_gnix_dgram_free returned %s\n",
+			      fi_strerror(-ret));
 		vc->dgram = NULL;
 	}
 
 	ret = _gnix_nic_free_rem_id(nic, vc->vc_id);
 	if (ret != FI_SUCCESS)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-		      "__gnix_vc_free_id returned %d\n", ret);
+		      "__gnix_vc_free_id returned %s\n",
+		      fi_strerror(-ret));
 
 	_gnix_free_bitmap(&vc->flags);
 
@@ -1495,8 +1501,9 @@ int _gnix_vc_push_tx_reqs(struct gnix_vc *vc)
 			break;
 		} else {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "Failed to push TX request %p: %d\n",
-				  req, ret);
+				  "Failed to push TX request %p: %s\n",
+				  req,
+				  fi_strerror(-ret));
 			fi_rc = ret;
 			assert(0);
 			break;
@@ -1593,8 +1600,9 @@ int _gnix_vc_push_reqs(struct gnix_vc *vc)
 			break;
 		} else {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "Failed to push request %p: %d\n",
-				  req, ret);
+				  "Failed to push request %p: %s\n",
+				  req,
+				  fi_strerror(-ret));
 			fi_rc = ret;
 			assert(0);
 			break;
@@ -1614,21 +1622,13 @@ int _gnix_vc_progress(struct gnix_vc *vc)
 	int ret;
 	struct gnix_cm_nic *cm_nic;
 
-	/*
-	 * TODO: this is temporary and will be removed
-	 * once the cm_nic functionality goes in to
-	 * nic functionality (see issue 218)
-	 */
 	if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
 		cm_nic = vc->ep->cm_nic;
 		ret = _gnix_cm_nic_progress(cm_nic);
-		if (ret != FI_SUCCESS)
+		if ((ret != FI_SUCCESS) && (ret != -FI_EAGAIN))
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_cm_nic_progress() failed: %d\n",
-				   ret);
-	}
-
-	if (unlikely(vc->conn_state < GNIX_VC_CONNECTED)) {
+				  "_gnix_cm_nic_progress() failed: %s\n",
+				   fi_strerror(-ret));
 		/* waiting to connect, check back later */
 		return -FI_EAGAIN;
 	}
@@ -1641,8 +1641,8 @@ int _gnix_vc_progress(struct gnix_vc *vc)
 		fastlock_release(&vc->ep->nic->lock);
 		if (unlikely(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_dequeue_smsg() failed: %d\n",
-				  ret);
+				  "_gnix_vc_dequeue_smsg() failed: %s\n",
+				  fi_strerror(-ret));
 			return ret;
 		}
 	}
@@ -1652,8 +1652,8 @@ int _gnix_vc_progress(struct gnix_vc *vc)
 		ret = _gnix_vc_push_reqs(vc);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_push_tx_reqs() failed: %d\n",
-				  ret);
+				  "_gnix_vc_push_tx_reqs() failed: %s\n",
+				  fi_strerror(-ret));
 			return ret;
 		}
 	}
@@ -1663,8 +1663,8 @@ int _gnix_vc_progress(struct gnix_vc *vc)
 		ret = _gnix_vc_push_tx_reqs(vc);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_vc_push_tx_reqs() failed: %d\n",
-				  ret);
+				  "_gnix_vc_push_tx_reqs() failed: %s\n",
+				  fi_strerror(-ret));
 			return ret;
 		}
 	}
@@ -1689,8 +1689,8 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 	ret = _gnix_av_lookup(av, dest_addr, &av_entry);
 	if (ret != FI_SUCCESS) {
 		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_av_lookup returned %d\n",
-			  ret);
+			  "_gnix_av_lookup returned %s\n",
+			  fi_strerror(-ret));
 		goto err;
 	}
 	GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
@@ -1707,8 +1707,8 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 				     &vc_tmp);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_alloc returned %d\n",
-				  ret);
+				  "_gnix_vc_alloc returned %s\n",
+				  fi_strerror(-ret));
 			goto err;
 		}
 		ret = _gnix_ht_insert(ep->vc_ht, key,
@@ -1720,8 +1720,8 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			ret = _gnix_vc_connect(vc);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_DATA,
-					"_gnix_vc_connect returned %d\n",
-					   ret);
+					"_gnix_vc_connect returned %s\n",
+					   fi_strerror(-ret));
 				goto err;
 			}
 		} else if (ret == -FI_ENOSPC) {
@@ -1734,8 +1734,8 @@ static int __gnix_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 			ret = FI_SUCCESS;
 		} else {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_ht_insert returned %d\n",
-				   ret);
+				  "_gnix_ht_insert returned %s\n",
+				   fi_strerror(-ret));
 			goto err;
 		}
 	}
@@ -1759,8 +1759,8 @@ int _gnix_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
 		ret = __gnix_ep_rdm_get_vc(ep, dest_addr, vc_ptr);
 		if (unlikely(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_ep_get_vc returned %d\n",
-				   ret);
+				  "__gnix_ep_get_vc returned %s\n",
+				   fi_strerror(-ret));
 			return ret;
 		}
 	} else if (ep->type == FI_EP_MSG) {
@@ -1787,8 +1787,8 @@ int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic)
 					&ofunc);
 	if ((ofunc != NULL) &&
 	    (ofunc != __gnix_vc_recv_fn)) {
-		GNIX_WARN(FI_LOG_EP_DATA, "callback reg failed: %d\n",
-			  ret);
+		GNIX_WARN(FI_LOG_EP_DATA, "callback reg failed: %s\n",
+			  fi_strerror(-ret));
 	}
 
 	fastlock_release(&cm_nic->lock);

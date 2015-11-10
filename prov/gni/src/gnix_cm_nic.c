@@ -123,7 +123,6 @@ static int __process_datagram(struct gnix_datagram *dgram,
 		(in_tag != GNIX_CM_NIC_WC_TAG)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			"datagram with unknown in tag %d\n", in_tag);
-		assert(0);
 		goto err;
 	}
 
@@ -132,7 +131,6 @@ static int __process_datagram(struct gnix_datagram *dgram,
 		(out_tag != GNIX_CM_NIC_WC_TAG)) {
 		GNIX_WARN(FI_LOG_EP_CTRL,
 			"datagram with unknown out tag %d\n", out_tag);
-		assert(0);
 		goto err;
 	}
 
@@ -151,7 +149,8 @@ static int __process_datagram(struct gnix_datagram *dgram,
 					peer_address);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"cm_nic->rcv_cb_fn returned %d\n", ret);
+				"cm_nic->rcv_cb_fn returned %s\n",
+				fi_strerror(-ret));
 			goto err;
 		}
 	}
@@ -167,16 +166,16 @@ static int __process_datagram(struct gnix_datagram *dgram,
 		ret = _gnix_dgram_wc_post(dgram);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_dgram_wc_post returned %d\n",
-				ret);
+				"_gnix_dgram_wc_post returned %s\n",
+				fi_strerror(-ret));
 			goto err;
 		}
 	} else {
 		ret  = _gnix_dgram_free(dgram);
 		if (ret != FI_SUCCESS)
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				"_gnix_dgram_free returned %d\n",
-				ret);
+				"_gnix_dgram_free returned %s\n",
+				fi_strerror(-ret));
 	}
 
 	return ret;
@@ -257,11 +256,10 @@ check_again:
 	assert(p->progress_fn);
 
 	ret = p->progress_fn(p->data, &complete);
-	if (ret != FI_SUCCESS) {
-		/*
-		 * TODO: fix this
-		 */
-	}
+	if (ret != FI_SUCCESS)
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "dgram prog fn returned %s\n",
+				  fi_strerror(-ret));
 
 	if (complete == 1) {
 		if (p->completer_fn) {
@@ -332,11 +330,6 @@ int _gnix_cm_nic_send(struct gnix_cm_nic *cm_nic,
 
 	if (len > GNI_DATAGRAM_MAXSIZE)
 		return -FI_ENOSPC;
-
-	/*
-	 * TODO: verify that target_addr appears to be
-	 * correct - can't fully verify
-	 */
 
 	ret = _gnix_dgram_alloc(cm_nic->dgram_hndl,
 				GNIX_DGRAM_BND,
@@ -579,8 +572,8 @@ int _gnix_cm_nic_alloc(struct gnix_fid_domain *domain,
 		ret = _gnix_ht_init(cm_nic->addr_to_ep_ht, &gnix_ht_attr);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "gnix_ht_init returned %d\n",
-				  ret);
+				  "gnix_ht_init returned %s\n",
+				  fi_strerror(-ret));
 			goto err;
 		}
 

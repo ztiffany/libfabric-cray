@@ -882,7 +882,6 @@ static void __ep_destruct(void *obj)
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
-	/* TODO: lots more stuff to do here */
 	if (ep->send_cq) {
 		_gnix_cq_poll_nic_rem(ep->send_cq, ep->nic);
 		_gnix_ref_put(ep->send_cq);
@@ -1058,7 +1057,7 @@ static int gnix_ep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		ep->av = av;
 		_gnix_ref_get(ep->av);
 		break;
-	case FI_CLASS_CNTR: /* TODO: need to support cntrs someday */
+	case FI_CLASS_CNTR:
 		cntr = container_of(bfid, struct gnix_fid_cntr, cntr_fid.fid);
 		if (ep->domain != cntr->domain) {
 			ret = -FI_EINVAL;
