@@ -11,7 +11,9 @@ AM_CFLAGS += -I$(top_srcdir)/prov/gni/include -I$(top_srcdir)/prov/gni/common -I
 
 _gni_files = \
 	prov/gni/common/rbtree.c \
+	prov/gni/common/rbtree.h \
 	prov/gni/common/fasthash/fasthash.c \
+	prov/gni/common/fasthash/fasthash.h \
 	prov/gni/src/gnix_atomic.c \
 	prov/gni/src/gnix_av.c \
 	prov/gni/src/gnix_bitmap.c \
@@ -38,6 +40,35 @@ _gni_files = \
 	prov/gni/src/gnix_util.c \
 	prov/gni/src/gnix_vc.c \
 	prov/gni/src/gnix_wait.c
+
+_gni_headers = \
+	prov/gni/include/fi_ext_gni.h \
+	prov/gni/include/gnix_atomic.h \
+	prov/gni/include/gnix_av.h \
+	prov/gni/include/gnix_bitmap.h \
+	prov/gni/include/gnix_cm_nic.h \
+	prov/gni/include/gnix_cntr.h \
+	prov/gni/include/gnix_cq.h \
+	prov/gni/include/gnix_datagram.h \
+	prov/gni/include/gnix_ep.h \
+	prov/gni/include/gnix_ep_msg.h \
+	prov/gni/include/gnix_ep_rdm.h \
+	prov/gni/include/gnix_eq.h \
+	prov/gni/include/gnix_freelist.h \
+	prov/gni/include/gnix.h \
+	prov/gni/include/gnix_hashtable.h \
+	prov/gni/include/gnix_mbox_allocator.h \
+	prov/gni/include/gnix_mr.h \
+	prov/gni/include/gnix_msg.h \
+	prov/gni/include/gnix_nameserver.h \
+	prov/gni/include/gnix_nic.h \
+	prov/gni/include/gnix_priv.h \
+	prov/gni/include/gnix_queue.h \
+	prov/gni/include/gnix_rma.h \
+	prov/gni/include/gnix_tags.h \
+	prov/gni/include/gnix_util.h \
+	prov/gni/include/gnix_vc.h \
+	prov/gni/include/gnix_wait.h
 
 if HAVE_CRITERION
 bin_PROGRAMS += prov/gni/test/gnitest
@@ -79,12 +110,12 @@ endif
 
 if HAVE_GNI_DL
 pkglib_LTLIBRARIES += libgnix-fi.la
-libgnix_fi_la_SOURCES = $(_gni_files) $(common_srcs)
+libgnix_fi_la_SOURCES = $(_gni_files) $(_gni_headers) $(common_srcs)
 libgnix_fi_la_LIBADD = $(linkback)
 libgnix_fi_la_LDFLAGS = -module -avoid-version -shared -export-dynamic
 libgnix_fi_la_DEPENDENCIES = $(linkback)
 else !HAVE_GNI_DL
-src_libfabric_la_SOURCES += $(_gni_files)
+src_libfabric_la_SOURCES += $(_gni_files) $(_gni_headers)
 endif !HAVE_GNI_DL
 endif
 
