@@ -364,15 +364,18 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	vc->conn_state = GNIX_VC_CONNECTING;
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n", vc);
 
-	ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl,
-			       &mbox);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_mbox_alloc returned %d\n", ret);
-		goto err;
+	if (vc->smsg_mbox == NULL) {
+		ret = _gnix_mbox_alloc(vc->ep->nic->mbox_hndl,
+				       &mbox);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_mbox_alloc returned %d\n", ret);
+			goto err;
+		}
+		vc->smsg_mbox = mbox;
+	} else {
+		mbox = vc->smsg_mbox;
 	}
-
-	vc->smsg_mbox = mbox;
 
 	smsg_mbox_attr.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr.msg_buffer = mbox->base;
@@ -432,15 +435,18 @@ static int __gnix_vc_connect_to_self(struct gnix_vc *vc)
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n",
 		   vc_peer);
 
-	ret = _gnix_mbox_alloc(vc_peer->ep->nic->mbox_hndl,
-			       &mbox_peer);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_mbox_alloc returned %d\n", ret);
-		goto err;
+	if (vc_peer->smsg_mbox == NULL) {
+		ret = _gnix_mbox_alloc(vc_peer->ep->nic->mbox_hndl,
+				       &mbox_peer);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_mbox_alloc returned %d\n", ret);
+			goto err;
+		}
+		vc_peer->smsg_mbox = mbox_peer;
+	} else {
+		mbox_peer = vc_peer->smsg_mbox;
 	}
-
-	vc_peer->smsg_mbox = mbox_peer;
 
 	smsg_mbox_attr_peer.msg_type = GNI_SMSG_TYPE_MBOX_AUTO_RETRANSMIT;
 	smsg_mbox_attr_peer.msg_buffer = mbox_peer->base;
@@ -1162,9 +1168,8 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 
 
 	/*
-	 * check the state of the VC, may need to
-	 * do something for some cases
-	 */
+	 * We may eventually want to check the state of the VC, if we
+	 * implement true VC shutdown.
 
 	if ((vc->conn_state != GNIX_VC_CONN_NONE)
 		&& (vc->conn_state != GNIX_VC_CONN_TERMINATED)) {
@@ -1174,6 +1179,7 @@ int _gnix_vc_destroy(struct gnix_vc *vc)
 		GNIX_WARN(FI_LOG_EP_CTRL, "vc conn state error\n");
 		return -FI_EBUSY;
 	}
+	 */
 
 	/*
 	 * if send_q not empty, return -FI_EBUSY

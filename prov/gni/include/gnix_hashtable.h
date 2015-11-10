@@ -94,6 +94,9 @@ enum gnix_ht_increase {
  *                           results.
  * @var ht_internal_locking  if non-zero, uses a version of the hash table with
  *                           internal locking implemented
+ *
+ * @var destructor           if non-NULL, will be called with value when
+ *                           destroying the hash table
  */
 typedef struct gnix_hashtable_attr {
 	int ht_initial_size;
@@ -103,6 +106,7 @@ typedef struct gnix_hashtable_attr {
 	int ht_collision_thresh;
 	uint64_t ht_hash_seed;
 	int ht_internal_locking;
+	void  (*destructor)(void *);
 } gnix_hashtable_attr_t;
 
 struct gnix_hashtable;
@@ -206,5 +210,15 @@ void *_gnix_ht_lookup(gnix_hashtable_t *ht, gnix_ht_key_t key);
  * @return        true if the hash table is empty, false if not
  */
 int _gnix_ht_empty(gnix_hashtable_t *ht);
+
+/* Hastable iteration macros */
+#define ht_lf_for_each(ht, ht_entry)				\
+	dlist_for_each(ht->ht_lf_tbl->head, ht_entry, entry)	\
+
+#define ht_lk_for_each(ht, ht_entry)				\
+	dlist_for_each(ht.ht_lk_tbl->head, ht_entry, entry)
+
+#define ht_entry_value(ht_entry)		\
+	ht_entry->value
 
 #endif /* GNIX_HASHTABLE_H_ */

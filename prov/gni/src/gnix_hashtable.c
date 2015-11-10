@@ -65,7 +65,8 @@ gnix_hashtable_attr_t default_attr = {
 		.ht_increase_type    = GNIX_HT_INCREASE_MULT,
 		.ht_collision_thresh = __GNIX_HT_COLLISION_THRESH,
 		.ht_hash_seed        = 0,
-		.ht_internal_locking = 0
+		.ht_internal_locking = 0,
+		.destructor          = NULL
 };
 
 static gnix_hashtable_ops_t __gnix_lockless_ht_ops;
@@ -163,11 +164,15 @@ static inline int __gnix_ht_destroy_list(
 		struct dlist_entry *head)
 {
 	gnix_ht_entry_t *ht_entry, *iter;
+	void *value;
 	int entries_freed = 0;
 
 	dlist_for_each_safe(head, ht_entry, iter, entry) {
+		value = ht_entry->value;
 		__gnix_ht_delete_entry(ht_entry);
-
+		if (ht->ht_attr.destructor != NULL) {
+			ht->ht_attr.destructor(value);
+		}
 		++entries_freed;
 	}
 
@@ -739,5 +744,4 @@ static gnix_hashtable_ops_t __gnix_locked_ht_ops = {
 		.lookup        = __gnix_ht_lk_lookup,
 		.resize        = __gnix_ht_lk_resize,
 		.retrieve_list = __gnix_ht_lk_retrieve_list
-
 };
