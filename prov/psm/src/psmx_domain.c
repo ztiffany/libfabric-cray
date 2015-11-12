@@ -174,17 +174,14 @@ static void psmx_domain_stop_progress(struct psmx_fid_domain *domain)
 	}
 }
 
-static int psmx_domain_close(fid_t fid)
+void psmx_domain_release(struct psmx_fid_domain *domain)
 {
-	struct psmx_fid_domain *domain;
 	int err;
 
-	FI_INFO(&psmx_prov, FI_LOG_DOMAIN, "\n");
-
-	domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+	FI_INFO(&psmx_prov, FI_LOG_DOMAIN, "refcnt=%d\n", domain->refcnt);
 
 	if (--domain->refcnt > 0)
-		return 0;
+		return;
 
 	if (domain->progress_thread_enabled)
 		psmx_domain_stop_progress(domain);
@@ -192,6 +189,9 @@ static int psmx_domain_close(fid_t fid)
 	psmx_am_fini(domain);
 
 	fastlock_destroy(&domain->poll_lock);
+
+	idm_reset(&domain->mr_map);
+	fastlock_destroy(&domain->mr_lock);
 
 #if 0
 	/* AM messages could arrive after MQ is finalized, causing segfault
@@ -216,7 +216,21 @@ static int psmx_domain_close(fid_t fid)
 		psm_ep_close(domain->psm_ep, PSM_EP_CLOSE_FORCE, 0);
 
 	domain->fabric->active_domain = NULL;
+
+	psmx_fabric_release(domain->fabric);
+
 	free(domain);
+}
+
+static int psmx_domain_close(fid_t fid)
+{
+	struct psmx_fid_domain *domain;
+
+	FI_INFO(&psmx_prov, FI_LOG_DOMAIN, "\n");
+
+	domain = container_of(fid, struct psmx_fid_domain, domain.fid);
+
+	psmx_domain_release(domain);
 
 	return 0;
 }
@@ -253,7 +267,7 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 
 	fabric_priv = container_of(fabric, struct psmx_fid_fabric, fabric);
 	if (fabric_priv->active_domain) {
-		fabric_priv->active_domain->refcnt++;
+		psmx_domain_acquire(fabric_priv->active_domain);
 		*domain = &fabric_priv->active_domain->domain;
 		return 0;
 	}
@@ -304,12 +318,23 @@ int psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 	if (psmx_domain_enable_ep(domain_priv, NULL) < 0)
 		goto err_out_finalize_mq;
 
+	err = fastlock_init(&domain_priv->mr_lock);
+	if (err) {
+		FI_WARN(&psmx_prov, FI_LOG_CORE,
+			"fastlock_init(mr_lock) returns %d\n", err);
+		goto err_out_finalize_mq;
+	}
+	memset(&domain_priv->mr_map, 0, sizeof(struct index_map));
+	domain_priv->mr_reserved_key = 1;
+	
 	err = fastlock_init(&domain_priv->poll_lock);
 	if (err) {
 		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"pthread_spin_init returns %d\n", err);
+			"fastlock_init(poll_lock) returns %d\n", err);
 		goto err_out_finalize_mq;
 	}
+
+	psmx_fabric_acquire(fabric_priv);
 
 	if (domain_priv->progress_thread_enabled)
 		psmx_domain_start_progress(domain_priv);

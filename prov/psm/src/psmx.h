@@ -68,6 +68,7 @@ extern "C" {
 #include "fi.h"
 #include "fi_enosys.h"
 #include "fi_list.h"
+#include "fi_indexer.h"
 #include "version.h"
 
 extern struct fi_provider psmx_prov;
@@ -275,7 +276,11 @@ struct psmx_fid_domain {
 	struct psmx_fid_ep	*atomics_ep;
 	uint64_t		mode;
 	uint64_t		caps;
+
 	enum fi_mr_mode		mr_mode;
+	fastlock_t		mr_lock;
+	uint64_t		mr_reserved_key;
+	struct index_map	mr_map;
 
 	int			am_initialized;
 
@@ -636,6 +641,19 @@ int	psmx_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 int	psmx_poll_open(struct fid_domain *domain, struct fi_poll_attr *attr,
 		       struct fid_poll **pollset);
 
+static inline void psmx_fabric_acquire(struct psmx_fid_fabric *fabric)
+{
+	++fabric->refcnt;
+}
+
+void	psmx_fabric_release(struct psmx_fid_fabric *fabric);
+
+static inline void psmx_domain_acquire(struct psmx_fid_domain *domain)
+{
+	++domain->refcnt;
+}
+
+void	psmx_domain_release(struct psmx_fid_domain *domain);
 int	psmx_domain_check_features(struct psmx_fid_domain *domain, int ep_cap);
 int	psmx_domain_enable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
 void	psmx_domain_disable_ep(struct psmx_fid_domain *domain, struct psmx_fid_ep *ep);
@@ -696,7 +714,7 @@ void	psmx_atomic_fini(void);
 
 void	psmx_am_ack_rma(struct psmx_am_request *req);
 
-struct	psmx_fid_mr *psmx_mr_hash_get(uint64_t key);
+struct	psmx_fid_mr *psmx_mr_get(struct psmx_fid_domain *domain, uint64_t key);
 int	psmx_mr_validate(struct psmx_fid_mr *mr, uint64_t addr, size_t len, uint64_t access);
 void	psmx_cntr_check_trigger(struct psmx_fid_cntr *cntr);
 void	psmx_cntr_add_trigger(struct psmx_fid_cntr *cntr, struct psmx_trigger *trigger);
