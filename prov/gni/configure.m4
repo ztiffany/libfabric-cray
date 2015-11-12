@@ -10,25 +10,25 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	ugni_lib_happy=0
 	gni_header_happy=0
 	AS_IF([test x"$enable_gni" != x"no"],
-	      [PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
+	      [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
                                   CPPFLAGS="$CRAY_UGNI_CFLAGS $CPPFLAGS"
                                   LDFLAGS="$CRAY_UGNI_LIBS $LDFLAGS"
                                  ],
                                  [ugni_lib_happy=0])
-               PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
+               FI_PKG_CHECK_MODULES([CRAY_GNI_HEADERS], [cray-gni-headers],
                                  [gni_header_happy=1
                                   CPPFLAGS="$CRAY_GNI_HEADERS_CFLAGS $CPPFLAGS"
                                   LDFLAGS="$CRAY_GNI_HEADER_LIBS $LDFLAGS"
                                  ],
                                  [gni_header_happy=0])
-               PKG_CHECK_MODULES_STATIC([CRAY_ALPS_LLI], [cray-alpslli],
+               FI_PKG_CHECK_MODULES_STATIC([CRAY_ALPS_LLI], [cray-alpslli],
                                  [alps_lli_happy=1
                                   CPPFLAGS="$CRAY_ALPS_LLI_CFLAGS $CPPFLAGS"
                                   LDFLAGS="$CRAY_ALPS_LLI_LIBS $LDFLAGS"
                                  ],
                                  [alps_lli_happy=0])
-               PKG_CHECK_MODULES([CRAY_ALPS_UTIL], [cray-alpsutil],
+               FI_PKG_CHECK_MODULES([CRAY_ALPS_UTIL], [cray-alpsutil],
                                  [alps_util_happy=1
                                   CPPFLAGS="$CRAY_ALPS_UTIL_CFLAGS $CPPFLAGS"
                                   LDFLAGS="$CRAY_ALPS_UTIL_LIBS $LDFLAGS"
@@ -56,7 +56,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 			else
 				have_criterion=false
 			fi
-			PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
+			FI_PKG_CHECK_MODULES([CRAY_PMI], [cray-pmi],
 					   [],
 					   [have_criterion=false])
 		else
