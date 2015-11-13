@@ -37,9 +37,7 @@
 extern "C" {
 #endif
 
-#if HAVE_CONFIG_H
-#include <config.h>
-#endif
+#include "config.h"
 
 #include <assert.h>
 #include <stdio.h>
@@ -73,12 +71,16 @@ extern "C" {
 
 extern struct fi_provider psmx_prov;
 
+#if (PSM_VERNO_MAJOR == 1)
+extern int psmx_am_compat_mode;
+#endif
+
 #define PSMX_OP_FLAGS	(FI_INJECT | FI_MULTI_RECV | FI_COMPLETION | \
 			 FI_TRIGGER | FI_INJECT_COMPLETE | \
 			 FI_TRANSMIT_COMPLETE | FI_DELIVERY_COMPLETE)
 
 #if (PSM_VERNO_MAJOR >= 2)
-#define PSMX_CAP_EXT	(FI_REMOTE_CQ_DATA)
+#define PSMX_CAP_EXT	(FI_REMOTE_CQ_DATA | FI_SOURCE)
 #else
 #define PSMX_CAP_EXT	(0)
 #endif
@@ -622,6 +624,8 @@ extern struct psm_am_parameters psmx_am_param;
 extern struct psmx_env		psmx_env;
 extern struct psmx_fid_fabric	*psmx_active_fabric;
 
+int	psmx_fabric(struct fi_fabric_attr *attr,
+		    struct fid_fabric **fabric, void *context);
 int	psmx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 			 struct fid_domain **domain, void *context);
 int	psmx_wait_open(struct fid_fabric *fabric, struct fi_wait_attr *attr,

@@ -31,11 +31,9 @@
  */
 
 #include "psmx.h"
-#include "fi.h"
 #include "prov.h"
 
 volatile int psmx_init_count = 0;
-struct psmx_fid_fabric *psmx_active_fabric = NULL;
 
 struct psmx_env psmx_env = {
 	.name_server	= 1,
@@ -466,7 +464,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx_info->domain_attr->av_type = av_type;
 	psmx_info->domain_attr->mr_mode = mr_mode;
-	psmx_info->domain_attr->mr_key_size = sizeof(uint64_t);
+	psmx_info->domain_attr->mr_key_size = sizeof(uint16_t); /* limited by IDX_MAX_INDEX */
 	psmx_info->domain_attr->cq_data_size = 4;
 	psmx_info->domain_attr->cq_cnt = 65535;
 	psmx_info->domain_attr->ep_cnt = 65535;
@@ -517,117 +515,6 @@ err_out:
 		free(dest_addr);
 
 	return err;
-}
-
-void psmx_fabric_release(struct psmx_fid_fabric *fabric)
-{
-	void *exit_code;
-	int ret;
-
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "refcnt=%d\n", fabric->refcnt);
-
-	if (--fabric->refcnt)
-		return;
-
-	if (psmx_env.name_server &&
-	    !pthread_equal(fabric->name_server_thread, pthread_self())) {
-		ret = pthread_cancel(fabric->name_server_thread);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"pthread_cancel returns %d\n", ret);
-		}
-		ret = pthread_join(fabric->name_server_thread, &exit_code);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"pthread_join returns %d\n", ret);
-		}
-		else {
-			FI_INFO(&psmx_prov, FI_LOG_CORE,
-				"name server thread exited with code %ld (%s)\n",
-				(uintptr_t)exit_code,
-				(exit_code == PTHREAD_CANCELED) ? "PTHREAD_CANCELED" : "?");
-		}
-	}
-	if (fabric->active_domain) {
-		FI_WARN(&psmx_prov, FI_LOG_CORE, "forced closing of active_domain\n");
-		fi_close(&fabric->active_domain->domain.fid);
-	}
-	assert(fabric == psmx_active_fabric);
-	psmx_active_fabric = NULL;
-	free(fabric);
-}
-
-static int psmx_fabric_close(fid_t fid)
-{
-	struct psmx_fid_fabric *fabric;
-
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
-	fabric = container_of(fid, struct psmx_fid_fabric, fabric.fid);
-
-	psmx_fabric_release(fabric);
-
-	return 0;
-}
-
-static struct fi_ops psmx_fabric_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = psmx_fabric_close,
-};
-
-static struct fi_ops_fabric psmx_fabric_ops = {
-	.size = sizeof(struct fi_ops_fabric),
-	.domain = psmx_domain_open,
-	.passive_ep = fi_no_passive_ep,
-	.eq_open = psmx_eq_open,
-	.wait_open = psmx_wait_open,
-};
-
-static int psmx_fabric(struct fi_fabric_attr *attr,
-		       struct fid_fabric **fabric, void *context)
-{
-	struct psmx_fid_fabric *fabric_priv;
-	int ret;
-
-	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
-
-	if (strcmp(attr->name, PSMX_FABRIC_NAME))
-		return -FI_ENODATA;
-
-	if (psmx_active_fabric) {
-		psmx_fabric_acquire(psmx_active_fabric);
-		*fabric = &psmx_active_fabric->fabric;
-		return 0;
-	}
-
-	fabric_priv = calloc(1, sizeof(*fabric_priv));
-	if (!fabric_priv)
-		return -FI_ENOMEM;
-
-	fabric_priv->fabric.fid.fclass = FI_CLASS_FABRIC;
-	fabric_priv->fabric.fid.context = context;
-	fabric_priv->fabric.fid.ops = &psmx_fabric_fi_ops;
-	fabric_priv->fabric.ops = &psmx_fabric_ops;
-
-	psmx_get_uuid(fabric_priv->uuid);
-
-	if (psmx_env.name_server) {
-		ret = pthread_create(&fabric_priv->name_server_thread, NULL,
-				     psmx_name_server, (void *)fabric_priv);
-		if (ret) {
-			FI_INFO(&psmx_prov, FI_LOG_CORE, "pthread_create returns %d\n", ret);
-			/* use the main thread's ID as invalid value for the new thread */
-			fabric_priv->name_server_thread = pthread_self();
-		}
-	}
-
-	psmx_query_mpi();
-
-	fabric_priv->refcnt = 1;
-	*fabric = &fabric_priv->fabric;
-	psmx_active_fabric = fabric_priv;
-
-	return 0;
 }
 
 static void psmx_fini(void)
@@ -705,12 +592,14 @@ PROVIDER_INI
 	FI_INFO(&psmx_prov, FI_LOG_CORE,
 		"PSM library version = (%d, %d)\n", major, minor);
 
+#if (PSM_VERNO_MAJOR == 1)
 	if (major != PSM_VERNO_MAJOR) {
-		FI_WARN(&psmx_prov, FI_LOG_CORE,
-			"PSM version mismatch: header %d.%d, library %d.%d.\n",
+		psmx_am_compat_mode = 1;
+		FI_INFO(&psmx_prov, FI_LOG_CORE,
+			"PSM AM compat mode enabled: appliation %d.%d, library %d.%d.\n",
 			PSM_VERNO_MAJOR, PSM_VERNO_MINOR, major, minor);
-		return NULL;
 	}
+#endif
 
 	psmx_init_count++;
 	return (&psmx_prov);
