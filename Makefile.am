@@ -39,6 +39,10 @@ linkback = $(top_builddir)/src/libfabric.la
 bin_PROGRAMS = \
 	util/fi_info
 
+bin_SCRIPTS =
+
+nodist_DIR =
+
 util_fi_info_SOURCES = \
 	util/info.c
 util_fi_info_LDADD = $(linkback)
