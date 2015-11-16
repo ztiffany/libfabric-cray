@@ -271,6 +271,7 @@ Test(gnix_cancel, cancel_ep_send)
 
 	key = (gnix_ht_key_t *)&gnix_ep->my_name.gnix_addr;
 	ret = _gnix_ht_insert(gnix_ep->vc_ht, *key, vc);
+	cr_assert(!ret);
 
 	/* make a dummy request */
 	fastlock_acquire(&vc->tx_queue_lock);
@@ -290,9 +291,6 @@ Test(gnix_cancel, cancel_ep_send)
 	cr_assert(buf.err == FI_ECANCELED, "error code mismatch");
 	cr_assert(buf.prov_errno == FI_ECANCELED, "prov error code mismatch");
 	cr_assert(buf.len == 128, "length mismatch");
-
-	ret = _gnix_vc_destroy(vc);
-	cr_assert(ret == FI_SUCCESS, "_gnix_vc_destroy failed");
 }
 
 Test(gnix_cancel, cancel_ep_recv)
