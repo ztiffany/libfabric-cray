@@ -290,9 +290,6 @@ Test(gnix_cancel, cancel_ep_send)
 	cr_assert(buf.err == FI_ECANCELED, "error code mismatch");
 	cr_assert(buf.prov_errno == FI_ECANCELED, "prov error code mismatch");
 	cr_assert(buf.len == 128, "length mismatch");
-
-	ret = _gnix_vc_destroy(vc);
-	cr_assert(ret == FI_SUCCESS, "_gnix_vc_destroy failed");
 }
 
 Test(gnix_cancel, cancel_ep_recv)
