@@ -198,7 +198,6 @@ slist_remove_first_match(struct slist *list, slist_func_t *match, const void *ar
 			if (!item->next)
 				list->tail = prev;
 
-			item->next = NULL;
 			return item;
 		}
 	}
