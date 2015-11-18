@@ -959,7 +959,7 @@ static int  __gnix_discard_request(struct gnix_fid_ep *ep,
 					addr, req->msg.imm, tag);
 
 		/* data has already been delivered, so just discard it */
-		free(req->msg.recv_addr);
+		free((void *) req->msg.recv_addr);
 		_gnix_fr_free(ep, req);
 	}
 
