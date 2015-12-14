@@ -475,6 +475,7 @@ usdf_get_devinfo(void)
 {
 	struct usdf_usnic_info *dp;
 	struct usdf_dev_entry *dep;
+	struct usd_open_params params;
 	int ret;
 	int d;
 
@@ -497,7 +498,12 @@ usdf_get_devinfo(void)
 	for (d = 0; d < dp->uu_num_devs; ++d) {
 		dep = &dp->uu_info[d];
 
-		ret = usd_open_for_attrs(dp->uu_devs[d].ude_devname, &dep->ue_dev);
+		memset(&params, 0, sizeof(params));
+		params.flags = UOPF_SKIP_PD_ALLOC;
+		params.cmd_fd = -1;
+		params.context = NULL;
+		ret = usd_open_with_params(dp->uu_devs[d].ude_devname,
+						&params, &dep->ue_dev);
 		if (ret != 0) {
 			continue;
 		}
@@ -708,6 +714,9 @@ usdf_fabric_close(fid_t fid)
 	/* Tell progression thread to exit */
 	fp->fab_exit = 1;
 
+	free(fp->fab_attr.name);
+	free(fp->fab_attr.prov_name);
+
 	if (fp->fab_thread) {
 		ret = usdf_fabric_wake_thread(fp);
 		if (ret != 0) {
@@ -914,6 +923,8 @@ usdf_fabric_open(struct fi_fabric_attr *fattrp, struct fid_fabric **fabric,
 	return 0;
 
 fail:
+	free(fp->fab_attr.name);
+	free(fp->fab_attr.prov_name);
 	ff = fab_utof(fp);
 	usdf_fabric_close(&ff->fid);
 	USDF_DBG("returning %d (%s)\n", ret, fi_strerror(-ret));

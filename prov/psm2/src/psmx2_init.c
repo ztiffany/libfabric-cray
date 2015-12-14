@@ -33,7 +33,7 @@
 #include "psmx2.h"
 #include "prov.h"
 
-volatile int psmx2_init_count = 0;
+static int psmx2_init_count = 0;
 
 struct psmx2_env psmx2_env = {
 	.name_server	= 1,
@@ -91,8 +91,17 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 
 	psmx2_init_env();
 
-	if (node && !(flags & FI_SOURCE))
+	if (node && !(flags & FI_SOURCE)) {
 		dest_addr = psmx2_resolve_name(node, 0);
+		if (dest_addr)
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"node '%s' resolved to <epid=0x%llx, vl=%d>\n", node,
+				((struct psmx2_ep_name *)dest_addr)->epid,
+				((struct psmx2_ep_name *)dest_addr)->vlane);
+		else
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"failed to resolve node '%s'.\n", node);
+	}
 
 	if (hints) {
 		switch (hints->addr_format) {
@@ -417,7 +426,7 @@ static int psmx2_getinfo(uint32_t version, const char *node,
 	psmx2_info->mode = mode;
 	psmx2_info->addr_format = FI_ADDR_PSMX;
 	psmx2_info->src_addrlen = 0;
-	psmx2_info->dest_addrlen = sizeof(psm2_epid_t);
+	psmx2_info->dest_addrlen = sizeof(struct psmx2_ep_name);
 	psmx2_info->src_addr = NULL;
 	psmx2_info->dest_addr = dest_addr;
 	psmx2_info->fabric_attr->name = strdup(PSMX2_FABRIC_NAME);
@@ -458,8 +467,20 @@ static void psmx2_fini(void)
 {
 	FI_INFO(&psmx2_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx2_init_count)
-		psm2_finalize();
+	if (! --psmx2_init_count) {
+		/* This function is called from a library destructor, which is called
+		 * automatically when exit() is called. The call to psm2_finalize()
+		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
+		 * -- the application could be inside a PSM call, holding a lock that
+		 * psm2_finalize() tries to acquire. This can be avoided by only
+		 * calling psm2_finalize() when PSM is guaranteed to be unused.
+		 */
+		if (psmx2_active_fabric)
+			FI_INFO(&psmx2_prov, FI_LOG_CORE,
+				"psmx2_active_fabric != NULL, skip psm2_finalize\n");
+		else
+			psm2_finalize();
+	}
 }
 
 struct fi_provider psmx2_prov = {

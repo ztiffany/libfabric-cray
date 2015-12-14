@@ -33,7 +33,7 @@
 #include "psmx.h"
 #include "prov.h"
 
-volatile int psmx_init_count = 0;
+static int psmx_init_count = 0;
 
 struct psmx_env psmx_env = {
 	.name_server	= 1,
@@ -466,7 +466,7 @@ static int psmx_getinfo(uint32_t version, const char *node, const char *service,
 	psmx_info->domain_attr->resource_mgmt = FI_RM_ENABLED;
 	psmx_info->domain_attr->av_type = av_type;
 	psmx_info->domain_attr->mr_mode = mr_mode;
-	psmx_info->domain_attr->mr_key_size = sizeof(uint16_t); /* limited by IDX_MAX_INDEX */
+	psmx_info->domain_attr->mr_key_size = sizeof(uint64_t);
 	psmx_info->domain_attr->cq_data_size = 4;
 	psmx_info->domain_attr->cq_cnt = 65535;
 	psmx_info->domain_attr->ep_cnt = 65535;
@@ -523,8 +523,20 @@ static void psmx_fini(void)
 {
 	FI_INFO(&psmx_prov, FI_LOG_CORE, "\n");
 
-	if (! --psmx_init_count)
-		psm_finalize();
+	if (! --psmx_init_count) {
+		/* This function is called from a library destructor, which is called
+		 * automatically when exit() is called. The call to psm_finalize()
+		 * might cause deadlock if the applicaiton is terminated with Ctrl-C
+		 * -- the application could be inside a PSM call, holding a lock that
+		 * psm_finalize() tries to acquire. This can be avoided by only
+		 * calling psm_finalize() when PSM is guaranteed to be unused.
+		 */
+		if (psmx_active_fabric)
+			FI_INFO(&psmx_prov, FI_LOG_CORE,
+				"psmx_active_fabric != NULL, skip psm_finalize\n");
+		else
+			psm_finalize();
+	}
 }
 
 struct fi_provider psmx_prov = {
