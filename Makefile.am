@@ -42,8 +42,6 @@ bin_PROGRAMS = \
 
 bin_SCRIPTS =
 
-nodist_DIR =
-
 util_fi_info_SOURCES = \
 	util/info.c
 util_fi_info_LDADD = $(linkback)
