@@ -116,4 +116,7 @@ endif
 
 rdmainclude_HEADERS += \
 	prov/gni/include/fi_ext_gni.h
-nodist_DIR += prov/gni/test
+
+real_man_pages += man/man7/fi_gni.7
+
+endif HAVE_GNI
