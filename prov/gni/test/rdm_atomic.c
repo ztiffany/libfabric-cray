@@ -517,7 +517,7 @@ void do_max(int len)
 	float min_fp;
 	double min_dp;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
-	uitn64_t r_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)source) = SOURCE_DATA;
