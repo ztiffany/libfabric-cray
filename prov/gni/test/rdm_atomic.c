@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015 Cray Inc.	 All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -12,14 +12,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	- Redistributions of source code must retain the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	- Redistributions in binary form must reproduce the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -94,7 +94,8 @@ static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
-static uint64_t writes[NUMEPS] = {0}, reads[NUMEPS] = {0}, write_errs[NUMEPS] = {0}, read_errs[NUMEPS] = {0};
+static uint64_t writes[NUMEPS] = {0}, reads[NUMEPS] = {0},
+	write_errs[NUMEPS] = {0}, read_errs[NUMEPS] = {0};
 
 void rdm_atomic_setup(void)
 {
@@ -168,8 +169,8 @@ void rdm_atomic_setup(void)
 
 	for (i = 0; i < NUMEPS; i++) {
 		for (j = 0; j < NUMEPS; j++) {
-			ret = fi_av_insert(av[i], ep_name[j], 1, &gni_addr[j], 0,
-					   NULL);
+			ret = fi_av_insert(av[i], ep_name[j], 1, &gni_addr[j],
+					   0, NULL);
 			cr_assert(ret == 1);
 		}
 
@@ -266,7 +267,8 @@ void rdm_atomic_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 	cr_assert(tcqe->tag == 0, "CQE tag invalid");
 }
 
-void rdm_atomic_check_cntrs(uint64_t w[], uint64_t r[], uint64_t w_e[], uint64_t r_e[])
+void rdm_atomic_check_cntrs(uint64_t w[], uint64_t r[], uint64_t w_e[],
+			    uint64_t r_e[])
 {
 	int i = 0;
 
@@ -276,8 +278,10 @@ void rdm_atomic_check_cntrs(uint64_t w[], uint64_t r[], uint64_t w_e[], uint64_t
 		write_errs[i] += w_e[i];
 		read_errs[i] += r_e[i];
 
-		cr_assert(fi_cntr_read(write_cntr[i]) == writes[i], "Bad write count");
-		cr_assert(fi_cntr_read(read_cntr[i]) == reads[i], "Bad read count");
+		cr_assert(fi_cntr_read(write_cntr[i]) == writes[i],
+			  "Bad write count");
+		cr_assert(fi_cntr_read(read_cntr[i]) == reads[i],
+			  "Bad read count");
 		cr_assert(fi_cntr_readerr(write_cntr[i]) == write_errs[i],
 			  "Bad write err count");
 		cr_assert(fi_cntr_readerr(read_cntr[i]) == read_errs[i],
@@ -299,7 +303,8 @@ void rdm_atomic_err_inject_enable(void)
 	int ret, err_count_val = 1, i = 0;
 
 	for (; i < NUMEPS; i++) {
-		ret = gni_domain_ops[i]->set_val(&dom[i]->fid, GNI_ERR_INJECT_COUNT,
+		ret = gni_domain_ops[i]->set_val(&dom[i]->fid,
+						 GNI_ERR_INJECT_COUNT,
 						 &err_count_val);
 		cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 	}
@@ -367,8 +372,8 @@ void do_invalid_atomic(enum fi_datatype dt, enum fi_op op)
 
 	if (!supported_atomic_ops[op][dt]) {
 		sz = fi_atomic(ep[0], source, 1,
-			       loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       dt, op, target);
+			       loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], dt, op, target);
 
 		cr_assert(sz == -FI_ENOENT);
 
@@ -400,7 +405,8 @@ void do_min(int len)
 	uint64_t min;
 	float min_fp;
 	double min_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)source) = SOURCE_DATA;
@@ -510,7 +516,8 @@ void do_max(int len)
 	uint64_t min;
 	float min_fp;
 	double min_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uitn64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)source) = SOURCE_DATA;
@@ -617,7 +624,8 @@ void do_sum(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
@@ -739,7 +747,8 @@ void do_bor(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
@@ -843,7 +852,8 @@ void do_band(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
@@ -947,7 +957,8 @@ void do_bxor(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
@@ -1050,7 +1061,8 @@ void do_atomic_write(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = SOURCE_DATA;
@@ -1196,7 +1208,8 @@ void do_min_buf(void *s, void *t)
 	uint64_t min;
 	float min_fp;
 	double min_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)s) = SOURCE_DATA;
@@ -1329,7 +1342,8 @@ Test(rdm_atomic, atomicv)
 	float min_fp;
 	double min_dp;
 	struct fi_ioc iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.addr = source;
 	iov.count = 1;
@@ -1435,7 +1449,8 @@ Test(rdm_atomic, atomicmsg)
 	struct fi_msg_atomic msg;
 	struct fi_ioc msg_iov;
 	struct fi_rma_ioc rma_iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	msg_iov.addr = source;
 	msg_iov.count = 1;
@@ -1703,14 +1718,15 @@ void do_fetch_min(int len)
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	double operand_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)source) = FETCH_SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_MIN, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1734,8 +1750,8 @@ void do_fetch_min(int len)
 	*((int64_t *)source) = FETCH_SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_MIN, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1762,8 +1778,8 @@ void do_fetch_min(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_FLOAT, FI_MIN, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_FLOAT, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1788,8 +1804,8 @@ void do_fetch_min(int len)
 	*((double *)source) = SOURCE_DATA_FP;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_dp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_DOUBLE, FI_MIN, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_DOUBLE, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1826,14 +1842,15 @@ void do_fetch_max(int len)
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	double operand_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)source) = FETCH_SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_MAX, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1857,8 +1874,8 @@ void do_fetch_max(int len)
 	*((int64_t *)source) = FETCH_SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_MAX, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1885,8 +1902,8 @@ void do_fetch_max(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_FLOAT, FI_MAX, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_FLOAT, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1911,8 +1928,8 @@ void do_fetch_max(int len)
 	*((double *)source) = SOURCE_DATA_FP;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_dp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_DOUBLE, FI_MAX, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_DOUBLE, FI_MAX, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1945,14 +1962,15 @@ void do_fetch_sum(int len)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_SUM, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1974,8 +1992,8 @@ void do_fetch_sum(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_SUM, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2000,8 +2018,8 @@ void do_fetch_sum(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_SUM, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2023,8 +2041,8 @@ void do_fetch_sum(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_SUM, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2050,8 +2068,8 @@ void do_fetch_sum(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_FLOAT, FI_SUM, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_FLOAT, FI_SUM, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2083,14 +2101,15 @@ void do_fetch_bor(int len)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_BOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2113,8 +2132,8 @@ void do_fetch_bor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_BOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2139,8 +2158,8 @@ void do_fetch_bor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_BOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2163,8 +2182,8 @@ void do_fetch_bor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_BOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_BOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2198,14 +2217,15 @@ void do_fetch_band(int len)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_BAND, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2228,8 +2248,8 @@ void do_fetch_band(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_BAND, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2254,8 +2274,8 @@ void do_fetch_band(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_BAND, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2278,8 +2298,8 @@ void do_fetch_band(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_BAND, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_BAND, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2313,14 +2333,15 @@ void do_fetch_bxor(int len)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t res;
 	uint64_t operand = SOURCE_DATA;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_BXOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2343,8 +2364,8 @@ void do_fetch_bxor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_BXOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2369,8 +2390,8 @@ void do_fetch_bxor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_BXOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2393,8 +2414,8 @@ void do_fetch_bxor(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_BXOR, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_BXOR, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2429,14 +2450,15 @@ void do_fetch_atomic_write(int len)
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	double operand_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2458,8 +2480,8 @@ void do_fetch_atomic_write(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2485,8 +2507,8 @@ void do_fetch_atomic_write(int len)
 	*((uint64_t *)source) = 0;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2508,8 +2530,8 @@ void do_fetch_atomic_write(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2536,8 +2558,8 @@ void do_fetch_atomic_write(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_FLOAT, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_FLOAT, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2560,8 +2582,8 @@ void do_fetch_atomic_write(int len)
 	*((double *)source) = FETCH_SOURCE_DATA;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_dp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_DOUBLE, FI_ATOMIC_WRITE, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_DOUBLE, FI_ATOMIC_WRITE, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2593,15 +2615,16 @@ void do_fetch_atomic_read(int len)
 	uint64_t operand;
 	float operand_fp;
 	double operand_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	operand = SOURCE_DATA;
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT64, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2626,8 +2649,8 @@ void do_fetch_atomic_read(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_UINT32, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_UINT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2656,8 +2679,8 @@ void do_fetch_atomic_read(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2682,8 +2705,8 @@ void do_fetch_atomic_read(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT32, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT32, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2712,8 +2735,8 @@ void do_fetch_atomic_read(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_fp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_FLOAT, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_FLOAT, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2738,8 +2761,8 @@ void do_fetch_atomic_read(int len)
 	*((double *)source) = FETCH_SOURCE_DATA;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_fetch_atomic(ep[0], &operand_dp, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_DOUBLE, FI_ATOMIC_READ, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_DOUBLE, FI_ATOMIC_READ, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -2776,7 +2799,8 @@ void do_fetch_min_buf(void *s, void *t)
 	uint64_t operand = SOURCE_DATA;
 	float operand_fp;
 	double operand_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* i64 */
 	*((int64_t *)s) = FETCH_SOURCE_DATA;
@@ -2923,7 +2947,8 @@ Test(rdm_atomic, fatomicv)
 	float operand_fp;
 	double operand_dp;
 	struct fi_ioc iov, r_iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.count = 1;
 	r_iov.count = 1;
@@ -3059,7 +3084,8 @@ Test(rdm_atomic, fatomicmsg)
 	struct fi_msg_atomic msg;
 	struct fi_ioc msg_iov, res_iov;
 	struct fi_rma_ioc rma_iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	msg_iov.count = 1;
 	msg.msg_iov = &msg_iov;
@@ -3250,14 +3276,15 @@ void do_cswap(int len)
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_UINT64, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_UINT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3279,8 +3306,8 @@ void do_cswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_UINT32, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_UINT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3306,8 +3333,8 @@ void do_cswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_INT64, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_INT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3329,8 +3356,8 @@ void do_cswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_INT32, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_INT32, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3358,8 +3385,8 @@ void do_cswap(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_fp, 1, NULL, &op2_fp, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_FLOAT, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_FLOAT, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3383,8 +3410,8 @@ void do_cswap(int len)
 	*((double *)source) = FETCH_SOURCE_DATA;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_dp, 1, NULL, &op2_dp, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_DOUBLE, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_DOUBLE, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3417,14 +3444,15 @@ void do_mswap(int len)
 	uint64_t operand = SOURCE_DATA, op2 = DATA_MASK;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_UINT64, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_UINT64, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3447,8 +3475,8 @@ void do_mswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_UINT32, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_UINT32, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3475,8 +3503,8 @@ void do_mswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_INT64, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_INT64, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3499,8 +3527,8 @@ void do_mswap(int len)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_INT32, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_INT32, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3529,8 +3557,8 @@ void do_mswap(int len)
 	*((float *)source) = FETCH_SOURCE_DATA;
 	*((float *)target) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_fp, 1, NULL, &op2_fp, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_FLOAT, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_FLOAT, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3554,8 +3582,8 @@ void do_mswap(int len)
 	*((double *)source) = FETCH_SOURCE_DATA;
 	*((double *)target) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_dp, 1, NULL, &op2_dp, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_DOUBLE, FI_MSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_DOUBLE, FI_MSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -3587,14 +3615,15 @@ void do_cswap_buf(void *s, void *t)
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	/* u64 */
 	*((uint64_t *)s) = FETCH_SOURCE_DATA;
 	*((uint64_t *)t) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_UINT64, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_UINT64, FI_CSWAP, t);
 	if ((uint64_t)s & 0x7 || (uint64_t)t & 0x7) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3620,8 +3649,8 @@ void do_cswap_buf(void *s, void *t)
 	*((uint64_t *)s) = FETCH_SOURCE_DATA;
 	*((uint64_t *)t) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_UINT32, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_UINT32, FI_CSWAP, t);
 	if ((uint64_t)s & 0x3 || (uint64_t)t & 0x3) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3652,8 +3681,8 @@ void do_cswap_buf(void *s, void *t)
 	*((uint64_t *)s) = FETCH_SOURCE_DATA;
 	*((uint64_t *)t) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_INT64, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_INT64, FI_CSWAP, t);
 	if ((uint64_t)s & 0x7 || (uint64_t)t & 0x7) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3679,8 +3708,8 @@ void do_cswap_buf(void *s, void *t)
 	*((uint64_t *)s) = FETCH_SOURCE_DATA;
 	*((uint64_t *)t) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_INT32, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_INT32, FI_CSWAP, t);
 	if ((uint64_t)s & 0x3 || (uint64_t)t & 0x3) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3713,8 +3742,8 @@ void do_cswap_buf(void *s, void *t)
 	*((float *)s) = FETCH_SOURCE_DATA;
 	*((float *)t) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_fp, 1, NULL, &op2_fp, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_FLOAT, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_FLOAT, FI_CSWAP, t);
 	if ((uint64_t)s & 0x3 || (uint64_t)t & 0x3) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3742,8 +3771,8 @@ void do_cswap_buf(void *s, void *t)
 	*((double *)s) = FETCH_SOURCE_DATA;
 	*((double *)t) = TARGET_DATA_FP;
 	sz = fi_compare_atomic(ep[0], &operand_dp, 1, NULL, &op2_dp, NULL,
-			       s, loc_mr[0], gni_addr[1], (uint64_t)t, mr_key[1],
-			       FI_DOUBLE, FI_CSWAP, t);
+			       s, loc_mr[0], gni_addr[1], (uint64_t)t,
+			       mr_key[1], FI_DOUBLE, FI_CSWAP, t);
 	if ((uint64_t)s & 0x7 || (uint64_t)t & 0x7) {
 		cr_assert_eq(sz, -FI_EINVAL);
 	} else {
@@ -3786,7 +3815,8 @@ Test(rdm_atomic, catomicv)
 	float operand_fp, op2_fp;
 	double operand_dp, op2_dp;
 	struct fi_ioc iov, r_iov, c_iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.count = 1;
 	r_iov.count = 1;
@@ -3990,7 +4020,8 @@ Test(rdm_atomic, catomicmsg)
 	struct fi_msg_atomic msg;
 	struct fi_ioc msg_iov, res_iov, cmp_iov;
 	struct fi_rma_ioc rma_iov;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	msg_iov.count = 1;
 	msg.msg_iov = &msg_iov;
@@ -4188,7 +4219,8 @@ Test(rdm_atomic, atomic_err)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
 	struct fi_cq_err_entry err_cqe;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_atomic_err_inject_enable();
 
@@ -4231,7 +4263,8 @@ Test(rdm_atomic, fetch_atomic_err)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand = SOURCE_DATA;
 	struct fi_cq_err_entry err_cqe;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_atomic_err_inject_enable();
 
@@ -4239,8 +4272,8 @@ Test(rdm_atomic, fetch_atomic_err)
 	*((int64_t *)source) = FETCH_SOURCE_DATA;
 	*((int64_t *)target) = TARGET_DATA;
 	sz = fi_fetch_atomic(ep[0], &operand, 1, NULL,
-			     source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			     FI_INT64, FI_MIN, target);
+			     source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			     mr_key[1], FI_INT64, FI_MIN, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -4274,7 +4307,8 @@ Test(rdm_atomic, compare_atomic_err)
 	struct fi_cq_tagged_entry cqe;
 	uint64_t operand = SOURCE_DATA, op2 = TARGET_DATA;
 	struct fi_cq_err_entry err_cqe;
-	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0}, r_e[NUMEPS] = {0};
+	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_atomic_err_inject_enable();
 
@@ -4282,8 +4316,8 @@ Test(rdm_atomic, compare_atomic_err)
 	*((uint64_t *)source) = FETCH_SOURCE_DATA;
 	*((uint64_t *)target) = TARGET_DATA;
 	sz = fi_compare_atomic(ep[0], &operand, 1, NULL, &op2, NULL,
-			       source, loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			       FI_UINT64, FI_CSWAP, target);
+			       source, loc_mr[0], gni_addr[1], (uint64_t)target,
+			       mr_key[1], FI_UINT64, FI_CSWAP, target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {

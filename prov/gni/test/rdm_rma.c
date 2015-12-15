@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.  All rights reserved.
+ * Copyright (c) 2015 Cray Inc.	 All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -12,14 +12,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *      - Redistributions of source code must retain the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer.
+ *	- Redistributions of source code must retain the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer.
  *
- *      - Redistributions in binary form must reproduce the above
- *        copyright notice, this list of conditions and the following
- *        disclaimer in the documentation and/or other materials
- *        provided with the distribution.
+ *	- Redistributions in binary form must reproduce the above
+ *	  copyright notice, this list of conditions and the following
+ *	  disclaimer in the documentation and/or other materials
+ *	  provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -60,11 +60,11 @@
 #if 1
 #define dbg_printf(...)
 #else
-#define dbg_printf(...)		\
-do {				\
-	printf(__VA_ARGS__);	\
-	fflush(stdout);		\
-} while (0)
+#define dbg_printf(...)				\
+	do {					\
+		printf(__VA_ARGS__);		\
+		fflush(stdout);			\
+	} while (0)
 #endif
 
 static struct fid_fabric *fab;
@@ -92,7 +92,8 @@ static struct fi_cntr_attr cntr_attr = {
 	.events = FI_CNTR_EVENTS_COMP,
 	.flags = 0
 };
-static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0}, read_errs[2] = {0};
+static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
+	read_errs[2] = {0};
 
 void rdm_rma_setup(void)
 {
@@ -384,7 +385,8 @@ void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 	cr_assert(tcqe->tag == 0, "CQE tag invalid");
 }
 
-void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2], uint64_t r_e[2])
+void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
+			 uint64_t r_e[2])
 {
 	// Domain 0
 	writes[0] += w[0];
@@ -425,11 +427,11 @@ void err_inject_enable(void)
 	int ret, err_count_val = 1;
 
 	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_ERR_INJECT_COUNT,
-				      &err_count_val);
+					 &err_count_val);
 	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 
 	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_ERR_INJECT_COUNT,
-				      &err_count_val);
+					 &err_count_val);
 	cr_assert(!ret, "setval(GNI_ERR_INJECT_COUNT)");
 }
 
@@ -451,8 +453,8 @@ void do_write(int len)
 	init_data(target, len, 0);
 
 	sz = fi_write(ep[0], source, len,
-			 loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			 target);
+		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -677,15 +679,16 @@ void do_inject_write(int len)
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
-	  loops = 0;
-	  while (source[i] != target[i]) {
-	    ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-	    cr_assert(ret == -EAGAIN,
-		      "Received unexpected event\n");
+		loops = 0;
+		while (source[i] != target[i]) {
+			/* for progress */
+			ret = fi_cq_read(send_cq[0], &cqe, 1);
+			cr_assert(ret == -EAGAIN,
+				  "Received unexpected event\n");
 
-	    pthread_yield();
-	    cr_assert(++loops < 10000, "Data mismatch");
-	  }
+			pthread_yield();
+			cr_assert(++loops < 10000, "Data mismatch");
+		}
 	}
 }
 
@@ -712,8 +715,8 @@ void do_writedata(int len)
 	init_data(source, len, 0x23);
 	init_data(target, len, 0);
 	sz = fi_writedata(ep[0], source, len, loc_mr[0], WRITE_DATA,
-			 gni_addr[1], (uint64_t)target, mr_key[1],
-			 target);
+			  gni_addr[1], (uint64_t)target, mr_key[1],
+			  target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -764,15 +767,16 @@ void do_inject_writedata(int len)
 	cr_assert_eq(sz, 0);
 
 	for (i = 0; i < len; i++) {
-			loops = 0;
-			while (source[i] != target[i]) {
-				ret = fi_cq_read(send_cq[0], &cqe, 1); /* for progress */
-				cr_assert(ret == -EAGAIN,
-					  "Received unexpected event\n");
+		loops = 0;
+		while (source[i] != target[i]) {
+			/* for progress */
+			ret = fi_cq_read(send_cq[0], &cqe, 1);
+			cr_assert(ret == -EAGAIN,
+				  "Received unexpected event\n");
 
-				pthread_yield();
-				cr_assert(++loops < 10000, "Data mismatch");
-			}
+			pthread_yield();
+			cr_assert(++loops < 10000, "Data mismatch");
+		}
 	}
 
 	while ((ret = fi_cq_read(recv_cq[1], &dcqe, 1)) == -FI_EAGAIN) {
@@ -810,8 +814,8 @@ void do_read(int len)
 
 	// domain 0 from domain 1
 	sz = fi_read(ep[0], source, len,
-			loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			(void *)READ_CTX);
+		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -853,8 +857,8 @@ void do_readv(int len)
 	init_data(target, len, 0x25);
 	init_data(source, len, 0);
 	sz = fi_readv(ep[0], &iov, (void **)loc_mr, 1,
-		       gni_addr[1], (uint64_t)target, mr_key[1],
-		       target);
+		      gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1083,8 +1087,8 @@ void do_write_autoreg(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-			 NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-			 target);
+		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1116,8 +1120,8 @@ void do_write_autoreg_uncached(int len)
 	init_data(uc_source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], uc_source, len,
-			 NULL, gni_addr[1], (uint64_t)target, mr_key[1],
-			 target);
+		      NULL, gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1150,8 +1154,8 @@ void do_write_error(int len)
 	init_data(source, len, 0xab);
 	init_data(target, len, 0);
 	sz = fi_write(ep[0], source, len,
-			 loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			 target);
+		      loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		      target);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1184,11 +1188,11 @@ Test(rdm_rma, write_error)
 	int ret, max_retrans_val = 1;
 
 	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 
 	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 	err_inject_enable();
 
@@ -1206,8 +1210,8 @@ void do_read_error(int len)
 	init_data(source, len, 0);
 	init_data(target, len, 0xad);
 	sz = fi_read(ep[0], source, len,
-			loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
-			(void *)READ_CTX);
+		     loc_mr[0], gni_addr[1], (uint64_t)target, mr_key[1],
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1241,11 +1245,11 @@ Test(rdm_rma, read_error)
 	int ret, max_retrans_val = 1;
 
 	ret = gni_domain_ops[0]->set_val(&dom[0]->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 
 	ret = gni_domain_ops[1]->set_val(&dom[1]->fid, GNI_MAX_RETRANSMITS,
-				      &max_retrans_val);
+					 &max_retrans_val);
 	cr_assert(!ret, "setval(GNI_MAX_RETRANSMITS)");
 	err_inject_enable();
 
@@ -1263,7 +1267,7 @@ void do_read_buf(void *s, void *t, int len)
 	init_data(s, len, 0);
 	init_data(t, len, 0xad);
 	sz = fi_read(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-			(void *)READ_CTX);
+		     (void *)READ_CTX);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
@@ -1316,7 +1320,7 @@ void do_write_buf(void *s, void *t, int len)
 	init_data(s, len, 0xab);
 	init_data(t, len, 0);
 	sz = fi_write(ep[0], s, len, NULL, gni_addr[1], (uint64_t)t, mr_key[1],
-			 t);
+		      t);
 	cr_assert_eq(sz, 0);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
