@@ -175,9 +175,28 @@ AC_DEFUN([USNIC_CHECK_LIBNL_SADNESS],[
 	AC_DEFINE_UNQUOTED([HAVE_LIBNL3], [$HAVE_LIBNL3],
 	      [Whether we have libl or libnl3])
 
-	AC_SUBST([usnic_nl_CPPFLAGS])
-	AC_SUBST([usnic_nl_LDFLAGS])
-	AC_SUBST([usnic_nl_LIBS])
+	usnic_CPPFLAGS=$usnic_nl_CPPFLAGS
+	usnic_LDFLAGS=$usnic_nl_LDFLAGS
+	usnic_LIBS=$usnic_nl_LIBS
+
+	# If the verbs or usnic providers are being built as a DL,
+	# then we need to add libibverbs to usnic_LIBS.  We can tell
+	# if verbs/usnic are being built as DL because fi_provider.m4
+	# will set $PROVIDER_dl to 1.  Also, per note in configure.ac,
+	# the verbs provider *must* be configured before the usnic
+	# provider explicitly for this case: so that $verbs_dl will be
+	# (potentially) set by the time we get here.
+
+	# NOTE: this decision whether to -libverbs or not used to be
+	# handled in Makefile.am via an AM_CONDITIONAL.  However, to
+	# properly support pkg-config, we have to make this decision
+	# here/now and AC SUBST the final result into usnic_LIBS.
+	AS_IF([test "$verbs_dl" = "1" || test "$usnic_dl" = "1"],
+	      [usnic_LIBS="$usnic_LIBS -libverbs"])
+
+	AC_SUBST([usnic_CPPFLAGS])
+	AC_SUBST([usnic_LDFLAGS])
+	AC_SUBST([usnic_LIBS])
 
 	AS_IF([test "$usnic_nl_LIBS" = ""],
 	      [usnic_happy=0])
@@ -211,7 +230,7 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 	       AC_MSG_RESULT([not found])])
 
 	# Random note: netlink/version.h is only in libnl3 - it is not in libnl.
-	# Also, nl_recvmsgs_report is only in libnl3.
+	# Also, nl_socket_set_peer_groups is only in libnl3.
 	CPPFLAGS_save=$CPPFLAGS
 	usnic_tmp_CPPFLAGS="-I$1/include/libnl3"
 	CPPFLAGS="$usnic_tmp_CPPFLAGS $CPPFLAGS"
@@ -219,7 +238,7 @@ AC_DEFUN([USNIC_CHECK_LIBNL3],[
 	      [FI_CHECK_PACKAGE([$2],
 				[netlink/version.h],
 				[nl-3],
-				[nl_recvmsgs_report],
+				[nl_socket_set_peer_groups],
 				[],
 				[$1],
 				[],

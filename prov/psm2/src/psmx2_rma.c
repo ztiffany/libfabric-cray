@@ -184,7 +184,7 @@ int psmx2_am_rma_handler(psm2_am_token_t token, psm2_amarg_t *args,
 			req->write.peer_addr = (void *)epaddr;
 			req->write.vl = dst_vl;
 			req->write.peer_vl = src_vl;
-			req->write.data = has_data ? *(uint64_t *)src: 0;
+			req->write.data = has_data ? args[4].u64 : 0;
 			req->cq_flags = FI_REMOTE_WRITE | FI_RMA |
 					(has_data ? FI_REMOTE_CQ_DATA : 0),
 			PSMX2_CTXT_TYPE(&req->fi_context) = PSMX2_REMOTE_WRITE_CONTEXT;
@@ -595,7 +595,7 @@ ssize_t psmx2_read_generic(struct fid_ep *ep, void *buf, size_t len,
 		req->no_event = 1;
 	}
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_reply_short);
+	chunk_size = psmx2_am_param.max_reply_short;
 
 	args[0].u32w0 = 0;
 	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
@@ -797,7 +797,7 @@ ssize_t psmx2_write_generic(struct fid_ep *ep, const void *buf, size_t len,
 	PSMX2_CTXT_USER(&req->fi_context) = context;
 	PSMX2_CTXT_EP(&req->fi_context) = ep_priv;
 
-	chunk_size = MIN(PSMX2_AM_CHUNK_SIZE, psmx2_am_param.max_request_short);
+	chunk_size = psmx2_am_param.max_request_short;
 
 	args[0].u32w0 = 0;
 	PSMX2_AM_SET_SRC(args[0].u32w0, ep_priv->vlane);
