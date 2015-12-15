@@ -437,8 +437,8 @@ void do_send(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -494,8 +494,8 @@ void do_sendv(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	struct iovec iov;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -543,8 +543,8 @@ Test(rdm_sr, sendv_retrans)
 }
 
 /*
-  ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
-  uint64_t flags);
+ssize_t fi_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
+		   uint64_t flags);
 */
 void do_sendmsg(int len)
 {
@@ -554,8 +554,8 @@ void do_sendmsg(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -622,8 +622,8 @@ void do_sendmsgdata(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct fi_msg msg;
 	struct iovec iov;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	iov.iov_base = source;
 	iov.iov_len = len;
@@ -679,8 +679,8 @@ Test(rdm_sr, sendmsgdata_retrans)
 }
 
 /*
-  ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
-  fi_addr_t dest_addr);
+ssize_t fi_inject(struct fid_ep *ep, void *buf, size_t len,
+		  fi_addr_t dest_addr);
 */
 #define INJECT_SIZE 64
 void do_inject(int len)
@@ -688,8 +688,8 @@ void do_inject(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0x23);
 	rdm_sr_init_data(target, len, 0);
@@ -746,8 +746,8 @@ void do_senddata(int len)
 	ssize_t sz;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -802,8 +802,8 @@ void do_injectdata(int len)
 	int ret;
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -861,8 +861,8 @@ void do_recvv(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -926,8 +926,8 @@ void do_recvmsg(int len)
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	struct iovec iov;
 	struct fi_msg msg;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -992,8 +992,8 @@ void do_send_autoreg(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -1044,8 +1044,8 @@ void do_send_autoreg_uncached(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(uc_source, len, 0xab);
 	rdm_sr_init_data(uc_target, len, 0);
@@ -1098,8 +1098,8 @@ void do_send_err(int len)
 	struct fi_cq_tagged_entry s_cqe;
 	struct fi_cq_err_entry err_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -1155,8 +1155,8 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(uc_source, len, 0xab);
 	rdm_sr_init_data(uc_target, len, 0);
@@ -1206,8 +1206,8 @@ Test(rdm_sr, send_readfrom)
 	ssize_t sz;
 	fi_addr_t src_addr;
 	int len = 64;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(source, len, 0xab);
 	rdm_sr_init_data(target, len, 0);
@@ -1248,8 +1248,8 @@ void do_send_buf(void *p, void *t, int len)
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
-	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0},
-							   r_e[NUMEPS] = {0};
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
 	rdm_sr_init_data(p, len, 0xab);
 	rdm_sr_init_data(t, len, 0);
@@ -1308,21 +1308,23 @@ Test(rdm_sr, send_alignment_retrans)
 	rdm_sr_xfer_for_each_size(do_send_alignment, 1, (BUF_SZ-1));
 }
 
-void do_sendrecv_buf(void *s, void *t, int send_len, int recv_len)
+void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 {
 	int ret;
 	int source_done = 0, dest_done = 0;
 	struct fi_cq_tagged_entry s_cqe, d_cqe;
 	ssize_t sz;
 	int xfer_len;
+	uint64_t s[NUMEPS] = {0}, r[NUMEPS] = {0}, s_e[NUMEPS] = {0};
+	uint64_t r_e[NUMEPS] = {0};
 
-	rdm_sr_init_data(s, send_len, 0xab);
+	rdm_sr_init_data(p, send_len, 0xab);
 	rdm_sr_init_data(t, recv_len, 0);
 
-	sz = fi_send(ep[0], s, send_len, loc_mr, gni_addr[1], t);
+	sz = fi_send(ep[0], p, send_len, loc_mr[0], gni_addr[1], t);
 	cr_assert_eq(sz, 0);
 
-	sz = fi_recv(ep[1], t, recv_len, rem_mr, gni_addr[0], s);
+	sz = fi_recv(ep[1], t, recv_len, rem_mr[0], gni_addr[0], p);
 	cr_assert_eq(sz, 0);
 
 	/* need to progress both CQs simultaneously for rendezvous */
@@ -1339,12 +1341,13 @@ void do_sendrecv_buf(void *s, void *t, int send_len, int recv_len)
 
 	xfer_len = MIN(send_len, recv_len);
 	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
-	rdm_sr_check_cqe(&d_cqe, s, (FI_MSG|FI_RECV), t, xfer_len, 0);
-	rdm_sr_check_cntrs(1, 1, 0, 0);
+	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0);
+	s[0] = 1; r[1] = 1;
+	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
 	dbg_printf("got context events!\n");
 
-	cr_assert(rdm_sr_check_data(s, t, xfer_len), "Data mismatch");
+	cr_assert(rdm_sr_check_data(p, t, xfer_len), "Data mismatch");
 }
 
 void do_sendrecv_alignment(int len)
