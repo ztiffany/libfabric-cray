@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.	 All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -12,14 +12,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *	- Redistributions of source code must retain the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer.
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
  *
- *	- Redistributions in binary form must reproduce the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer in the documentation and/or other materials
- *	  provided with the distribution.
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -523,6 +523,7 @@ void do_sendv(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -590,6 +591,7 @@ void do_sendmsg(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -659,6 +661,7 @@ void do_sendmsgdata(int len)
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
 			 target, len, (uint64_t)source);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -774,6 +777,7 @@ void do_senddata(int len)
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV|FI_REMOTE_CQ_DATA),
 			 target, len, (uint64_t)source);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -881,18 +885,16 @@ void do_recvv(int len)
 		ret = fi_cq_read(msg_cq[0], &s_cqe, 1);
 		if (ret == 1) {
 			source_done = 1;
-
 		}
 		ret = fi_cq_read(msg_cq[1], &d_cqe, 1);
 		if (ret == 1) {
 			dest_done = 1;
-
 		}
-
 	} while (!(source_done && dest_done));
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -904,14 +906,12 @@ void do_recvv(int len)
 Test(rdm_sr, recvv)
 {
 	rdm_sr_xfer_for_each_size(do_recvv, 1, BUF_SZ);
-
 }
 
 Test(rdm_sr, recvv_retrans)
 {
 	rdm_sr_err_inject_enable();
 	rdm_sr_xfer_for_each_size(do_recvv, 1, BUF_SZ);
-
 }
 
 /*
@@ -962,6 +962,7 @@ void do_recvmsg(int len)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -1131,7 +1132,6 @@ void do_send_err(int len)
 
 	s_e[0] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
-
 }
 
 Test(rdm_sr, send_err)
@@ -1182,6 +1182,7 @@ void do_send_autoreg_uncached_nolazydereg(int len)
 	rdm_sr_check_cqe(&s_cqe, uc_target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, uc_source, (FI_MSG|FI_RECV),
 			 uc_target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -1232,6 +1233,7 @@ Test(rdm_sr, send_readfrom)
 
 	rdm_sr_check_cqe(&s_cqe, target, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, source, (FI_MSG|FI_RECV), target, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -1274,6 +1276,7 @@ void do_send_buf(void *p, void *t, int len)
 
 	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 
@@ -1342,6 +1345,7 @@ void do_sendrecv_buf(void *p, void *t, int send_len, int recv_len)
 	xfer_len = MIN(send_len, recv_len);
 	rdm_sr_check_cqe(&s_cqe, t, (FI_MSG|FI_SEND), 0, 0, 0);
 	rdm_sr_check_cqe(&d_cqe, p, (FI_MSG|FI_RECV), t, xfer_len, 0);
+
 	s[0] = 1; r[1] = 1;
 	rdm_sr_check_cntrs(s, r, s_e, r_e);
 

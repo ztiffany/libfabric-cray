@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.	 All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -12,14 +12,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *	- Redistributions of source code must retain the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer.
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
  *
- *	- Redistributions in binary form must reproduce the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer in the documentation and/or other materials
- *	  provided with the distribution.
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -463,6 +463,7 @@ void do_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -507,6 +508,7 @@ void do_writev(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -563,6 +565,7 @@ void do_writemsg(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -646,6 +649,7 @@ void do_write_fence(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 2;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -725,6 +729,7 @@ void do_writedata(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -824,6 +829,7 @@ void do_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -867,6 +873,7 @@ void do_readv(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -923,6 +930,7 @@ void do_readmsg(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -996,6 +1004,7 @@ void do_readmsgdata(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1068,6 +1077,7 @@ Test(rdm_rma, inject)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1097,6 +1107,7 @@ void do_write_autoreg(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1130,6 +1141,7 @@ void do_write_autoreg_uncached(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1179,6 +1191,7 @@ void do_write_error(int len)
 	cr_assert(err_cqe.prov_errno == GNI_RC_TRANSACTION_ERROR,
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
+
 	w_e[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 }
@@ -1276,6 +1289,7 @@ void do_read_buf(void *s, void *t, int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 
@@ -1329,6 +1343,7 @@ void do_write_buf(void *s, void *t, int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
 

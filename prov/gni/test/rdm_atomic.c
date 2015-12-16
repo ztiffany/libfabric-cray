@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
- * Copyright (c) 2015 Cray Inc.	 All rights reserved.
+ * Copyright (c) 2015 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -12,14 +12,14 @@
  *     without modification, are permitted provided that the following
  *     conditions are met:
  *
- *	- Redistributions of source code must retain the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer.
+ *      - Redistributions of source code must retain the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer.
  *
- *	- Redistributions in binary form must reproduce the above
- *	  copyright notice, this list of conditions and the following
- *	  disclaimer in the documentation and/or other materials
- *	  provided with the distribution.
+ *      - Redistributions in binary form must reproduce the above
+ *        copyright notice, this list of conditions and the following
+ *        disclaimer in the documentation and/or other materials
+ *        provided with the distribution.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -422,6 +422,7 @@ void do_min(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -533,6 +534,7 @@ void do_max(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
+
 	w[0] = 1;
 	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
@@ -641,7 +643,9 @@ void do_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -764,7 +768,9 @@ void do_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -786,7 +792,7 @@ void do_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -809,7 +815,7 @@ void do_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -831,7 +837,7 @@ void do_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -869,7 +875,9 @@ void do_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -891,7 +899,7 @@ void do_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -914,7 +922,7 @@ void do_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -936,7 +944,7 @@ void do_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -974,7 +982,9 @@ void do_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -996,7 +1006,7 @@ void do_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1019,7 +1029,7 @@ void do_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1041,7 +1051,7 @@ void do_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1078,7 +1088,9 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1099,7 +1111,7 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1122,7 +1134,7 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1143,7 +1155,7 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1166,7 +1178,7 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1187,7 +1199,7 @@ void do_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1228,7 +1240,9 @@ void do_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
-		w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		w[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -1255,7 +1269,9 @@ void do_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
-		w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		w[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -1283,7 +1299,9 @@ void do_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
-		w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		w[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -1310,7 +1328,9 @@ void do_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_WRITE, 0);
-		w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		w[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -1361,7 +1381,9 @@ Test(rdm_atomic, atomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1383,7 +1405,7 @@ Test(rdm_atomic, atomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1406,7 +1428,7 @@ Test(rdm_atomic, atomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1428,7 +1450,7 @@ Test(rdm_atomic, atomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1478,7 +1500,9 @@ Test(rdm_atomic, atomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	w[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1500,7 +1524,7 @@ Test(rdm_atomic, atomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1523,7 +1547,7 @@ Test(rdm_atomic, atomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1545,7 +1569,7 @@ Test(rdm_atomic, atomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_WRITE, 0);
-	w[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1735,7 +1759,9 @@ void do_fetch_min(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1760,7 +1786,7 @@ void do_fetch_min(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1788,7 +1814,7 @@ void do_fetch_min(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1814,7 +1840,7 @@ void do_fetch_min(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1859,7 +1885,9 @@ void do_fetch_max(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1884,7 +1912,7 @@ void do_fetch_max(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1912,7 +1940,7 @@ void do_fetch_max(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1938,7 +1966,7 @@ void do_fetch_max(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -1979,7 +2007,9 @@ void do_fetch_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2002,7 +2032,7 @@ void do_fetch_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2028,7 +2058,7 @@ void do_fetch_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2051,7 +2081,7 @@ void do_fetch_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2078,7 +2108,7 @@ void do_fetch_sum(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2118,7 +2148,9 @@ void do_fetch_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2142,7 +2174,7 @@ void do_fetch_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2168,7 +2200,7 @@ void do_fetch_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2192,7 +2224,7 @@ void do_fetch_bor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2234,7 +2266,9 @@ void do_fetch_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2258,7 +2292,7 @@ void do_fetch_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2284,7 +2318,7 @@ void do_fetch_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2308,7 +2342,7 @@ void do_fetch_band(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2350,7 +2384,9 @@ void do_fetch_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2374,7 +2410,7 @@ void do_fetch_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2400,7 +2436,7 @@ void do_fetch_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2424,7 +2460,7 @@ void do_fetch_bxor(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2467,7 +2503,9 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2490,7 +2528,7 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2517,7 +2555,7 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2540,7 +2578,7 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2568,7 +2606,7 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2592,7 +2630,7 @@ void do_fetch_atomic_write(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2633,7 +2671,9 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2659,7 +2699,7 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2689,7 +2729,7 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2715,7 +2755,7 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2745,7 +2785,7 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2771,7 +2811,7 @@ void do_fetch_atomic_read(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2819,7 +2859,9 @@ void do_fetch_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -2848,7 +2890,9 @@ void do_fetch_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -2881,7 +2925,9 @@ void do_fetch_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -2911,7 +2957,9 @@ void do_fetch_min_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -2970,7 +3018,9 @@ Test(rdm_atomic, fatomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -2998,7 +3048,7 @@ Test(rdm_atomic, fatomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3029,7 +3079,7 @@ Test(rdm_atomic, fatomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3058,7 +3108,7 @@ Test(rdm_atomic, fatomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3116,7 +3166,9 @@ Test(rdm_atomic, fatomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3141,7 +3193,7 @@ Test(rdm_atomic, fatomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3169,7 +3221,7 @@ Test(rdm_atomic, fatomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3195,7 +3247,7 @@ Test(rdm_atomic, fatomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3293,7 +3345,9 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3316,7 +3370,7 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3343,7 +3397,7 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3366,7 +3420,7 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3395,7 +3449,7 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3420,7 +3474,7 @@ void do_cswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3461,7 +3515,9 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3485,7 +3541,7 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3513,7 +3569,7 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3537,7 +3593,7 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3567,7 +3623,7 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3592,7 +3648,7 @@ void do_mswap(int len)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3635,7 +3691,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3662,7 +3720,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3694,7 +3754,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3721,7 +3783,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3755,7 +3819,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3784,7 +3850,9 @@ void do_cswap_buf(void *s, void *t)
 
 		cr_assert_eq(ret, 1);
 		rdm_atomic_check_tcqe(&cqe, t, FI_ATOMIC | FI_READ, 0);
-		r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+		r[0] = 1;
+		rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 		dbg_printf("got write context event!\n");
 
@@ -3842,7 +3910,9 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3871,7 +3941,7 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3904,7 +3974,7 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3933,7 +4003,7 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3968,7 +4038,7 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -3999,7 +4069,7 @@ Test(rdm_atomic, catomicv)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4055,7 +4125,9 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+
+	r[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4081,7 +4153,7 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4111,7 +4183,7 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4137,7 +4209,7 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4169,7 +4241,7 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4197,7 +4269,7 @@ Test(rdm_atomic, catomicmsg)
 
 	cr_assert_eq(ret, 1);
 	rdm_atomic_check_tcqe(&cqe, target, FI_ATOMIC | FI_READ, 0);
-	r[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 
 	dbg_printf("got write context event!\n");
 
@@ -4253,7 +4325,8 @@ Test(rdm_atomic, atomic_err)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	w_e[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	w_e[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 }
 
 Test(rdm_atomic, fetch_atomic_err)
@@ -4297,7 +4370,8 @@ Test(rdm_atomic, fetch_atomic_err)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	r_e[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	r_e[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 }
 
 Test(rdm_atomic, compare_atomic_err)
@@ -4341,5 +4415,6 @@ Test(rdm_atomic, compare_atomic_err)
 		  "Bad prov errno");
 	cr_assert(err_cqe.err_data == NULL, "Bad error provider data");
 
-	r_e[0] = 1; rdm_atomic_check_cntrs(w, r, w_e, r_e);
+	r_e[0] = 1;
+	rdm_atomic_check_cntrs(w, r, w_e, r_e);
 }
