@@ -12,6 +12,8 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gni_CPPFLAGS=
 	gni_LDFLAGS=
 	gni_LIBS=
+	GNI_GCC_VERSION="4.9.0"
+
 	AS_IF([test x"$enable_gni" != x"no"],
 	      [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
                                  [ugni_lib_happy=1
@@ -39,6 +41,13 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
                                  [alps_util_happy=0])
 	       ])
 
+	# Pull out gcc version number with regex backreference
+	gcc_version=`gcc --version | head -n1 | sed 's/.*\([[0-9]]\.[[0-9]]\.[[0-9]]\).*/\1/'`
+	if [[ "$gcc_version" \< "$GNI_GCC_VERSION" ]]; then
+	   AC_MSG_WARN([gni provider requires gcc version "$GNI_GCC_VERSION" or higher but gcc version "$gcc_version" is being used.])
+	   ugni_lib_happy=0
+	   fi
+
 	have_criterion=false
 	criterion_tests_present=true
 
@@ -46,6 +55,13 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	      [AC_ARG_WITH([criterion], [AS_HELP_STRING([--with-criterion],
 		       [Location for criterion unit testing framework])])],
 		 	[criterion_tests_present=false])
+
+	# Pull out gcc version number with regex backreference
+	gcc_version=`gcc --version | head -n1 | sed 's/.*\([[0-9]]\.[[0-9]]\.[[0-9]]\).*/\1/'`
+	if [[ "$gcc_version" \< "$GNI_GCC_VERSION" ]]; then
+	   AC_MSG_WARN([gni provider requires gcc version "$GNI_GCC_VERSION" or higher but gcc version "$gcc_version" is being used.])
+	   ugni_lib_happy=0
+	   fi
 
 	if test "$with_criterion" != "" && test "$with_criterion" != "no"; then
 		AS_IF([test "$criterion_tests_present" = "true"],
