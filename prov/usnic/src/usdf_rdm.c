@@ -492,13 +492,6 @@ usdf_rdm_recv(struct fid_ep *fep, void *buf, size_t len,
 }
 
 ssize_t
-usdf_rdm_recvv(struct fid_ep *fep, const struct iovec *iov, void **desc,
-                 size_t count, fi_addr_t src_addr, void *context)
-{
-	return -FI_ENOSYS;
-}
-
-ssize_t
 usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 		fi_addr_t dest_addr, void *context)
 {
@@ -559,13 +552,6 @@ usdf_rdm_send(struct fid_ep *fep, const void *buf, size_t len, void *desc,
 	usdf_domain_progress(udp);
 
 	return 0;
-}
-
-ssize_t
-usdf_rdm_senddata(struct fid_ep *fep, const void *buf, size_t len, void *desc,
-		uint64_t data, fi_addr_t dest_addr, void *context)
-{
-	return -FI_ENOSYS;
 }
 
 ssize_t
@@ -775,11 +761,8 @@ usdf_rdm_inject(struct fid_ep *fep, const void *buf, size_t len,
 		return -FI_EAGAIN;
 	}
 
-	wqe = TAILQ_FIRST(&tx->t.rdm.tx_free_wqe);
-	TAILQ_REMOVE(&tx->t.rdm.tx_free_wqe, wqe, rd_link);
-
+	wqe = usdf_rdm_get_tx_wqe(tx);
 	wqe->rd_context = NULL;
-
 	msg_id = atomic_inc(&tx->t.rdm.tx_next_msg_id);
 	wqe->rd_msg_id_be = htonl(msg_id);
 
@@ -807,12 +790,6 @@ usdf_rdm_inject(struct fid_ep *fep, const void *buf, size_t len,
 	usdf_domain_progress(udp);
 
 	return 0;
-}
-
-ssize_t
-usdf_rdm_recvmsg(struct fid_ep *ep, const struct fi_msg *msg, uint64_t flags)
-{
-	return -FI_ENOSYS;
 }
 
 /*
