@@ -12,7 +12,6 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 	gni_CPPFLAGS=
 	gni_LDFLAGS=
 	gni_LIBS=
-	GNI_GCC_VERSION="4.9.0"
 
 	AS_IF([test x"$enable_gni" != x"no"],
 	      [FI_PKG_CHECK_MODULES([CRAY_UGNI], [cray-ugni],
@@ -52,13 +51,6 @@ dnl looks like we need to get rid of some white space
                        ],
                        [[#include "$gni_path_to_gni_pub"]])
 
-	# Pull out gcc version number with regex backreference
-	gcc_version=`gcc --version | head -n1 | sed 's/.*\([[0-9]]\.[[0-9]]\.[[0-9]]\).*/\1/'`
-	if [[ "$gcc_version" \< "$GNI_GCC_VERSION" ]]; then
-	   AC_MSG_WARN([gni provider requires gcc version "$GNI_GCC_VERSION" or higher but gcc version "$gcc_version" is being used.])
-	   ugni_lib_happy=0
-	   fi
-
 	have_criterion=false
 	criterion_tests_present=true
 
@@ -97,6 +89,13 @@ dnl looks like we need to get rid of some white space
 	AC_SUBST(gni_CPPFLAGS)
 	AC_SUBST(gni_LDFLAGS)
 	AC_SUBST(gni_LIBS)
+
+        AC_CHECK_DECL([HAVE_ATOMICS],
+                        [],
+                        [cc_version=`$CC --version | head -n1`
+                        AC_MSG_WARN(["$cc_version" doesn't support native atomics.  Disabling GNI provider.])
+                        ugni_lib_happy=0]
+			)
 
 	AS_IF([test $gni_header_happy -eq 1 -a $ugni_lib_happy -eq 1 \
                -a $alps_lli_happy -eq 1 -a $alps_util_happy -eq 1], [$1], [$2])
