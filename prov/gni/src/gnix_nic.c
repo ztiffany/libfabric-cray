@@ -99,7 +99,8 @@ static void *__gnix_nic_prog_thread_fn(void *the_arg)
 	ret = _gnix_task_is_not_app();
 	if (ret)
 		GNIX_WARN(FI_LOG_EP_CTRL,
-		"_gnix_task_is_not_app call returned %d\n", ret);
+			"_gnix_task_is_not_app call returned %d\n",
+			ret);
 
 	/*
 	 * block all signals, don't want this thread to catch
@@ -497,42 +498,28 @@ static int __nic_get_completed_txd(struct gnix_nic *nic,
 	return 1;
 }
 
-/*
- * function to process GNI CQ TX CQES to progress a gnix_nic
- */
-
-static int __nic_tx_progress(struct gnix_nic *nic)
+static int __nic_tx_progress(struct gnix_nic *nic, gni_cq_handle_t cq)
 {
 	int ret = FI_SUCCESS;
-	gni_return_t tx_status0;
-	gni_return_t tx_status1;
-	struct gnix_tx_descriptor *txd0;
-	struct gnix_tx_descriptor *txd1;
+	gni_return_t tx_status;
+	struct gnix_tx_descriptor *txd;
 
 	do {
-		txd0 = txd1 = NULL;
+		txd = NULL;
 
 		fastlock_acquire(&nic->lock);
-		__nic_get_completed_txd(nic, nic->tx_cq, &txd0,
-						&tx_status0);
-		__nic_get_completed_txd(nic, nic->tx_cq_blk,
-					     &txd1, &tx_status1);
+		__nic_get_completed_txd(nic, cq, &txd,
+						&tx_status);
 		fastlock_release(&nic->lock);
 
-		if (txd0 && txd0->completer_fn) {
-			ret = txd0->completer_fn(txd0, tx_status0);
+		if (txd && txd->completer_fn) {
+			ret = txd->completer_fn(txd, tx_status);
 			if (ret != FI_SUCCESS)
 				GNIX_WARN(FI_LOG_EP_DATA,
-					  "TXD0 completer failed: %d", ret);
-		}
-		if (txd1 && txd1->completer_fn) {
-			ret = txd1->completer_fn(txd1, tx_status1);
-			if (ret != FI_SUCCESS)
-				GNIX_WARN(FI_LOG_EP_DATA,
-					  "TXD1 completer failed: %d", ret);
+					  "TXD completer failed: %d", ret);
 		}
 
-		if (((txd0 == NULL) && (txd1 == NULL)) || ret != FI_SUCCESS)
+		if ((txd == NULL) || ret != FI_SUCCESS)
 			break;
 	} while (1);
 
@@ -543,9 +530,15 @@ int _gnix_nic_progress(struct gnix_nic *nic)
 {
 	int ret = FI_SUCCESS;
 
-	ret =  __nic_tx_progress(nic);
+	ret =  __nic_tx_progress(nic, nic->tx_cq);
 	if (unlikely(ret != FI_SUCCESS))
 		return ret;
+
+	if (nic->tx_cq_blk) {
+		ret =  __nic_tx_progress(nic, nic->tx_cq_blk);
+		if (unlikely(ret != FI_SUCCESS))
+			return ret;
+	}
 
 	ret = __nic_rx_progress(nic);
 	if (unlikely(ret != FI_SUCCESS))
