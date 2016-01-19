@@ -926,6 +926,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.rma_id = hdr->req_addr;
 		req->msg.rndzv_head = hdr->head;
 		req->msg.rndzv_tail = hdr->tail;
+		atomic_initialize(&req->msg.outstanding_txds, 0);
 
 		_gnix_insert_tag(unexp_queue, req->msg.tag, req, ~0);
 	}
@@ -1302,6 +1303,7 @@ ssize_t _gnix_recv(struct gnix_fid_ep *ep, uint64_t buf, size_t len,
 		req->msg.recv_flags = flags;
 		req->msg.tag = tag;
 		req->msg.ignore = ignore;
+		atomic_initialize(&req->msg.outstanding_txds, 0);
 
 		if ((flags & GNIX_SUPPRESS_COMPLETION) ||
 		    (ep->recv_selective_completion &&
@@ -1537,6 +1539,12 @@ ssize_t _gnix_send(struct gnix_fid_ep *ep, uint64_t loc_addr, size_t len,
 	}
 
 	if (rendezvous) {
+		/*
+		 * this initialization is not necessary currently
+		 * but is a place holder in the event a RDMA write
+		 * path is implemented for rendezvous
+		 */
+		atomic_initialize(&req->msg.outstanding_txds, 0);
 		req->msg.send_flags |= GNIX_MSG_RENDEZVOUS;
 	}
 
