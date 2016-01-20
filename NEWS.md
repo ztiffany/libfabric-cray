@@ -5,7 +5,7 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.2.0, TBD
+v1.2.0, Thu Jan 7, 2016
 =======================
 
 ## General notes
@@ -29,6 +29,10 @@ v1.2.0, TBD
 ## Sockets provider notes
 
 - General bug fixes and code cleanup
+- Update memory registration to support 32-bit builds and fix build warnings
+- Initiate conn-msg on the same tx_ctx as the tx operation for scalable ep
+- Fix av mask calculation for scalable ep
+- Mask out context-id during connection lookup for scalable ep
 - Increase buffered receive limit
 - Ignore FI_INJECT flag for atomic read operation
 - Return -FI_EINVAL instead of -FI_ENODATA for fi_endpoint for invalid attributes
@@ -58,7 +62,8 @@ v1.2.0, TBD
 
 - Add support for RDM EPs. Currently only FI_TAGGED capability is supported.
   RDM and MSG EPs would be reported in seperate domains since they don't share
-  CQs.
+  CQs. The RDM enpoint feature is currently experimental and no guarantees are
+  given with regard to its functionality.
 - Refactor the code into several files to enable adding RDM support.
 - Consolidate send code paths to improve maintainability.
 - Fix a bug in fi_getinfo where wild card address was not used when service
@@ -67,7 +72,7 @@ v1.2.0, TBD
 - Add support for fi_eq_write.
 - Other misc bug fixes.
 
-v1.1.1, TBD
+v1.1.1, Fri Oct 2, 2015
 =======================
 
 ## General notes
