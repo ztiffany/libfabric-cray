@@ -49,7 +49,7 @@ extern struct fi_provider gnix_prov;
  */
 #ifdef NDEBUG
 
-#define GNIX_LOG_INTERNAL(FI_LOG_FN, subsystem, fmt, ...)	\
+#define GNIX_LOG_INTERNAL(FI_LOG_FN, LEVEL, subsystem, fmt, ...)	\
 	FI_LOG_FN(&gnix_prov, subsystem, fmt, ##__VA_ARGS__)
 
 #define GNIX_FI_PRINT(prov, subsystem, ...)
