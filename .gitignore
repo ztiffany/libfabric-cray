@@ -16,8 +16,11 @@ config.log
 config.status
 configure
 libtool
-libfabric.spec
+
 doxygen
+
+libfabric.spec
+libfabric.pc
 
 config/ar-lib
 config/compile
