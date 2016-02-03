@@ -46,6 +46,7 @@
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
 #include <netdb.h>
+#include <netinet/in.h>
 
 #include <fi.h>
 #include <fi_enosys.h>
@@ -325,6 +326,7 @@ struct sock_av {
 	struct sock_eq *eq;
 	struct sock_av_table_hdr *table_hdr;
 	struct sock_av_addr *table;
+	uint64_t *idx_arr;
 	char *name;
 	int shared_fd;
 };

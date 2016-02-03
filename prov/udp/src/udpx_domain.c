@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,54 +30,37 @@
  * SOFTWARE.
  */
 
-#ifndef _SOCK_UTIL_H_
-#define _SOCK_UTIL_H_
+#include <stdlib.h>
+#include <string.h>
 
-#include <sys/mman.h>
-#include <rdma/fi_log.h>
-#include "sock.h"
+#include "udpx.h"
 
-extern const char sock_fab_name[];
-extern const char sock_dom_name[];
-extern const char sock_prov_name[];
-extern struct fi_provider sock_prov;
-extern int sock_pe_waittime;
-extern int sock_conn_retry;
-extern int sock_cm_def_map_sz;
-extern int sock_av_def_sz;
-extern int sock_cq_def_sz;
-extern int sock_eq_def_sz;
-extern char *sock_pe_affinity_str;
-#if ENABLE_DEBUG
-extern int sock_dgram_drop_rate;
-#endif
 
-#define _SOCK_LOG_DBG(subsys, ...) FI_DBG(&sock_prov, subsys, __VA_ARGS__)
-#define _SOCK_LOG_ERROR(subsys, ...) FI_WARN(&sock_prov, subsys, __VA_ARGS__)
+static struct fi_ops_domain udpx_domain_ops = {
+	.size = sizeof(struct fi_ops_domain),
+	.av_open = ip_av_create,
+	.cq_open = udpx_cq_open,
+	.endpoint = udpx_endpoint,
+	.scalable_ep = fi_no_scalable_ep,
+	.cntr_open = fi_no_cntr_open,
+	.poll_open = fi_poll_create,
+	.stx_ctx = fi_no_stx_context,
+	.srx_ctx = fi_no_srx_context,
+};
 
-static inline int sock_drop_packet(struct sock_ep *sock_ep)
+int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		struct fid_domain **domain, void *context)
 {
-#if ENABLE_DEBUG
-	if (sock_ep->ep_type == FI_EP_DGRAM && sock_dgram_drop_rate > 0) {
-		sock_ep->domain->fab->num_send_msg++;
-		if (!(sock_ep->domain->fab->num_send_msg % sock_dgram_drop_rate))
-			return 1;
-	}
-#endif
+	int ret;
+
+	ret = udpx_check_info(info);
+	if (ret)
+		return ret;
+
+	ret = fi_domain_create(fabric, info, domain, context);
+	if (ret)
+		return ret;
+
+	(*domain)->ops = &udpx_domain_ops;
 	return 0;
 }
-
-static inline void *sock_mremap(void *old_address, size_t old_size,
-				size_t new_size)
-{
-#ifdef __APPLE__
-	return (void *) -1;
-#elif defined __FreeBSD__
-	return (void *) -1;
-#else
-	return mremap(old_address, old_size, new_size, 0);
-#endif
-}
-
-#endif
-
