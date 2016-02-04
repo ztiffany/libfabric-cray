@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,57 +30,48 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
-#include <string.h>
+#if HAVE_CONFIG_H
+#  include <config.h>
+#endif /* HAVE_CONFIG_H */
 
-#include "udpx.h"
+#include <fi.h>
+#include <fi_list.h>
 
+#ifndef _FI_MEM_H_
+#define _FI_MEM_H_
 
-static struct fi_ops_fabric udpx_fabric_ops = {
-	.size = sizeof(struct fi_ops_fabric),
-	.domain = udpx_domain_open,
-	.passive_ep = fi_no_passive_ep,
-	.eq_open = fi_eq_create,
-	.wait_open = fi_wait_fd_open,
+/*
+ * Buffer Pool
+ */
+
+struct util_buf_pool {
+	size_t entry_sz;
+	size_t max_cnt;
+	size_t chunk_cnt;
+	size_t alignment;
+	size_t num_allocated;
+#if ENABLE_DEBUG
+	size_t num_used;
+#endif
+	struct slist buf_list;
+	struct slist region_list;
 };
 
-static int udpx_fabric_close(fid_t fid)
-{
-	int ret;
-	struct util_fabric *fabric;
-	fabric = container_of(fid, struct util_fabric, fabric_fid.fid);
-	ret = util_fabric_close(fabric);
-	if (ret)
-		return ret;
-	free(fabric);
-	return 0;
-}
-
-static struct fi_ops udpx_fabric_fi_ops = {
-	.size = sizeof(struct fi_ops),
-	.close = udpx_fabric_close,
-	.bind = fi_no_bind,
-	.control = fi_no_control,
-	.ops_open = fi_no_ops_open,
+struct util_buf_region {
+	struct slist_entry entry;
+	char *mem_region;
 };
 
-int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context)
-{
-	int ret;
-	struct util_fabric *util_fabric;
+union util_buf {
+	struct slist_entry entry;
+	uint8_t data[0];
+};
 
-	util_fabric = calloc(1, sizeof(*util_fabric));
-	if (!util_fabric)
-		return -FI_ENOMEM;
+struct util_buf_pool *util_buf_pool_create(size_t size, size_t alignment,
+					   size_t max_cnt, size_t chunk_cnt);
+void util_buf_pool_destroy(struct util_buf_pool *pool);
 
-	ret = fi_fabric_init(&udpx_prov, udpx_info.fabric_attr, attr,
-			     util_fabric, context);
-	if (ret)
-		return ret;
+void *util_buf_get(struct util_buf_pool *pool);
+void util_buf_release(struct util_buf_pool *pool, void *buf);
 
-	*fabric = &util_fabric->fabric_fid;
-	(*fabric)->fid.ops = &udpx_fabric_fi_ops;
-	(*fabric)->ops = &udpx_fabric_ops;
-	return 0;
-}
+#endif
