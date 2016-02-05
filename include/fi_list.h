@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2011-2015 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cray Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -31,19 +32,15 @@
  *
  */
 
-#if !defined(LIST_H)
-#define LIST_H
+#ifndef _FI_LIST_H_
+#define _FI_LIST_H_
 
 #include "config.h"
 
-#include <unistd.h>
-#include <errno.h>
-#include <fcntl.h>
+#include <sys/types.h>
+#include <stdlib.h>
 
-#include <rdma/fi_errno.h>
-
-#include "fi.h"
-#include "fi_signal.h"
+#include <fi_signal.h>
 
 
 /*
@@ -176,7 +173,9 @@ static inline struct slist_entry *slist_remove_head(struct slist *list)
 	else
 		list->head = item->next;
 #if ENABLE_DEBUG
-	item->next = NULL;
+	if (item) {
+		item->next = NULL;
+	}
 #endif
 	return item;
 }
@@ -276,4 +275,4 @@ static inline int dlistfd_wait_avail(struct dlistfd_head *head, int timeout)
 	return ret ? ret : !dlistfd_empty(head);
 }
 
-#endif /* LIST_H */
+#endif /* _FI_LIST_H_ */
