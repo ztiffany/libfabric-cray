@@ -129,13 +129,8 @@ static struct psmx_unexp *psmx_am_search_and_dequeue_unexp(
  *	args[2].u64	recv_req
  */
 
-#if (PSM_VERNO_MAJOR >= 2)
-int psmx_am_msg_handler(psm_am_token_t token,
-			psm_amarg_t *args, int nargs, void *src, uint32_t len)
-#else
 int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			psm_amarg_t *args, int nargs, void *src, uint32_t len)
-#endif
 {
         psm_amarg_t rep_args[8];
         struct psmx_am_request *req;
@@ -148,11 +143,6 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 	int err = 0;
 	int op_error = 0;
 	struct psmx_unexp *unexp;
-#if (PSM_VERNO_MAJOR >= 2)
-	psm_epaddr_t epaddr;
-
-	psm_am_get_source(token, &epaddr);
-#endif
 
 	epaddr_context = psm_epaddr_getctxt(epaddr);
 	if (!epaddr_context) {
@@ -177,13 +167,11 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 				copy_len = MIN(len, req->recv.len);
 				memcpy(req->recv.buf, src, len);
 				req->recv.len_received += copy_len;
-			}
-			else {
+			} else {
 				unexp = malloc(sizeof(*unexp) + len);
 				if (!unexp) {
 					op_error = -FI_ENOSPC;
-				}
-				else  {
+				} else {
 					memcpy(unexp->buf, src, len);
 					unexp->sender_addr = epaddr;
 					unexp->sender_context = args[1].u64;
@@ -209,15 +197,13 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 						rep_args, 3, NULL, 0, 0,
 						NULL, NULL );
 			}
-		}
-		else {
+		} else {
 			req = (struct psmx_am_request *)(uintptr_t)args[2].u64;
 			if (req) {
 				copy_len = MIN(req->recv.len + offset, len);
 				memcpy(req->recv.buf + offset, src, copy_len);
 				req->recv.len_received += copy_len;
-			}
-			else {
+			} else {
 				FI_WARN(&psmx_prov, FI_LOG_EP_DATA,
 					"NULL recv_req in follow-up packets.\n");
 				op_error = -FI_ENOMSG;
@@ -271,8 +257,7 @@ int psmx_am_msg_handler(psm_am_token_t token, psm_epaddr_t epaddr,
 			 * put the request into a queue and process it later.
 			 */
 			psmx_am_enqueue_send(req->ep->domain, req);
-		}
-		else { /* done */
+		} else { /* done */
 			if (req->ep->send_cq && !req->no_event) {
 				event = psmx_cq_create_event(
 						req->ep->send_cq,
@@ -376,8 +361,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 
 			src_addr = (fi_addr_t)av->psm_epaddrs[idx];
 		}
-	}
-	else {
+	} else {
 		src_addr = 0;
 	}
 
@@ -410,8 +394,7 @@ static ssize_t _psmx_recv2(struct fid_ep *ep, void *buf, size_t len,
 
 	if (unexp->done) {
 		recv_done = 1;
-	}
-	else {
+	} else {
 		args[0].u32w0 = PSMX_AM_REP_SEND;
 		args[0].u32w1 = 0;
 		args[1].u64 = unexp->sender_context;
@@ -471,12 +454,10 @@ static ssize_t psmx_recvmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -497,12 +478,10 @@ static ssize_t psmx_recvv2(struct fid_ep *ep, const struct iovec *iov,
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -535,8 +514,7 @@ static ssize_t _psmx_send2(struct fid_ep *ep, const void *buf, size_t len,
 			return -FI_EINVAL;
 
 		dest_addr = (fi_addr_t) av->psm_epaddrs[idx];
-	}
-	else if (!dest_addr) {
+	} else if (!dest_addr) {
 		return -FI_EINVAL;
 	}
 
@@ -595,12 +573,10 @@ static ssize_t psmx_sendmsg2(struct fid_ep *ep, const struct fi_msg *msg,
 
 	if (msg->iov_count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (msg->iov_count) {
+	} else if (msg->iov_count) {
 		buf = msg->msg_iov[0].iov_base;
 		len = msg->msg_iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}
@@ -621,12 +597,10 @@ static ssize_t psmx_sendv2(struct fid_ep *ep, const struct iovec *iov,
 
 	if (count > 1) {
 		return -FI_EINVAL;
-	}
-	else if (count) {
+	} else if (count) {
 		buf = iov[0].iov_base;
 		len = iov[0].iov_len;
-	}
-	else {
+	} else {
 		buf = NULL;
 		len = 0;
 	}

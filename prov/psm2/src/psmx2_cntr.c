@@ -76,6 +76,17 @@ int psmx2_process_trigger(struct psmx2_fid_domain *domain,
 					  trigger->tsend.flags,
 					  trigger->tsend.data);
 		break;
+	case PSMX2_TRIGGERED_TSENDV:
+		psmx2_tagged_sendv_generic(trigger->tsendv.ep,
+					   trigger->tsendv.iov,
+					   trigger->tsendv.desc,
+					   trigger->tsendv.count,
+					   trigger->tsendv.dest_addr,
+					   trigger->tsendv.tag,
+					   trigger->tsendv.context,
+					   trigger->tsendv.flags,
+					   trigger->tsendv.data);
+		break;
 	case PSMX2_TRIGGERED_TRECV:
 		psmx2_tagged_recv_generic(trigger->trecv.ep,
 					  trigger->trecv.buf,
@@ -194,8 +205,7 @@ void psmx2_cntr_check_trigger(struct psmx2_fid_cntr *cntr)
 			slist_insert_tail(&trigger->list_entry,
 					  &domain->trigger_queue.list);
 			fastlock_release(&domain->trigger_queue.lock);
-		}
-		else {
+		} else {
 			psmx2_process_trigger(domain, trigger);
 		}
 
@@ -305,8 +315,7 @@ static int psmx2_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeou
 					      timeout - msec_passed);
 			if (ret == -FI_ETIMEDOUT)
 				break;
-		}
-		else {
+		} else {
 			psmx2_progress(cntr_priv->domain);
 		}
 

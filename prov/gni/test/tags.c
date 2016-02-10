@@ -1375,7 +1375,8 @@ TestSuite(gnix_tags_basic_posted_list,
 
 TestSuite(gnix_tags_basic_posted_hlist,
 		.init = __gnix_tags_basic_posted_hlist_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 TestSuite(gnix_tags_basic_posted_kdtree,
 		.init = __gnix_tags_basic_posted_kdtree_test_setup,
@@ -1388,7 +1389,8 @@ TestSuite(gnix_tags_basic_unexpected_list,
 
 TestSuite(gnix_tags_basic_unexpected_hlist,
 		.init = __gnix_tags_basic_unexpected_hlist_test_setup,
-		.fini = __gnix_tags_basic_test_teardown);
+		.fini = __gnix_tags_basic_test_teardown,
+		.disabled = true);
 
 TestSuite(gnix_tags_basic_unexpected_kdtree,
 		.init = __gnix_tags_basic_unexpected_kdtree_test_setup,
