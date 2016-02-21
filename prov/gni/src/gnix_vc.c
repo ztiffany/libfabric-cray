@@ -50,6 +50,7 @@
 #include "gnix_mbox_allocator.h"
 #include "gnix_hashtable.h"
 #include "gnix_av.h"
+#include "gnix_vector.h"
 
 /*
  * forward declarations and local struct defs.
@@ -70,6 +71,367 @@ static int __gnix_vc_push_tx_reqs(struct gnix_vc *vc);
 /*******************************************************************************
  * Helper functions
  ******************************************************************************/
+/**
+ * Insert vc based on AV type and favor FI_AV_TABLE
+ *
+ * @assumption: ep, ep->av, index, key are all valid non-null ptrs.
+ */
+static inline int __gnix_vc_insert(struct gnix_fid_ep *ep,
+				   fi_addr_t *index,
+				   gnix_ht_key_t *key,
+				   struct gnix_vc *vc)
+{
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+	int ret, av_type = ep->av->type;
+
+	if (likely(av_type == FI_AV_TABLE)) {
+		fastlock_acquire(&ep->vc_lock);
+		ret = _gnix_vec_insert_at(ep->vc_table, (void *) vc, *index);
+
+		if (ret == -FI_ENOSPC) {
+			fastlock_release(&ep->vc_lock);
+			return ret;
+		}
+
+
+		if (unlikely(ret != FI_SUCCESS)) {
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "_gnix_vec_insert_at returned %s\n",
+				   fi_strerror(-ret));
+		}
+
+		vc->modes |= GNIX_VC_MODE_IN_TABLE;
+		fastlock_release(&ep->vc_lock);
+	} else if (av_type == FI_AV_MAP){
+		fastlock_acquire(&ep->vc_lock);
+		ret = _gnix_ht_insert(ep->vc_ht, *key, (void *) vc);
+
+		/* vc was inserted into ht between call to lookup and here! */
+		if (ret == -FI_ENOSPC) {
+			fastlock_release(&ep->vc_lock);
+			return ret;
+		}
+
+		if (unlikely(ret != FI_SUCCESS)) {
+			GNIX_FATAL(FI_LOG_EP_CTRL,
+				   "_gnix_ht_insert returned %s\n",
+				   fi_strerror(-ret));
+		}
+
+		vc->modes |= GNIX_VC_MODE_IN_HT;
+		fastlock_release(&ep->vc_lock);
+	} else {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Invalid AV type \"%d\" in __gnix_vc_insert\n",
+			  av_type);
+                return -FI_EINVAL;
+	}
+
+	return ret;
+}
+
+/**
+ * Lookup VC based on AV type and favor FI_AV_TABLE.  If the AV type
+ * is FI_AV_TABLE, then table_dest_addr will be populated. If the AV type
+ * is FI_AV_MAP, then key and ht_dest_addr will be populated.  In either
+ * case av_entry and vc_ptr will be populated.
+ *
+ * @assumption: The user correctly sets is_dest_addr_gnix_addr;
+ * if key is non-null then it is the correct key for the given dest_addr;
+ * ep is non-null;
+ * vc_ptr is non-null.
+ *
+ * TODO: Only lock the vc_lock when looking up the VC.
+ */
+static inline int __gnix_vc_lookup_vc(struct gnix_fid_ep *ep, void *dest_addr,
+				      bool is_dest_addr_gnix_addr,
+				      struct gnix_av_addr_entry **av_entry,
+				      gnix_ht_key_t **key,
+				      fi_addr_t *table_dest_addr,
+				      struct gnix_address *ht_dest_addr,
+				      struct gnix_vc **vc_ptr)
+{
+	struct gnix_fid_av *av = ep->av;
+	int av_type = av->type, ret = FI_SUCCESS;
+	gnix_ht_key_t *key_ptr = *key;
+
+	/*
+	 * Ensure that vc_ptr is NULL before vc lookup as
+	 * functions rely on vc_ptr being NULL to determine
+	 * whether the vc was found during the lookup.
+	 */
+	*vc_ptr = NULL;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
+
+	if (likely((av_type == FI_AV_TABLE))) {
+		/* Check to see if the user passed in a gnix address */
+		if (is_dest_addr_gnix_addr) {
+			ret = _gnix_table_reverse_lookup(
+				av, *((struct gnix_address *) dest_addr),
+				table_dest_addr);
+
+                        GNIX_INFO(FI_LOG_EP_CTRL, "gnix_addr: %llx\n",
+                                  *((struct gnix_address *)dest_addr));
+                        if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_table_reverse_lookup returned %s\n",
+					  fi_strerror(-ret));
+				return ret;
+			}
+		} else {
+			*table_dest_addr = *((fi_addr_t *) dest_addr);
+
+                        GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: %llx\n",
+                                  *table_dest_addr);
+                }
+
+		ret = _gnix_table_lookup(av, *table_dest_addr, av_entry);
+		assert(*av_entry);
+
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "_gnix_table_lookup returned %s\n",
+				  fi_strerror(-ret));
+			return ret;
+		}
+		/* fastlock_acquire(&ep->vc_lock); */
+                ret = _gnix_vec_at(ep->vc_table, (void **)vc_ptr,
+                                   *table_dest_addr);
+                /* fastlock_release(&ep->vc_lock); */
+                GNIX_DEBUG(FI_LOG_EP_CTRL, "Found vc %p at vector index %llu\n",
+                           *vc_ptr, *table_dest_addr);
+
+                /* Ignore FI_ECANCELED as it's returned when looking up a entry
+                 * that is empty */
+                if (ret != -FI_ECANCELED && ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_vec_at returned %s\n",
+				  fi_strerror(-ret));
+                }
+
+		return ret;
+	} else if (av_type == FI_AV_MAP) {
+		if (key_ptr == NULL) {
+			/* Check to see if the user passed in a gnix address */
+			if (is_dest_addr_gnix_addr) {
+				*ht_dest_addr = *((struct gnix_address *)
+						  dest_addr);
+
+                                GNIX_INFO(FI_LOG_EP_CTRL, "gnix_addr: 0x%llx\n",
+					  *ht_dest_addr);
+
+				key_ptr = malloc(sizeof(gnix_ht_key_t));
+				assert(key_ptr);
+
+                                memcpy(key_ptr, ht_dest_addr,
+                                       sizeof(gnix_ht_key_t));
+                                *av_entry =
+                                    _gnix_ht_lookup(av->map_ht, *key_ptr);
+
+                                assert(*av_entry);
+			} else {
+				ret = _gnix_map_lookup(av,
+						       *((fi_addr_t *)dest_addr),
+						       av_entry);
+                                assert(*av_entry);
+                                GNIX_DEBUG(FI_LOG_EP_CTRL,
+					   "av_entry at %p in __gnix_vc_lookup_vc",
+					   *av_entry);
+
+                                if (ret != FI_SUCCESS) {
+					GNIX_WARN(FI_LOG_EP_CTRL,
+						  "_gnix_map_lookup returned %s\n",
+						  fi_strerror(-ret));
+					return ret;
+				}
+				memcpy(ht_dest_addr, &((av_entry[0])->gnix_addr),
+				       sizeof(struct gnix_address));
+
+				key_ptr = malloc(sizeof(gnix_ht_key_t));
+				assert(key_ptr);
+
+                                memcpy(key_ptr, ht_dest_addr,
+                                       sizeof(gnix_ht_key_t));
+
+                                GNIX_INFO(FI_LOG_EP_CTRL,
+					  "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
+					  *((fi_addr_t *) dest_addr),
+					  (av_entry[0])->gnix_addr);
+			}
+
+		}
+		/* fastlock_acquire(&ep->vc_lock); */
+		*vc_ptr = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht, *key_ptr);
+		/* fastlock_release(&ep->vc_lock); */
+		*key = key_ptr;
+                GNIX_DEBUG(FI_LOG_EP_CTRL,
+                           "Found vc %p at hashtable key %llu\n", *vc_ptr,
+                           *key_ptr);
+                return ret;
+	} else {
+		GNIX_WARN(FI_LOG_EP_CTRL,
+			  "Invalid FI_AV type of \"%d\" in __gnix_vc_lookup_vc",
+			  av_type);
+		return -FI_EINVAL;
+	}
+}
+
+/**
+ * Look up the vc, if it's found just return it, otherwise allocate a new vc,
+ * insert it into the hashtable or vector, and connect it.
+ *
+ * @assumption: ep is non-null;
+ * dest_addr is valid;
+ * is_dest_addr_gnix_addr is correct for the given dest_addr;
+ * vc_ptr is non-null.
+ */
+static inline int __gnix_vc_get_vc(struct gnix_fid_ep *ep, void *dest_addr,
+				   bool is_dest_addr_gnix_addr,
+				   struct gnix_vc **vc_ptr)
+{
+	struct gnix_fid_av *av = ep->av;
+	assert(av);
+	int av_type = av->type, ret = FI_SUCCESS;
+	struct gnix_av_addr_entry *av_entry = NULL;
+	gnix_ht_key_t *key_ptr = NULL;
+	struct gnix_vc *vc_tmp = NULL;
+	fi_addr_t table_dest_addr;
+	struct gnix_address ht_dest_addr;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+        GNIX_DEBUG(FI_LOG_EP_CTRL,
+                   "ep->vc_table = %p, ep->vc_table->vector = %p\n",
+                   ep->vc_table, ep->vc_table->vector);
+
+        fastlock_acquire(&ep->vc_lock);
+
+	/*
+         * if AV type is FI_AV_TABLE, table_dest_addr will be filled in;
+         * otherwise
+         * if AV type is FI_AV_MAP, ht_dest_addr and key will be filled in.
+         */
+        ret = __gnix_vc_lookup_vc(ep, dest_addr, is_dest_addr_gnix_addr,
+                                  &av_entry, &key_ptr, &table_dest_addr,
+                                  &ht_dest_addr, &vc_tmp);
+
+        /* Ignore FI_ECANCELED as it's returned when looking up an empty entry */
+	if (ret != -FI_ECANCELED && ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "__gnix_vc_lookup_vc returned %s\n",
+			  fi_strerror(-ret));
+                return ret;
+	}
+
+	/* VC not found in hashtable or vector */
+	if (vc_tmp == NULL) {
+		ret = _gnix_vc_alloc(ep,
+				     av_entry,
+				     &vc_tmp);
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_DATA,
+				  "_gnix_vc_alloc returned %s\n",
+				  fi_strerror(-ret));
+			goto err;
+		}
+
+		if (likely(av_type == FI_AV_TABLE)) {
+			ret = _gnix_vec_insert_at(ep->vc_table, (void *)vc_tmp,
+						  table_dest_addr);
+
+			if (ret == -FI_ECANCELED) {
+                          GNIX_INFO(FI_LOG_EP_CTRL, "in __gnix_vc_get_vc no "
+				    "space was left in hte "
+				    "vector\n");
+
+                                _gnix_vc_destroy(vc_tmp);
+                                ret = _gnix_vec_at(ep->vc_table,
+						   (void **)&vc_tmp,
+						   table_dest_addr);
+
+                                if (ret == -FI_ECANCELED) {
+					GNIX_INFO(FI_LOG_EP_CTRL,
+						  "in __gnix_vc_get_vc the vector "
+						  "was found to be full\n");
+                                        goto err;
+				}
+				fastlock_release(&ep->vc_lock);
+				return FI_SUCCESS;
+			}
+
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_vec_insert_at returned %s\n",
+					  fi_strerror(-ret));
+                                goto err;
+			}
+
+			vc_tmp->modes |= GNIX_VC_MODE_IN_TABLE;
+		} else if (av_type == FI_AV_MAP) {
+			assert(key_ptr);
+                        ret = _gnix_ht_insert(ep->vc_ht, *key_ptr,
+                                              (void *)vc_tmp);
+
+                        /* VC was inserted into ht between call to lookup and
+                         * here! */
+                        if (ret == -FI_ENOSPC) {
+				GNIX_INFO(FI_LOG_EP_CTRL, "in __gnix_vc_get_vc no "
+					  "space was left in the "
+					  "ht\n");
+                                _gnix_vc_destroy(vc_tmp);
+                                vc_tmp = (struct gnix_vc *)_gnix_ht_lookup(
+					ep->vc_ht, *key_ptr);
+                                fastlock_release(&ep->vc_lock);
+				assert(vc_tmp != NULL);
+				assert(vc_tmp->modes & GNIX_VC_MODE_IN_HT);
+				*vc_ptr = vc_tmp;
+				return FI_SUCCESS;
+			}
+
+			if (ret != FI_SUCCESS) {
+				GNIX_WARN(FI_LOG_EP_CTRL,
+					  "_gnix_ht_insert returned %s\n",
+					  fi_strerror(-ret));
+                                goto err;
+			}
+
+			vc_tmp->modes |= GNIX_VC_MODE_IN_HT;
+                        GNIX_TRACE(FI_LOG_EP_CTRL,
+                                   "vc_tmp mode set to IN_HT\n");
+                } else {
+			GNIX_WARN(FI_LOG_EP_CTRL,
+				  "Invalid AV type \"%d\" in __gnix_vc_get_vc\n",
+				  av_type);
+                        goto err;
+		}
+
+		fastlock_release(&ep->vc_lock);
+
+		ret = _gnix_vc_connect(vc_tmp);
+
+		if (ret != FI_SUCCESS) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "_gnix_vc_connect returned %s\n",
+				  fi_strerror(-ret));
+                        goto err;
+		}
+	} else
+		fastlock_release(&ep->vc_lock);
+
+	if (key_ptr)
+		free(key_ptr);
+
+	*vc_ptr = vc_tmp;
+	return ret;
+
+err:
+	if (key_ptr)
+		free(key_ptr);
+
+	if (vc_tmp)
+		_gnix_vc_destroy(vc_tmp);
+	fastlock_release(&ep->vc_lock);
+	return ret;
+}
+
 
 /*******************************************************************************
  * connection request /response message pack/unpack functions
@@ -369,8 +731,10 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	struct gnix_vc *vc_peer;
 	gni_smsg_attr_t smsg_mbox_attr;
 	gni_smsg_attr_t smsg_mbox_attr_peer;
-	gnix_ht_key_t *key_ptr;
-	struct gnix_av_addr_entry entry;
+	gnix_ht_key_t *key_ptr = NULL;
+	struct gnix_av_addr_entry *entry = NULL;
+	fi_addr_t table_dest_addr;
+	struct gnix_address ht_dest_addr;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -390,15 +754,15 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		goto exit;
 	}
 
-	fastlock_acquire(&ep->vc_ht_lock);
+	fastlock_acquire(&ep->vc_lock);
 	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
 	    (vc->conn_state == GNIX_VC_CONNECTED)) {
-		fastlock_release(&ep->vc_ht_lock);
+		fastlock_release(&ep->vc_lock);
 		return FI_SUCCESS;
 	} else
 		vc->conn_state = GNIX_VC_CONNECTING;
 
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 
 	GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connecting\n", vc);
 
@@ -434,11 +798,23 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		goto exit;
 	}
 
-	key_ptr = (gnix_ht_key_t *)&ep->my_name.gnix_addr;
+        /*
+         * Lookup VC for this EP.
+         *
+         * if AV type is FI_AV_TABLE, table_dest_addr will be filled in;
+         * otherwise if AV type is FI_AV_MAP, ht_dest_addr, and key_ptr
+	 * (if it's null) will be filled in.
+         */
+        GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+	key_ptr = NULL;
+	fastlock_acquire(&ep_peer->vc_lock);
+        ret = __gnix_vc_lookup_vc(ep_peer, &ep->my_name.gnix_addr, true, &entry,
+                                  &key_ptr, &table_dest_addr, &ht_dest_addr,
+                                  &vc_peer);
 
-	fastlock_acquire(&ep_peer->vc_ht_lock);
-	vc_peer = (struct gnix_vc *)_gnix_ht_lookup(ep_peer->vc_ht,
-						   *key_ptr);
+        if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "__gnix_vc_lookup_vc returned %s\n", fi_strerror(-ret));
+	}
 
 	/*
 	 * handle the special case of connecting to self
@@ -475,10 +851,10 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 	}
 
 	if (vc_peer == NULL) {
-		entry.gnix_addr = ep->my_name.gnix_addr;
-		entry.cm_nic_cdm_id = ep->my_name.cm_nic_cdm_id;
+		entry->gnix_addr = ep->my_name.gnix_addr;
+		entry->cm_nic_cdm_id = ep->my_name.cm_nic_cdm_id;
 		ret = _gnix_vc_alloc(ep_peer,
-				     &entry,
+				     entry,
 				     &vc_peer);
 		if (ret != FI_SUCCESS) {
 			GNIX_WARN(FI_LOG_EP_CTRL,
@@ -487,16 +863,14 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 			goto exit_w_lock;
 		}
 
-		ret = _gnix_ht_insert(ep_peer->vc_ht,
-				      *key_ptr,
-				      vc_peer);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_CTRL,
-				  "_gnix_ht_insert returned %s\n",
-				  fi_strerror(-ret));
-			goto exit_w_lock;
-		}
-		vc_peer->modes |= GNIX_VC_MODE_IN_HT;
+		fastlock_release(&ep_peer->vc_lock);
+                ret = __gnix_vc_insert(ep_peer, &table_dest_addr, key_ptr,
+                                       vc_peer);
+
+                /* potentially allocated in _gnix_vc_lookup_vc */
+		if (key_ptr)
+			free(key_ptr);
+		fastlock_acquire(&ep_peer->vc_lock);
 	}
 
 	vc_peer->conn_state = GNIX_VC_CONNECTING;
@@ -559,7 +933,7 @@ static int __gnix_vc_connect_to_same_cm_nic(struct gnix_vc *vc)
 		   vc_peer);
 
 exit_w_lock:
-	fastlock_release(&ep_peer->vc_ht_lock);
+	fastlock_release(&ep_peer->vc_lock);
 exit:
 	return ret;
 }
@@ -605,7 +979,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	ep = vc->ep;
 	assert(ep != NULL);
 
-	fastlock_acquire(&ep->vc_ht_lock);
+	fastlock_acquire(&ep->vc_lock);
 
 	/*
 	 * at this point vc should be in connecting state
@@ -643,7 +1017,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 		   " moving vc %p to state connected\n",vc);
 
 	vc->peer_caps = peer_caps;
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 
 	ret = _gnix_vc_schedule(vc);
 	if (ret != FI_SUCCESS)
@@ -654,7 +1028,7 @@ static int __gnix_vc_hndl_conn_resp(struct gnix_cm_nic *cm_nic,
 	return ret;
 err:
 	vc->conn_state = GNIX_VC_CONN_ERROR;
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 	return ret;
 }
 
@@ -666,7 +1040,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	gni_return_t __attribute__((unused)) status;
 	struct gnix_fid_ep *ep = NULL;
 	gnix_ht_key_t *key_ptr;
-	struct gnix_av_addr_entry entry;
+	struct gnix_av_addr_entry *entry;
 	struct gnix_address src_addr, target_addr;
 	struct gnix_vc *vc = NULL;
 	struct gnix_vc *vc_try = NULL;
@@ -677,9 +1051,10 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 	uint64_t peer_caps;
 	struct wq_hndl_conn_req *data = NULL;
 	gni_mem_handle_t tmp_mem_hndl;
+	fi_addr_t table_dest_addr;
+	struct gnix_address ht_dest_addr;
 
 	ssize_t __attribute__((unused)) len;
-
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	/*
@@ -722,28 +1097,36 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 
 	/*
 	 * look to see if there is a VC already for the
-	 * address of the connecting EP.
+	 * source address of the connecting EP.
+	 *
+	 * if AV type is FI_AV_TABLE, table_dest_addr will be filled in; otherwise
+	 * if AV type is FI_AV_MAP, ht_dest_addr and key_ptr (if it's null)
+	 * will be filled in.
 	 */
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+	key_ptr = NULL;
+        ret = __gnix_vc_lookup_vc(ep, &src_addr, true, &entry, &key_ptr,
+                                  &table_dest_addr, &ht_dest_addr, &vc);
 
-	key_ptr = (gnix_ht_key_t *)&src_addr;
-
-	fastlock_acquire(&ep->vc_ht_lock);
-	vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht,
-					       *key_ptr);
+        if (ret != FI_SUCCESS) {
+		GNIX_WARN(FI_LOG_EP_CTRL, "__gnix_vc_lookup_vc returned %s\n",
+			  fi_strerror(-ret));
+	}
 
 	/*
  	 * if there is no corresponding vc in the hash,
  	 * or there is an entry and its not in connecting state
  	 * go down the conn req ack route.
  	 */
-
+	fastlock_acquire(&ep->vc_lock);
 	if ((vc == NULL)  ||
 	    (vc->conn_state == GNIX_VC_CONN_NONE)) {
 		if (vc == NULL) {
-			entry.gnix_addr = src_addr;
-			entry.cm_nic_cdm_id = src_cm_nic_addr.cdm_id;
+			assert(entry);
+			entry->gnix_addr = src_addr;
+			entry->cm_nic_cdm_id = src_cm_nic_addr.cdm_id;
 			ret = _gnix_vc_alloc(ep,
-					     &entry,
+					     entry,
 					     &vc_try);
 			if (ret != FI_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL,
@@ -753,9 +1136,16 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 			}
 
 			vc_try->conn_state = GNIX_VC_CONNECTING;
-			ret = _gnix_ht_insert(ep->vc_ht,
-					      *key_ptr,
-					      vc_try);
+
+			fastlock_release(&ep->vc_lock);
+                        ret = __gnix_vc_insert(ep, &table_dest_addr, key_ptr,
+                                               vc_try);
+
+                        /* potentially allocated in _gnix_vc_lookup_vc */
+			if (key_ptr)
+				free(key_ptr);
+			fastlock_acquire(&ep->vc_lock);
+
 			if (likely(ret == FI_SUCCESS)) {
 				vc = vc_try;
 				vc->modes |= GNIX_VC_MODE_IN_HT;
@@ -763,7 +1153,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 				if (ret == -FI_ENOSPC)
 					_gnix_vc_destroy(vc_try);
 				GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_ht_insert returned %s\n",
+				  "__gnix_vc_insert returned %s\n",
 				   fi_strerror(-ret));
 				goto err;
 			}
@@ -809,7 +1199,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		dlist_insert_before(&work_req->list, &cm_nic->cm_nic_wq);
 		fastlock_release(&cm_nic->wq_lock);
 
-		fastlock_release(&ep->vc_ht_lock);
+		fastlock_release(&ep->vc_lock);
 
 		ret = _gnix_vc_schedule(vc);
 		if (ret != FI_SUCCESS)
@@ -854,7 +1244,7 @@ static int __gnix_vc_hndl_conn_req(struct gnix_cm_nic *cm_nic,
 		GNIX_DEBUG(FI_LOG_EP_CTRL, "moving vc %p state to connected\n",
 			vc);
 
-		fastlock_release(&ep->vc_ht_lock);
+		fastlock_release(&ep->vc_lock);
 
 		ret = _gnix_vc_schedule(vc);
 		if (ret != FI_SUCCESS)
@@ -948,7 +1338,7 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&ep->vc_ht_lock);
+	fastlock_acquire(&ep->vc_lock);
 
 	/*
 	 * we may have already been moved to connected or
@@ -1048,7 +1438,7 @@ static int __gnix_vc_conn_ack_prog_fn(void *data, int *complete_ptr)
 	}
 
 exit:
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 
 	*complete_ptr = complete;
 	return ret;
@@ -1064,6 +1454,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	struct gnix_fid_ep *ep = NULL;
 	struct gnix_fid_domain *dom = NULL;
 	struct gnix_cm_nic *cm_nic = NULL;
+	struct gnix_fid_av *av = NULL;
 	char sbuf[GNIX_CM_NIC_MAX_MSG_SIZE] = {0};
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -1080,7 +1471,11 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 	if (cm_nic == NULL)
 		return -FI_EINVAL;
 
-	fastlock_acquire(&ep->vc_ht_lock);
+	av = ep->av;
+	if (av == NULL)
+		return -FI_EINVAL;
+
+	fastlock_acquire(&ep->vc_lock);
 
 	if ((vc->conn_state == GNIX_VC_CONNECTING) ||
 		(vc->conn_state == GNIX_VC_CONNECTED)) {
@@ -1088,15 +1483,28 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 			goto err;
 	}
 
-	/*
-	 * sanity check that the vc is in the hash table
-	 */
+	if (unlikely(av->type == FI_AV_MAP)) {
+		/*
+		 * sanity check that the vc is in the hash table
+		 */
 
-	if (!(vc->modes & GNIX_VC_MODE_IN_HT)) {
-		GNIX_WARN(FI_LOG_EP_CTRL, "vc not in hashtable\n");
-		assert(vc->modes & GNIX_VC_MODE_IN_HT);
-		ret = -FI_EINVAL;
-		goto err;
+		if (!(vc->modes & GNIX_VC_MODE_IN_HT)) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "vc not in hashtable\n");
+			assert(vc->modes & GNIX_VC_MODE_IN_HT);
+			ret = -FI_EINVAL;
+			goto err;
+		}
+	} else {
+		/*
+		 * sanity check that the vc is in the vector
+		 */
+
+		if (!(vc->modes & GNIX_VC_MODE_IN_TABLE)) {
+			GNIX_WARN(FI_LOG_EP_CTRL, "vc not in vector\n");
+			assert(vc->modes & GNIX_VC_MODE_IN_TABLE);
+			ret = -FI_EINVAL;
+			goto err;
+		}
 	}
 
 	/*
@@ -1176,7 +1584,7 @@ static int __gnix_vc_conn_req_prog_fn(void *data, int *complete_ptr)
 			  fi_strerror(-ret));
 
 err:
-	fastlock_release(&ep->vc_ht_lock);
+	fastlock_release(&ep->vc_lock);
 	*complete_ptr = complete;
 	return ret;
 }
@@ -1204,7 +1612,6 @@ static int __gnix_vc_conn_req_comp_fn(void *data)
 /*******************************************************************************
  * Internal API functions
  ******************************************************************************/
-
 int _gnix_vc_alloc(struct gnix_fid_ep *ep_priv,
 		   struct gnix_av_addr_entry *entry, struct gnix_vc **vc)
 
@@ -1542,6 +1949,8 @@ static int __gnix_vc_connected(struct gnix_vc *vc)
 /* Schedule the VC for RX progress. */
 int _gnix_vc_rx_schedule(struct gnix_vc *vc)
 {
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	struct gnix_nic *nic = vc->ep->nic;
 
 	if (!_gnix_test_and_set_bit(&vc->flags, GNIX_VC_FLAG_RX_SCHEDULED)) {
@@ -1607,6 +2016,8 @@ int _gnix_vc_dequeue_smsg(struct gnix_vc *vc)
 static int __gnix_vc_rx_progress(struct gnix_vc *vc)
 {
 	int ret;
+
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	ret = __gnix_vc_connected(vc);
 	if (ret) {
@@ -1677,6 +2088,7 @@ static int __gnix_vc_nic_rx_progress(struct gnix_nic *nic)
 /* Schedule the VC for work progress. */
 static int __gnix_vc_work_schedule(struct gnix_vc *vc)
 {
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 	struct gnix_nic *nic = vc->ep->nic;
 
 	/* Don't bother scheduling if there's no work to do. */
@@ -1802,6 +2214,7 @@ static int __gnix_vc_nic_work_progress(struct gnix_nic *nic)
 /* Schedule the VC for TX progress. */
 int _gnix_vc_tx_schedule(struct gnix_vc *vc)
 {
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 	struct gnix_nic *nic = vc->ep->nic;
 
 	/* Don't bother scheduling if there's no work to do. */
@@ -2049,6 +2462,8 @@ int _gnix_vc_nic_progress(struct gnix_nic *nic)
  */
 int _gnix_vc_schedule(struct gnix_vc *vc)
 {
+	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 	_gnix_vc_rx_schedule(vc);
 	__gnix_vc_work_schedule(vc);
 	_gnix_vc_tx_schedule(vc);
@@ -2056,99 +2471,18 @@ int _gnix_vc_schedule(struct gnix_vc *vc)
 	return FI_SUCCESS;
 }
 
-static int __gnix_vc_ep_rdm_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
-			    struct gnix_vc **vc_ptr)
-{
-	int ret = FI_SUCCESS;
-	struct gnix_vc *vc = NULL, *vc_tmp;
-	struct gnix_fid_av *av;
-	struct gnix_av_addr_entry *av_entry;
-	gnix_ht_key_t key;
-
-	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
-
-	av = ep->av;
-	assert(av != NULL);
-
-	ret = _gnix_av_lookup(av, dest_addr, &av_entry);
-	if (ret != FI_SUCCESS) {
-		GNIX_WARN(FI_LOG_EP_DATA,
-			  "_gnix_av_lookup for addr 0x%llx returned %s \n",
-			  dest_addr, fi_strerror(-ret));
-		goto err;
-	}
-
-	GNIX_INFO(FI_LOG_EP_CTRL, "fi_addr_t: 0x%llx gnix_addr: 0x%llx\n",
-		  dest_addr, av_entry->gnix_addr);
-
-	memcpy(&key, &av_entry->gnix_addr, sizeof(gnix_ht_key_t));
-
-	fastlock_acquire(&ep->vc_ht_lock);
-	vc = (struct gnix_vc *)_gnix_ht_lookup(ep->vc_ht,
-						key);
-	if (vc == NULL) {
-		ret = _gnix_vc_alloc(ep,
-				     av_entry,
-				     &vc_tmp);
-		if (ret != FI_SUCCESS) {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_vc_alloc returned %s\n",
-				  fi_strerror(-ret));
-			goto err_w_lock;
-		}
-		ret = _gnix_ht_insert(ep->vc_ht, key,
-					vc_tmp);
-		if (likely(ret == FI_SUCCESS)) {
-			vc = vc_tmp;
-			vc->modes |= GNIX_VC_MODE_IN_HT;
-			fastlock_release(&ep->vc_ht_lock);
-			ret = _gnix_vc_connect(vc);
-			if (ret != FI_SUCCESS) {
-				GNIX_WARN(FI_LOG_EP_DATA,
-					"_gnix_vc_connect returned %s\n",
-					   fi_strerror(-ret));
-				goto err;
-			}
-		} else if (ret == -FI_ENOSPC) {
-			_gnix_vc_destroy(vc_tmp);
-			vc = _gnix_ht_lookup(ep->vc_ht, key);
-			fastlock_release(&ep->vc_ht_lock);
-			assert(vc != NULL);
-			assert(vc->modes & GNIX_VC_MODE_IN_HT);
-			ret = FI_SUCCESS;
-		} else {
-			GNIX_WARN(FI_LOG_EP_DATA,
-				  "_gnix_ht_insert returned %s\n",
-				   fi_strerror(-ret));
-			goto err_w_lock;
-		}
-	} else  {
-		fastlock_release(&ep->vc_ht_lock);
-	}
-
-	*vc_ptr = vc;
-	return ret;
-
-err_w_lock:
-	fastlock_release(&ep->vc_ht_lock);
-err:
-	if (vc != NULL)
-		_gnix_vc_destroy(vc);
-	return ret;
-}
-
 int _gnix_vc_ep_get_vc(struct gnix_fid_ep *ep, fi_addr_t dest_addr,
-			struct gnix_vc **vc_ptr)
+		       struct gnix_vc **vc_ptr)
 {
 	int ret;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
 	if (GNIX_EP_RDM_DGM(ep->type)) {
-		ret = __gnix_vc_ep_rdm_get_vc(ep, dest_addr, vc_ptr);
+		ret = __gnix_vc_get_vc(ep, (void *) &dest_addr, false, vc_ptr);
 		if (unlikely(ret != FI_SUCCESS)) {
 			GNIX_WARN(FI_LOG_EP_DATA,
-				  "__gnix_vc_ep_get_vc returned %s\n",
+				  "__gnix_vc_get_vc returned %s\n",
 				   fi_strerror(-ret));
 			return ret;
 		}
@@ -2209,4 +2543,3 @@ int _gnix_vc_cm_init(struct gnix_cm_nic *cm_nic)
 
 	return ret;
 }
-
