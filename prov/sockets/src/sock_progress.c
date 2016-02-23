@@ -187,7 +187,7 @@ static struct sock_pe_entry *sock_pe_acquire_entry(struct sock_pe *pe)
 	struct sock_pe_entry *pe_entry;
 
 	if (dlist_empty(&pe->free_list)) {
-		pe_entry = util_buf_get(pe->pe_rx_pool);
+		pe_entry = util_buf_alloc(pe->pe_rx_pool);
 		SOCK_LOG_DBG("Getting rx pool entry\n");
 		if (pe_entry) {
 			memset(pe_entry, 0, sizeof(*pe_entry));
@@ -2270,6 +2270,8 @@ static int sock_pe_new_tx_entry(struct sock_pe *pe, struct sock_tx_ctx *tx_ctx)
 			}
 		}
 		msg_hdr->dest_iov_len = pe_entry->pe.tx.tx_op.dest_iov_len;
+		if (pe_entry->flags & SOCK_NO_COMPLETION)
+			pe_entry->flags |= FI_INJECT_COMPLETE;
 		break;
 	case SOCK_OP_WRITE:
 		if (pe_entry->flags & FI_INJECT) {
