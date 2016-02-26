@@ -42,10 +42,11 @@
 
 extern struct dlist_entry fi_ibv_rdm_tagged_request_ready_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_unexp_queue;
+/* TODO: implement posted recv queue per connection */
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
 extern struct dlist_entry fi_ibv_rdm_tagged_send_postponed_queue;
 
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_postponed_pool;
+extern struct util_buf_pool* fi_ibv_rdm_tagged_postponed_pool;
 
 
 static inline void
@@ -94,7 +95,7 @@ fi_ibv_rdm_tagged_move_to_posted_queue(
 				      FI_LOG_DEBUG);
 	dlist_insert_tail(&request->queue_entry,
 			  &fi_ibv_rdm_tagged_recv_posted_queue);
-	ep->pend_recv++;
+	ep->posted_recvs++;
 }
 
 static inline void
@@ -105,7 +106,7 @@ fi_ibv_rdm_tagged_remove_from_posted_queue(
 	FI_IBV_RDM_TAGGED_DBG_REQUEST("remove_from_posted_queue: ", request,
 				      FI_LOG_DEBUG);
 	dlist_remove(&request->queue_entry);
-	ep->pend_recv--;
+	ep->posted_recvs--;
 }
 
 static inline void
@@ -120,8 +121,7 @@ fi_ibv_rdm_tagged_move_to_postponed_queue(
 
 	if (dlist_empty(&conn->postponed_requests_head)) {
 		struct fi_ibv_rdm_tagged_postponed_entry *entry =
-			(struct fi_ibv_rdm_tagged_postponed_entry *)
-			fi_ibv_mem_pool_get(&fi_ibv_rdm_tagged_postponed_pool);
+			util_buf_alloc(fi_ibv_rdm_tagged_postponed_pool);
 
 		entry->conn = conn;	
 		conn->postponed_entry = entry;
@@ -161,8 +161,8 @@ fi_ibv_rdm_tagged_remove_from_postponed_queue(
 		conn->postponed_entry->queue_entry.prev = NULL;
 		conn->postponed_entry->conn = NULL;
 
-		fi_ibv_mem_pool_return(&conn->postponed_entry->mpe,
-				       &fi_ibv_rdm_tagged_postponed_pool);
+		util_buf_release(fi_ibv_rdm_tagged_postponed_pool,
+				 conn->postponed_entry);
 		conn->postponed_entry = NULL;
 	}
 }

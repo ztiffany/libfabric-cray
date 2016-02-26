@@ -45,8 +45,8 @@
 extern struct fi_ops_tagged fi_ibv_rdm_tagged_ops;
 extern struct fi_ops_cm fi_ibv_rdm_tagged_ep_cm_ops;
 extern struct dlist_entry fi_ibv_rdm_tagged_recv_posted_queue;
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_request_pool;
-extern struct fi_ibv_mem_pool fi_ibv_rdm_tagged_extra_buffers_pool;
+extern struct util_buf_pool* fi_ibv_rdm_tagged_request_pool;
+extern struct util_buf_pool* fi_ibv_rdm_tagged_extra_buffers_pool;
 extern struct fi_provider fi_ibv_prov;
 
 struct fi_ibv_rdm_tagged_conn *fi_ibv_rdm_tagged_conn_hash = NULL;
@@ -188,11 +188,10 @@ static ssize_t fi_ibv_rdm_tagged_ep_cancel(fid_t fid, void *ctx)
 		FI_IBV_RDM_TAGGED_DBG_REQUEST("to_pool: ", request,
 					      FI_LOG_DEBUG);
 
-		fi_ibv_mem_pool_return(&request->mpe,
-				       &fi_ibv_rdm_tagged_request_pool);
+		util_buf_release(fi_ibv_rdm_tagged_request_pool, request);
 
 		VERBS_DBG(FI_LOG_EP_DATA,
-			  "\t\t-> SUCCESS, pend recv %d\n", fid_ep->pend_recv);
+			  "\t\t-> SUCCESS, post recv %d\n", fid_ep->posted_recvs);
 
 		err = 0;
 	}
@@ -283,13 +282,18 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid.fid);
 
 	ep->is_closing = 1;
-	// assert(ep->pend_send == 0);
-	// assert(ep->pend_recv == 0); //TODO
 	_fi_ibv_rdm_tagged_cm_progress_running = 0;
 	pthread_join(ep->cm_progress_thread, &status);
 	pthread_mutex_destroy(&ep->cm_lock);
 
-	struct fi_ibv_rdm_tagged_conn *conn, *tmp;
+	/* All posted sends are waiting local completions */
+	while (ep->posted_sends > 0) {
+		fi_ibv_rdm_tagged_poll(ep);
+	}
+
+	assert(ep->posted_recvs == 0);
+
+	struct fi_ibv_rdm_tagged_conn *conn = NULL, *tmp = NULL;
 
 	HASH_ITER(hh, fi_ibv_rdm_tagged_conn_hash, conn, tmp) {
 		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
@@ -335,9 +339,9 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 	ibv_destroy_cq(ep->scq);
 	ibv_destroy_cq(ep->rcq);
 
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_request_pool);
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_postponed_pool);
-	fi_ibv_mem_pool_fini(&fi_ibv_rdm_tagged_extra_buffers_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_request_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_postponed_pool);
+	util_buf_pool_destroy(fi_ibv_rdm_tagged_extra_buffers_pool);
 
 	free(ep);
 
@@ -555,10 +559,8 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 		FI_IBV_RDM_ADDR_STR(_ep->my_rdm_addr));
 
 	_ep->n_buffs = FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM;
-	const int header_size = sizeof(struct fi_ibv_rdm_tagged_header);
 	_ep->buff_len = FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE;
-	_ep->rndv_threshold = _ep->buff_len -
-	    FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE - header_size;
+	_ep->rndv_threshold = FI_IBV_RDM_DFLT_BUFFERED_SSIZE;
 
 	_ep->rq_wr_depth = FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE;
 
@@ -568,23 +570,22 @@ int fi_ibv_open_rdm_ep(struct fid_domain *domain, struct fi_info *info,
 	 */
 	_ep->sq_wr_depth = 2 * (_ep->n_buffs + 1);
 
-	_ep->total_outgoing_send = 0;
-	_ep->pend_send = 0;
-	_ep->pend_recv = 0;
+	_ep->posted_sends = 0;
+	_ep->posted_recvs = 0;
 	_ep->recv_preposted_threshold = MAX(0.2 * _ep->rq_wr_depth, 5);
 	VERBS_INFO(FI_LOG_EP_CTRL, "recv preposted threshold: %d\n",
 		   _ep->recv_preposted_threshold);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_request_pool,
-			     100, 100,
-			     sizeof(struct fi_ibv_rdm_tagged_request));
+	fi_ibv_rdm_tagged_request_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_request),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_postponed_pool,
-			     100, 100,
-			     sizeof(struct fi_ibv_rdm_tagged_postponed_entry));
+	fi_ibv_rdm_tagged_postponed_pool = util_buf_pool_create(
+		sizeof(struct fi_ibv_rdm_tagged_postponed_entry),
+		FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
-	fi_ibv_mem_pool_init(&fi_ibv_rdm_tagged_extra_buffers_pool,
-			     100, 100, _ep->buff_len);
+	fi_ibv_rdm_tagged_extra_buffers_pool = util_buf_pool_create(
+		_ep->buff_len, FI_IBV_RDM_MEM_ALIGNMENT, 0, 100);
 
 	_ep->max_inline_rc =
 	    fi_ibv_rdm_tagged_find_max_inline_size(_ep->domain->pd,

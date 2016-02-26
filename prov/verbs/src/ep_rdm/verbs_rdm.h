@@ -80,8 +80,7 @@
 #define FI_IBV_RDM_INC_SIG_POST_COUNTERS(_connection, _ep, _send_flags)	\
 do {                                                                	\
 	(_connection)->sends_outgoing++;                                \
-	(_ep)->pend_send++;                                             \
-	(_ep)->total_outgoing_send++;                                   \
+	(_ep)->posted_sends++;                                          \
 	(_send_flags) |= IBV_SEND_SIGNALED;                             \
 									\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER++, conn %p, sends_outgoing %d\n",    \
@@ -92,12 +91,11 @@ do {                                                                	\
 #define FI_IBV_RDM_TAGGED_DEC_SEND_COUNTERS(_connection, _ep)		\
 do {                                                                	\
 	(_connection)->sends_outgoing--;                                \
-	(_ep)->total_outgoing_send--;                                   \
-	(_ep)->pend_send--;                                             \
+	(_ep)->posted_sends--;                                          \
 									\
 	VERBS_DBG(FI_LOG_CQ, "SEND_COUNTER--, conn %p, sends_outgoing %d\n",    \
 			_connection, (_connection)->sends_outgoing);    \
-	assert((_ep)->pend_send >= 0);                                  \
+	assert((_ep)->posted_sends >= 0);                               \
 	assert((_connection)->sends_outgoing >= 0);                     \
 } while (0)
 
@@ -105,7 +103,7 @@ do {                                                                	\
 	((_connection)->sends_outgoing > 0.5*(_ep)->sq_wr_depth)
 
 #define PEND_SEND_IS_LIMITED(_ep)                                       \
-	((_ep)->pend_send > 0.5 * (_ep)->scq_depth)
+	((_ep)->posted_sends > 0.5 * (_ep)->scq_depth)
 
 #define SEND_RESOURCES_IS_BUSY(_connection, _ep)                        \
 	(FI_IBV_RDM_TAGGED_SENDS_OUTGOING_ARE_LIMITED(_connection, _ep) ||  \
@@ -129,16 +127,10 @@ struct fi_ibv_rdm_tagged_rndv_header {
 	uint32_t mem_key;
 };
 
-struct fi_ibv_rdm_tagged_extra_buff {
-	struct fi_ibv_mem_pool_entry mpe;
-	char payload[sizeof(void *)];
-};
-
 struct fi_ibv_rdm_tagged_request {
 
 	/* Accessors and match info */
 
-	struct fi_ibv_mem_pool_entry mpe;
 	/* Request can be an element of only one queue at the moment */
 	struct dlist_entry queue_entry;
 
@@ -161,11 +153,9 @@ struct fi_ibv_rdm_tagged_request {
 	};
 
 	union {
-		/* user level */
-		void					*exp_rbuf;
-		struct fi_ibv_rdm_tagged_extra_buff	*unexp_rbuf;
-		/* verbs level */
-		void					*sbuf;
+		void *exp_rbuf;
+		void *unexp_rbuf;
+		void *sbuf;
 	};
 
 	/*
@@ -203,9 +193,7 @@ struct fi_ibv_rdm_tagged_request {
 static inline void
 fi_ibv_rdm_tagged_zero_request(struct fi_ibv_rdm_tagged_request *request)
 {
-	char *p = (char *)request;
-	memset(p + sizeof(request->mpe), 0, sizeof(*request) -
-					    sizeof(request->mpe));
+	memset(request, 0, sizeof (struct fi_ibv_rdm_tagged_request));
 }
 
 void fi_ibv_rdm_tagged_print_request(char *buf,
@@ -235,9 +223,8 @@ struct fi_ibv_rdm_ep {
 	int n_buffs;
 	int rq_wr_depth;    // RQ depth
 	int sq_wr_depth;    // SQ depth
-	int total_outgoing_send;
-	int pend_send;
-	int pend_recv;
+	int posted_sends;
+	int posted_recvs;
 	int num_active_conns;
 	int max_inline_rc;
 	int rndv_threshold;
@@ -300,7 +287,6 @@ struct fi_ibv_rdm_tagged_conn {
 };
 
 struct fi_ibv_rdm_tagged_postponed_entry {
-	struct fi_ibv_mem_pool_entry mpe;
 	struct dlist_entry queue_entry;
 
 	struct fi_ibv_rdm_tagged_conn *conn;
