@@ -45,15 +45,16 @@
 #include <rdma/fi_log.h>
 #include "../fi_verbs.h"
 
-#if defined(__ICC) || defined(__INTEL_COMPILER) || \
- defined(__GNUC__) || defined(__GNUG__)
+#if (defined(__ICC) || defined(__INTEL_COMPILER) ||	\
+ defined(__GNUC__) || defined(__GNUG__)) &&		\
+ defined(__x86_64__)
 #include "xmmintrin.h"
 #define FI_IBV_PREFETCH_ADDR(_addr) {                    \
         _mm_prefetch((const char *)(_addr), _MM_HINT_T0);\
 }
-#else /* ICC || GCC */
+#else /* ICC || GCC && x86_64 */
 #define FI_IBV_PREFETCH_ADDR(_addr)
-#endif /* ICC || GCC */
+#endif /* ICC || GCC && x86_64 */
 
 /* TODO: Merge anything useful into verbs_rdm.h */
 
@@ -69,15 +70,15 @@ struct fi_ibv_msg_ep;
 
 #define FI_IBV_RDM_TAGGED_DFLT_BUFFER_NUM (8)
 
-#define FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE                              \
-	((8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) +        \
-	 (8 * 1024 + FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE) %        \
+#define FI_IBV_RDM_DFLT_BUFFER_SIZE					\
+	((8 * 1024 + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE) +		\
+	 (8 * 1024 + FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE) %		\
 	  FI_IBV_RDM_BUF_ALIGNMENT)
 
 #define FI_IBV_RDM_DFLT_BUFFERED_SSIZE					\
-	(FI_IBV_RDM_TAGGED_DFLT_BUFFER_SIZE -				\
-	 FI_IBV_RDM_TAGGED_BUFF_SERVICE_DATA_SIZE -			\
-	 sizeof(struct fi_ibv_rdm_tagged_header))
+	(FI_IBV_RDM_DFLT_BUFFER_SIZE -					\
+	 FI_IBV_RDM_BUFF_SERVICE_DATA_SIZE -				\
+	 sizeof(struct fi_ibv_rdm_header))
 
 #define FI_IBV_RDM_TAGGED_DFLT_RQ_SIZE  (1000)
 
