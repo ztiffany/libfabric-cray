@@ -49,7 +49,7 @@ AC_DEFUN([FI_GNI_CONFIGURE],[
 dnl looks like we need to get rid of some white space
                gni_path_to_gni_pub=${gni_path_to_gni_pub%?}/gni_pub.h
 
-               AC_CHECK_TYPES([gni_ct_get_post_descriptor_t], [],
+               AC_CHECK_TYPES([gni_ct_cqw_post_descriptor_t], [],
                               [AC_MSG_WARN([GNI provider requires CLE 5.2.UP04 or higher. Disabling gni provider.])
                                gni_header_happy=0
                               ],
