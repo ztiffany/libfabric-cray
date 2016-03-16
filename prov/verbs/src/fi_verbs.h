@@ -69,6 +69,13 @@
 #include "fi_list.h"
 #include "fi_signal.h"
 
+#ifndef AF_IB
+#define AF_IB 27
+#endif
+
+#ifndef RAI_FAMILY
+#define RAI_FAMILY              0x00000008
+#endif
 
 #define VERBS_PROV_NAME "verbs"
 #define VERBS_PROV_VERS FI_VERSION(1,0)
@@ -113,6 +120,8 @@ struct fi_ibv_eq_entry {
 	size_t			len;
 	char 			eq_entry[0];
 };
+
+typedef int (*fi_ibv_trywait_func)(struct fid *fid);
 
 struct fi_ibv_eq {
 	struct fid_eq		eq_fid;
@@ -185,6 +194,8 @@ struct fi_ibv_cq {
 	uint64_t		ep_cnt;
 	uint64_t		send_signal_wr_id;
 	uint64_t		wr_id_mask;
+	fi_ibv_trywait_func	trywait;
+	atomic_t		nevents;
 	/* RDM EP fields - TODO: check usage */
 	struct fi_ibv_rdm_ep	*ep;
 	int			format;

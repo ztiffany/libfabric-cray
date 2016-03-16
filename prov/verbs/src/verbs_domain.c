@@ -256,6 +256,34 @@ err1:
 	return ret;
 }
 
+static int fi_ibv_trywait(struct fid_fabric *fabric, struct fid **fids, int count)
+{
+	struct fi_ibv_cq *cq;
+	int ret, i;
+
+	for (i = 0; i < count; i++) {
+		switch (fids[i]->fclass) {
+		case FI_CLASS_CQ:
+			cq = container_of(fids[i], struct fi_ibv_cq, cq_fid.fid);
+			ret = cq->trywait(fids[i]);
+			if (ret)
+				return ret;
+			break;
+		case FI_CLASS_EQ:
+			/* We are always ready to wait on an EQ since
+			 * rdmacm EQ is based on an fd */
+			continue;
+		case FI_CLASS_CNTR:
+		case FI_CLASS_WAIT:
+			return -FI_ENOSYS;
+		default:
+			return -FI_EINVAL;
+		}
+
+	}
+	return FI_SUCCESS;
+}
+
 static int fi_ibv_fabric_close(fid_t fid)
 {
 	struct fi_ibv_fabric *fab;
@@ -281,7 +309,7 @@ static struct fi_ops_fabric fi_ibv_ops_fabric = {
 	.passive_ep = fi_ibv_passive_ep,
 	.eq_open = fi_ibv_eq_open,
 	.wait_open = fi_no_wait_open,
-	.trywait = fi_no_trywait
+	.trywait = fi_ibv_trywait
 };
 
 int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
@@ -310,19 +338,22 @@ int fi_ibv_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
 	fab->wce_pool = util_buf_pool_create(sizeof(struct fi_ibv_wce), 16, 0, VERBS_WCE_CNT);
 	if (!fab->wce_pool) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create wce_pool\n");
-		return -FI_ENOMEM;
+		ret = -FI_ENOMEM;
+		goto err1;
 	}
 
 	fab->epe_pool = util_buf_pool_create(sizeof(struct fi_ibv_msg_epe), 16, 0, VERBS_EPE_CNT);
 	if (!fab->epe_pool) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC, "Failed to create epe_pool\n");
 		ret = -FI_ENOMEM;
-		goto err;
+		goto err2;
 	}
 
 	*fabric = &fab->fabric_fid;
 	return 0;
-err:
+err2:
 	util_buf_pool_destroy(fab->wce_pool);
+err1:
+	free(fab);
 	return ret;
 }
