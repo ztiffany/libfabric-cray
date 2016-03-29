@@ -5,12 +5,36 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.3.0, TBD
+v1.3.0, Fri Apr 1, 2016
 =======================
 
 ## General notes
 
 ## GNI provider notes
+
+- CLE 5.2UP04 required for building GNI provider
+- General bug fixes, plugged memory leaks, etc.
+- Improved error handling, warning messages, etc.
+- Added support for the following APIs:
+  - fi_endpoint: fi_getopt, fi_setopt, fi_rx_size_left, fi_tx_size_left, fi_stx_context
+  - fi_cq: fi_sread, fi_sreadfrom
+  - fi_msg: FI_MULTI_RECV (flag)
+  - fi_domain: FI_PROGRESS_AUTO (flag)
+  - fi_direct: FI_DIRECT
+- Added support for FI_EP_DGRAM (datagram endpoint):
+  - fi_msg, fi_tagged, fi_rma
+- Memory registration improvements:
+  - Improved performance
+  - Additional domain open_ops
+- Initial support for Cray Cluster Compatibility Mode (CCM)
+- Implemented strict API checking
+- Added hash list implementation for tag matching (available by domain open_ops)
+
+Note: The current version of fabtests does not work with the GNI
+provider due to the job launch mechanism on Cray XC systems.  Please
+see the [GNI provider
+wiki](https://github.com/ofi-cray/libfabric-cray/wiki) for
+alternatives to validating your installation.
 
 ## MXM provider notes
 
@@ -26,6 +50,7 @@ v1.3.0, TBD
 ## Sockets provider notes
 
 - General code cleanup
+- Enable FABRIC_DIRECT
 - Enable sockets-provider to run on FreeBSD
 - Add support for fi_trywait
 - Add support for map_addr in shared-av creation
@@ -40,6 +65,8 @@ v1.3.0, TBD
 - Fix an issue that caused out-of-order arrival of messages
 - Fix a bug in processing RMA access error
 - Fix a bug that caused starvation in processing receive operations
+- Add reference counting for pollset
+- Fix a bug in connection port assignment
 
 ## UDP provider notes
 
@@ -60,6 +87,15 @@ v1.3.0, TBD
 - Fix crashes that may occur from improper handling of receive state tracking
   [PR #1809]
 - Fortify the receive side of libnl communication [PR #1655]
+- Fix handling of fi_info with passive endpoints. Connections opened on a
+  passive endpoint now inherit the properties of the fi_info struct used to
+  open the passive endpoint. [PR #1806]
+- Implement pollsets. [PR #1835]
+- Add version 2 of the usnic getinfo extension [PR #1866]
+- Implement waitsets [PR #1893]
+- Implement fi_trywait [PR #1893]
+- Fix progress thread deadlock [PR #1893]
+- Implement FD based CQ sread [PR #1893]
 
 ## Verbs provider notes
 
@@ -70,7 +106,8 @@ v1.3.0, TBD
 - Added a workaround to support posting more than 'verbs send work queue length'
   number of fi_inject calls at a time.
 - Make CQ reads thread safe.
-- Support the case where the user creates only a send or recv queue for the endpoint.
+- Support the case where the user creates only a send or recv queue for the
+  endpoint.
 - Fix an issue where RMA reads were not working on iWARP cards.
 
 v1.2.0, Thu Jan 7, 2016

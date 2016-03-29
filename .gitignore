@@ -21,6 +21,7 @@ doxygen
 
 libfabric.spec
 libfabric.pc
+libfabric.map
 
 config/ar-lib
 config/compile
