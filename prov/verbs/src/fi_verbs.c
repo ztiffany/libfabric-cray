@@ -138,8 +138,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 
 	if (!node && !rai_hints.ai_dst_addr) {
 		if ((!rai_hints.ai_src_addr && !service) ||
-		    (!rai_hints.ai_src_addr &&
-		     (hints->ep_attr->type == FI_EP_RDM)))
+		    (!rai_hints.ai_src_addr && FI_IBV_EP_TYPE_IS_RDM(hints)))
 		{
 			node = local_node;
 		}
@@ -172,7 +171,7 @@ int fi_ibv_create_ep(const char *node, const char *service,
 		}
 	}
 
-	if (hints->ep_attr->type == FI_EP_RDM) {
+	if (FI_IBV_EP_TYPE_IS_RDM(hints)) {
 		struct fi_ibv_rdm_cm* cm = 
 			container_of(id, struct fi_ibv_rdm_cm, listener);
 		fi_ibv_rdm_cm_init(cm, _rai);
@@ -229,6 +228,7 @@ static int fi_ibv_signal_send(struct fi_ibv_msg_ep *ep, struct ibv_send_wr *wr)
 			fastlock_release(&ep->scq->lock);
 			return -FI_ENOMEM;
 		}
+		memset(epe, 0, sizeof(*epe));
 		wr->send_flags |= IBV_SEND_SIGNALED;
 		wr->wr_id = ep->ep_id;
 		epe->ep = ep;
@@ -253,6 +253,7 @@ static int fi_ibv_reap_comp(struct fi_ibv_msg_ep *ep)
 				fastlock_release(&ep->scq->lock);
 				return -FI_ENOMEM;
 			}
+			memset(wce, 0, sizeof(*wce));
 		}
 		ret = fi_ibv_poll_cq(ep->scq, &wce->wc);
 		if (ret < 0) {

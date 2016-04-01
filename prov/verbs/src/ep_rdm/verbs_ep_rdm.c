@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2013-2015 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -76,8 +77,13 @@ fi_ibv_rdm_tagged_find_max_inline_size(struct ibv_pd *pd,
 			ibv_destroy_qp(qp);
 		qp_attr.cap.max_inline_data = max_inline;
 		qp = ibv_create_qp(pd, &qp_attr);
-		if (qp)
+		if (qp) {
+			/* 
+			 * truescale returns max_inline_data 0
+			 */
+			if (0 == qp_attr.cap.max_inline_data) break;
 			rst = max_inline;
+		}
 	} while (qp && (max_inline *= 2));
 
 	if (rst != 0) {
@@ -298,11 +304,9 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 		HASH_DEL(fi_ibv_rdm_tagged_conn_hash, conn);
 		switch (conn->state) {
 		case FI_VERBS_CONN_ALLOCATED:
-			free(conn);
-			break;
 		case FI_VERBS_CONN_REMOTE_DISCONNECT:
-			fi_ibv_rdm_start_disconnection(ep, conn);
-			fi_ibv_rdm_tagged_conn_cleanup(ep, conn);
+		case FI_VERBS_CONN_ESTABLISHED:
+			fi_ibv_rdm_start_disconnection(conn);
 			break;
 		case FI_VERBS_CONN_STARTED:
 			while (conn->state != FI_VERBS_CONN_ESTABLISHED &&
@@ -314,9 +318,6 @@ static int fi_ibv_rdm_tagged_ep_close(fid_t fid)
 					return ret;
 				}
 			}
-			break;
-		case FI_VERBS_CONN_ESTABLISHED:
-			fi_ibv_rdm_start_disconnection(ep, conn);
 			break;
 		default:
 			break;
