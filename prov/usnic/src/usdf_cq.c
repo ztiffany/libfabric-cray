@@ -245,12 +245,14 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 		enum fi_cq_format format)
 {
 	struct usdf_cq *cq;
+	struct usdf_fabric *fab;
 	size_t copylen;
 	size_t copied;
 	uint8_t *dest;
 	ssize_t ret;
 
 	cq = cq_ftou(fcq);
+	fab = cq->cq_domain->dom_fabric;
 
 	if (cq->cq_comp.uc_status != USD_COMPSTAT_SUCCESS)
 		return -FI_EAVAIL;
@@ -289,6 +291,11 @@ usdf_cq_read_common(struct fid_cq *fcq, void *buf, size_t count,
 			return ret;
 
 		dest += copylen;
+	}
+
+	if (cq->cq_waiting) {
+		cq->cq_waiting = false;
+		atomic_dec(&fab->num_blocked_waiting);
 	}
 
 	return copied > 0 ? copied : -FI_EAGAIN;
@@ -367,7 +374,7 @@ usdf_cq_readfrom_context(struct fid_cq *fcq, void *buf, size_t count,
 			}
 			++src_addr;
 		}
-			
+
 
 		entry->op_context = cq->cq_comp.uc_context;
 
@@ -759,11 +766,14 @@ usdf_cq_close(fid_t fid)
 {
 	int ret;
 	struct usdf_cq *cq;
+	struct usdf_fabric *fab;
 	struct usdf_cq_hard *hcq;
 
 	USDF_TRACE_SYS(CQ, "\n");
 
 	cq = container_of(fid, struct usdf_cq, cq_fid.fid);
+	fab = cq->cq_domain->dom_fabric;
+
 	if (atomic_get(&cq->cq_refcnt) > 0) {
 		return -FI_EBUSY;
 	}
@@ -774,7 +784,7 @@ usdf_cq_close(fid_t fid)
 			return ret;
 	}
 
-	if (cq->is_soft) {
+	if (cq->cq_is_soft) {
 		while (!TAILQ_EMPTY(&cq->c.soft.cq_list)) {
 			hcq = TAILQ_FIRST(&cq->c.soft.cq_list);
 			if (atomic_get(&hcq->cqh_refcnt) > 0) {
@@ -800,6 +810,9 @@ usdf_cq_close(fid_t fid)
 		}
 	}
 
+	if (cq->cq_waiting)
+		atomic_dec(&fab->num_blocked_waiting);
+
 	free(cq);
 	return 0;
 }
@@ -810,6 +823,12 @@ static int usdf_cq_get_wait(struct usdf_cq *cq, void *arg)
 
 	switch (cq->cq_attr.wait_obj) {
 	case FI_WAIT_FD:
+		if (cq->object.fd == -1) {
+			USDF_WARN_SYS(CQ,
+					"CQ must be bound before FD can be retrieved\n");
+			return -FI_EOPBADSTATE;
+		}
+
 		*(int *) arg = cq->object.fd;
 		break;
 	default:
@@ -939,7 +958,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 		return 0;
         }
 
-	if (!cq->is_soft) {
+	if (!cq->cq_is_soft) {
 
 		/* save the CQ before we trash the union */
 		ucq = cq->c.hard.cq_cq;
@@ -973,7 +992,7 @@ usdf_cq_make_soft(struct usdf_cq *cq)
 			TAILQ_INSERT_HEAD(&cq->c.soft.cq_list, hcq, cqh_link);
 		}
 
-		cq->is_soft = 1;
+		cq->cq_is_soft = 1;
 		cq->cq_ops = *soft_ops;
         }
 	return 0;
@@ -1084,11 +1103,13 @@ static int usdf_cq_create_fd(struct usdf_cq *cq)
 int usdf_cq_trywait(struct fid *fcq)
 {
 	struct usdf_cq *cq;
+	struct usdf_fabric *fab;
 	uint64_t ev;
 	int empty;
 	int ret;
 
 	cq = cq_fidtou(fcq);
+	fab = cq->cq_domain->dom_fabric;
 
 	switch (cq->cq_attr.wait_obj) {
 	case FI_WAIT_UNSPEC:
@@ -1117,7 +1138,15 @@ int usdf_cq_trywait(struct fid *fcq)
 		}
 	}
 
-	if (cq->is_soft) {
+	cq->cq_waiting = true;
+	atomic_inc(&fab->num_blocked_waiting);
+	ret = usdf_fabric_wake_thread(fab);
+	if (ret) {
+		USDF_DBG_SYS(FABRIC, "error while waking progress thread\n");
+		atomic_dec(&fab->num_blocked_waiting);
+	}
+
+	if (cq->cq_is_soft) {
 		empty = usdf_check_empty_soft_cq(cq);
 	} else {
 		usd_poll_req_notify(cq->c.hard.cq_cq);
@@ -1270,6 +1299,7 @@ usdf_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		atomic_inc(&wait_priv->wait_refcnt);
 	}
 
+	cq->object.fd = -1;
 	cq->cq_domain = udp;
 	cq->cq_fid.fid.fclass = FI_CLASS_CQ;
 	cq->cq_fid.fid.context = context;
