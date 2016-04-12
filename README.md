@@ -1,5 +1,6 @@
 [<img alt="libfabric master branch Travis CI status" src="https://travis-ci.org/ofiwg/libfabric.svg?branch=master"/>](https://travis-ci.org/ofiwg/libfabric)
 [<img alt="libfabric Coverity scan suild status" src="https://scan.coverity.com/projects/4274/badge.svg"/>](https://scan.coverity.com/projects/4274)
+[![libfabric release version](https://img.shields.io/github/release/ofiwg/libfabric.svg)](https://github.com/ofiwg/libfabric/releases/latest)
 
 # libfabric
 
@@ -25,12 +26,14 @@ distributions.
 
 ## Building and installing Libfabric from source
 
+Distribution tarballs are available from the Github
+[releases](https://github.com/ofiwg/libfabric/releases) tab.
+
 If you are building Libfabric from a developer Git clone, you must first run
 the `autogen.sh` script. This will invoke the GNU Autotools to bootstrap
 Libfabric's configuration and build mechanisms. If you are building Libfabric
-from an official distribution tarball from libfabric.org, there is no need to
-run `autogen.sh`; Libfabric distribution tarballs are already bootstrapped for
-you.
+from an official distribution tarball, there is no need to run `autogen.sh`;
+Libfabric distribution tarballs are already bootstrapped for you.
 
 Libfabric currently supports GNU/Linux, Free BSD, and OS X.
 
@@ -228,4 +231,22 @@ directory and check for `libnl` version 3. If version 3 is not found, then
 check for version 1. If no `<directory>` argument is specified, then this
 option is redundant with `--with-usnic`.
 
-This is the GNI provider branch for libfabric.
+### verbs
+
+***
+
+The verbs provider enables applications using OFI to be run over any verbs
+hardware (Infiniband, iWarp, etc). It uses the Linux Verbs API for network
+transport and provides a translation of OFI calls to appropriate verbs API calls.
+It uses librdmacm for communication management and libibverbs for other control
+and data transfer operations.
+
+See the `fi_verbs(7)` man page for more details.
+
+#### Dependencies
+
+- The verbs provider requires libibverbs (v1.1.8 or newer) and librdmacm (v1.0.16
+  or newer). If you are compiling Libfabric from source and want to enable verbs
+  support, you will also need the matching header files for the above two libraries.
+  If the libraries and header files are not in default paths, specify them in CFLAGS,
+  LDFLAGS and LD_LIBRARY_PATH environment variables.

@@ -71,33 +71,40 @@ int fi_ibv_rdm_start_connection(struct fi_ibv_rdm_ep *ep,
 
 int fi_ibv_rdm_start_disconnection(struct fi_ibv_rdm_tagged_conn *conn)
 {
-	int ret;
+	int ret = 0;
 
 	FI_INFO(&fi_ibv_prov, FI_LOG_AV,
 		"Closing connection %p, state %d\n", conn, conn->state);
 
+	if (conn->id[0]) {
+		ret = rdma_disconnect(conn->id[0]);
+		assert(ret == 0);
+	}
+
 	switch (conn->state) {
 	case FI_VERBS_CONN_ALLOCATED:
+	case FI_VERBS_CONN_REMOTE_DISCONNECT:
 		fi_ibv_rdm_tagged_conn_cleanup(conn);
-		return 0;
+		break;
 	case FI_VERBS_CONN_ESTABLISHED:
 		conn->state = FI_VERBS_CONN_LOCAL_DISCONNECT;
 		break;
-	case FI_VERBS_CONN_REMOTE_DISCONNECT:
-		fi_ibv_rdm_tagged_conn_cleanup(conn);
 	case FI_VERBS_CONN_REJECTED:
 		conn->state = FI_VERBS_CONN_CLOSED;
 		break;
 	default:
-		assert(0);
-		return -1;
+		ret = -1;
 	}
-
-	ret = rdma_disconnect(conn->id[0]);
 
 	assert(ret == 0);
 	return ret;
 }
+
+static inline int fi_ibv_rdm_av_is_valid_address(struct sockaddr_in *addr)
+{
+	return addr->sin_family == AF_INET ? 1 : 0;
+}
+
 
 static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
                                 size_t count, fi_addr_t * fi_addr,
@@ -107,10 +114,25 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 	struct fi_ibv_rdm_ep *ep = fid_av->ep;
 	int i,  ret = 0;
 
-	pthread_mutex_lock(&ep->cm_lock);
+	if (ep) {
+		pthread_mutex_lock(&ep->cm_lock);
+	}
+
 	for (i = 0; i < count; i++) {
 		struct fi_ibv_rdm_tagged_conn *conn = NULL;
-		void *addr_i = (char *) addr + i * ep->addrlen;
+		void *addr_i = (char *) addr + 
+			i * (ep ? ep->addrlen : FI_IBV_RDM_DFLT_ADDRLEN);
+
+		if (!fi_ibv_rdm_av_is_valid_address(addr_i)) {
+			if (fi_addr) {
+				fi_addr[i] = FI_ADDR_NOTAVAIL;
+			}
+
+			FI_INFO(&fi_ibv_prov, FI_LOG_AV,
+				"fi_av_insert: bad addr #%i\n", i);
+
+			continue;
+		}
 
 		HASH_FIND(hh, fi_ibv_rdm_tagged_conn_hash, addr_i,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
@@ -134,7 +156,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 			FI_IBV_RDM_DFLT_ADDRLEN, conn);
 		}
 
-		fi_ibv_rdm_conn_init_cm_role(conn, ep);
+		if (ep) {
+			fi_ibv_rdm_conn_init_cm_role(conn, ep);
+		}
 
 		fi_addr[i] = (uintptr_t) (void *) conn;
 		FI_INFO(&fi_ibv_prov, FI_LOG_AV, "fi_av_insert: addr %s:%u conn %p %d\n",
@@ -145,7 +169,9 @@ static int fi_ibv_rdm_av_insert(struct fid_av *av, const void *addr,
 	}
 
 out:
-	pthread_mutex_unlock(&ep->cm_lock);
+	if (ep) {
+		pthread_mutex_unlock(&ep->cm_lock);
+	}
 	return ret;
 }
 

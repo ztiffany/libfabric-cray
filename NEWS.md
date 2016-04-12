@@ -5,10 +5,17 @@ This file contains the main features as well as overviews of specific
 bug fixes (and other actions) for each version of Libfabric since
 version 1.0.
 
-v1.3.0, Fri Apr 1, 2016
-=======================
+v1.3.1, TBD
+===========
+
+
+v1.3.0, Mon Apr 11, 2016
+========================
 
 ## General notes
+
+* [See a list of provider features for this
+  release](https://github.com/ofiwg/libfabric/wiki/Provider-Feature-Matrix-v1.3.0)
 
 ## GNI provider notes
 
@@ -113,6 +120,12 @@ alternatives to validating your installation.
 - Support the case where the user creates only a send or recv queue for the
   endpoint.
 - Fix an issue where RMA reads were not working on iWARP cards.
+- verbs/RDM
+  - Add support for RMA operations.
+  - Add support for fi_cq_sread and fi_cq_sreadfrom
+  - Rework connection management to make it work with fabtests and also allow
+    connection to self.
+  - Other bug fixes and performance improvements.
 
 v1.2.0, Thu Jan 7, 2016
 =======================
