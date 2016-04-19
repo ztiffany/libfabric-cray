@@ -39,7 +39,6 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
-
 static struct fid_fabric *fab;
 static struct fi_info *hints;
 static struct fi_info *fi;

@@ -43,14 +43,13 @@
 #include <limits.h>
 #include <assert.h>
 
-#include "gnix_rdma_headers.h"
-#include "fi_ext_gni.h"
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
 #include <criterion/criterion.h>
+#include "gnix_rdma_headers.h"
+#include "fi_ext_gni.h"
 
 #if 1
 #define dbg_printf(...)

@@ -40,7 +40,6 @@
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
 
-
 static struct fid_fabric *fab;
 static struct fid_domain *dom;
 static struct fid_ep *ep;

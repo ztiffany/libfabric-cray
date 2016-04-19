@@ -39,15 +39,10 @@
 #include <string.h>
 
 
-
-
-
-
 #include "gnix.h"
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
-
 
 static struct fid_fabric *fabric;
 static struct fi_info *fi;

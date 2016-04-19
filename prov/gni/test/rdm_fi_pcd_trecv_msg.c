@@ -42,12 +42,6 @@
 #include <sys/time.h>
 
 
-
-
-
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -59,7 +53,6 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
-
 
 /* Both the send and recv paths use independent state machines within
  * each test to simulate the behavior you would expect in a client/server

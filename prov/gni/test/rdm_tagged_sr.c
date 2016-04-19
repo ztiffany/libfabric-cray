@@ -41,12 +41,6 @@
 #include <pthread.h>
 
 
-
-
-
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -58,7 +52,6 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
-
 
 #if 1
 #define dbg_printf(...)

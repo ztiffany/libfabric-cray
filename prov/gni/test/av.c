@@ -36,13 +36,14 @@
 #include <stdlib.h>
 
 #include "fi.h"
-#include "gnix_rdma_headers.h"
+#include "rdma/fi_domain.h"
+#include "rdma/fi_prov.h"
 
 #include "gnix.h"
 #include "gnix_av.h"
 
 #include <criterion/criterion.h>
-
+#include "gnix_rdma_headers.h"
 
 static struct fid_fabric *fab;
 static struct fid_domain *dom;

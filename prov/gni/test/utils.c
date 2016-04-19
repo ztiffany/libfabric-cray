@@ -43,18 +43,12 @@
 #include <unistd.h>
 
 
-
-
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
-
 #include "gnix_util.h"
 #include "gnix.h"
 

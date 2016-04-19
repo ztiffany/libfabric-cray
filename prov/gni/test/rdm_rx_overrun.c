@@ -41,11 +41,6 @@
 #include <pthread.h>
 
 
-
-
-
-
-
 #include <stdio.h>
 #include <stdlib.h>
 #include <inttypes.h>
@@ -57,7 +52,6 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
-
 
 #define NUM_EPS 61
 const int num_msgs = 10;
