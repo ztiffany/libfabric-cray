@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_TRIGGER_H_
-#define _FI_TRIGGER_H_
+#ifndef FI_TRIGGER_H
+#define FI_TRIGGER_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -72,4 +72,4 @@ struct fi_triggered_context {
 }
 #endif
 
-#endif /* _FI_TRIGGER_H_ */
+#endif /* FI_TRIGGER_H */

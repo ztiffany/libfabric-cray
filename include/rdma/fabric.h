@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FABRIC_H_
-#define _FABRIC_H_
+#ifndef FABRIC_H
+#define FABRIC_H
 
 #include <stdint.h>
 #include <stddef.h>
@@ -495,4 +495,4 @@ struct fi_context {
 }
 #endif
 
-#endif /* _FABRIC_H_ */
+#endif /* FABRIC_H */

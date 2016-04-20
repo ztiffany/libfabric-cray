@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_EQ_H_
-#define _FI_EQ_H_
+#ifndef FI_EQ_H
+#define FI_EQ_H
 
 #include <pthread.h>
 
@@ -445,4 +445,4 @@ fi_cntr_wait(struct fid_cntr *cntr, uint64_t threshold, int timeout)
 }
 #endif
 
-#endif /* _FI_EQ_H_ */
+#endif /* FI_EQ_H */

@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_DOMAIN_H_
-#define _FI_DOMAIN_H_
+#ifndef FI_DOMAIN_H
+#define FI_DOMAIN_H
 
 #include <rdma/fabric.h>
 #include <rdma/fi_eq.h>
@@ -291,4 +291,4 @@ fi_rx_addr(fi_addr_t fi_addr, int rx_index, int rx_ctx_bits)
 }
 #endif
 
-#endif /* _FI_DOMAIN_H_ */
+#endif /* FI_DOMAIN_H */

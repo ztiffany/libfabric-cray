@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_CM_H_
-#define _FI_CM_H_
+#ifndef FI_CM_H
+#define FI_CM_H
 
 #include <rdma/fi_endpoint.h>
 
@@ -115,4 +115,4 @@ static inline int fi_shutdown(struct fid_ep *ep, uint64_t flags)
 }
 #endif
 
-#endif /* _FI_CM_H_ */
+#endif /* FI_CM_H */

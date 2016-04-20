@@ -31,8 +31,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ERRNO_H_
-#define _FI_ERRNO_H_
+#ifndef FI_ERRNO_H
+#define FI_ERRNO_H
 
 #include <errno.h>
 
@@ -200,4 +200,4 @@ const char *fi_strerror(int errnum);
 }
 #endif
 
-#endif /* _FI_ERRNO_H_ */
+#endif /* FI_ERRNO_H */

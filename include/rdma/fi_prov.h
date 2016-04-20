@@ -33,8 +33,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_PROV_H_
-#define _FI_PROV_H_
+#ifndef FI_PROV_H
+#define FI_PROV_H
 
 #include <rdma/fabric.h>
 
@@ -133,4 +133,4 @@ fi_param_get_bool(struct fi_provider *provider, const char *param_name, int *val
 }
 #endif
 
-#endif /* _FI_PROV_H_ */
+#endif /* FI_PROV_H */

@@ -32,8 +32,8 @@
  *
  */
 
-#ifndef _FI_LOG_H_
-#define _FI_LOG_H_
+#ifndef FI_LOG_H
+#define FI_LOG_H
 
 #include "config.h"
 
@@ -99,4 +99,4 @@ void fi_log(const struct fi_provider *prov, enum fi_log_level level,
 }
 #endif
 
-#endif /*_FI_LOG_H_ */
+#endif /* FI_LOG_H */

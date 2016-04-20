@@ -30,8 +30,8 @@
  * SOFTWARE.
  */
 
-#ifndef _FI_ENDPOINT_H_
-#define _FI_ENDPOINT_H_
+#ifndef FI_ENDPOINT_H
+#define FI_ENDPOINT_H
 
 #include <sys/socket.h>
 #include <rdma/fabric.h>
@@ -208,6 +208,17 @@ fi_getopt(fid_t fid, int level, int optname,
 	return ep->ops->getopt(fid, level, optname, optval, optlen);
 }
 
+static inline int fi_ep_alias(struct fid_ep *ep, struct fid_ep **alias_ep,
+			      uint64_t flags)
+{
+	int ret;
+	struct fid *fid;
+	ret = fi_alias(&ep->fid, &fid, flags);
+	if (!ret)
+		*alias_ep = container_of(fid, struct fid_ep, fid);
+	return ret;
+}
+
 static inline int
 fi_tx_context(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 	      struct fid_ep **tx_ep, void *context)
@@ -314,4 +325,4 @@ fi_injectdata(struct fid_ep *ep, const void *buf, size_t len,
 }
 #endif
 
-#endif /* _FI_ENDPOINT_H_ */
+#endif /* FI_ENDPOINT_H */
