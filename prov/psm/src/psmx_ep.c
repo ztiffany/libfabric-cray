@@ -174,6 +174,14 @@ static int psmx_ep_close(fid_t fid)
 
 	ep = container_of(fid, struct psmx_fid_ep, ep.fid);
 
+	if (ep->base_ep) {
+		atomic_dec(&ep->base_ep->ref);
+		return 0;
+	}
+
+	if (atomic_get(&ep->ref))
+		return -FI_EBUSY;
+
 	psmx_domain_disable_ep(ep->domain, ep);
 
 	psmx_domain_release(ep->domain);
@@ -318,6 +326,8 @@ static int psmx_ep_control(fid_t fid, int command, void *arg)
 			free(new_ep);
 			return err;
 		}
+		new_ep->base_ep = ep;
+		atomic_inc(&ep->ref);
 		psmx_ep_optimize_ops(new_ep);
 		*alias->fid = &new_ep->ep.fid;
 		break;
@@ -389,7 +399,8 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	else
 		ep_cap = FI_TAGGED;
 
-	domain_priv = container_of(domain, struct psmx_fid_domain, domain.fid);
+	domain_priv = container_of(domain, struct psmx_fid_domain,
+				   util_domain.domain_fid.fid);
 	if (!domain_priv)
 		return -FI_EINVAL;
 
@@ -407,6 +418,7 @@ int psmx_ep_open(struct fid_domain *domain, struct fi_info *info,
 	ep_priv->ep.ops = &psmx_ep_ops;
 	ep_priv->ep.cm = &psmx_cm_ops;
 	ep_priv->domain = domain_priv;
+	atomic_initialize(&ep_priv->ref, 0);
 
 	PSMX_CTXT_TYPE(&ep_priv->nocomp_send_context) = PSMX_NOCOMP_SEND_CONTEXT;
 	PSMX_CTXT_EP(&ep_priv->nocomp_send_context) = ep_priv;
@@ -478,7 +490,8 @@ int psmx_stx_ctx(struct fid_domain *domain, struct fi_tx_attr *attr,
 
 	FI_INFO(&psmx_prov, FI_LOG_EP_DATA, "\n");
 
-	domain_priv = container_of(domain, struct psmx_fid_domain, domain.fid);
+	domain_priv = container_of(domain, struct psmx_fid_domain,
+				   util_domain.domain_fid.fid);
 
 	stx_priv = (struct psmx_fid_stx *) calloc(1, sizeof *stx_priv);
 	if (!stx_priv)
