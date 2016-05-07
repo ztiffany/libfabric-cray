@@ -1913,6 +1913,10 @@ static int __gnix_vc_push_work_reqs(struct gnix_vc *vc)
 			 * request is inserted into the VC's work_queue. */
 			__gnix_vc_work_schedule(vc);
 
+			/* __gnix_vc_work_schedule() must come after the
+			 * request is inserted into the VC's work_queue. */
+			__gnix_vc_work_schedule(vc);
+
 			fi_rc = -FI_EAGAIN;
 
 			/* FI_ENOSPC is reserved to indicate a lack of
