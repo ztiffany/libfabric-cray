@@ -53,6 +53,7 @@
 #include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
+#include <fi_file.h>
 #include <rbtree.h>
 
 #ifndef _SOCK_H_
@@ -504,8 +505,6 @@ struct sock_ep_attr {
 	size_t min_multi_recv;
 
 	atomic_t ref;
-	struct sock_comp comp;
-
 	struct sock_eq *eq;
 	struct sock_av *av;
 	struct sock_domain *domain;
@@ -595,12 +594,14 @@ struct sock_rx_ctx {
 	int progress;
 	int is_ctrl_ctx;
 	int recv_cq_event;
+	int use_shared;
 
 	size_t num_left;
 	size_t buffered_len;
 	size_t min_multi_recv;
 	uint64_t addr;
 	struct sock_comp comp;
+	struct sock_rx_ctx *srx_ctx;
 
 	struct sock_ep_attr *ep_attr;
 	struct sock_av *av;
@@ -609,7 +610,6 @@ struct sock_rx_ctx {
 
 	struct dlist_entry pe_entry;
 	struct dlist_entry cq_entry;
-	struct dlist_entry cntr_entry;
 
 	struct dlist_entry pe_entry_list;
 	struct dlist_entry rx_entry_list;
@@ -637,9 +637,11 @@ struct sock_tx_ctx {
 	uint8_t enabled;
 	uint8_t progress;
 
+	int use_shared;
 	uint64_t addr;
 	struct sock_comp comp;
 	struct sock_rx_ctx *rx_ctrl_ctx;
+	struct sock_tx_ctx *stx_ctx;
 
 	struct sock_ep_attr *ep_attr;
 	struct sock_av *av;
@@ -648,7 +650,6 @@ struct sock_tx_ctx {
 
 	struct dlist_entry pe_entry;
 	struct dlist_entry cq_entry;
-	struct dlist_entry cntr_entry;
 
 	struct dlist_entry pe_entry_list;
 	struct dlist_entry ep_list;
@@ -816,6 +817,7 @@ struct sock_pe {
 	struct util_buf_pool *atomic_rx_pool;
 	struct dlist_entry free_list;
 	struct dlist_entry busy_list;
+	struct dlist_entry pool_list;
 
 	struct dlist_entry tx_list;
 	struct dlist_entry rx_list;
@@ -1021,6 +1023,10 @@ int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
 			 size_t olen, int err, int prov_errno, void *err_data);
 int sock_cq_progress(struct sock_cq *cq);
+void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
+void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
+void sock_cq_add_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx);
+void sock_cq_remove_rx_ctx(struct sock_cq *cq, struct sock_rx_ctx *rx_ctx);
 
 
 int sock_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
@@ -1037,6 +1043,10 @@ int sock_cntr_open(struct fid_domain *domain, struct fi_cntr_attr *attr,
 void sock_cntr_inc(struct sock_cntr *cntr);
 void sock_cntr_err_inc(struct sock_cntr *cntr);
 int sock_cntr_progress(struct sock_cntr *cntr);
+void sock_cntr_add_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx);
+void sock_cntr_remove_tx_ctx(struct sock_cntr *cntr, struct sock_tx_ctx *tx_ctx);
+void sock_cntr_add_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx);
+void sock_cntr_remove_rx_ctx(struct sock_cntr *cntr, struct sock_rx_ctx *rx_ctx);
 
 
 struct sock_mr *sock_mr_verify_key(struct sock_domain *domain, uint64_t key,
@@ -1046,10 +1056,12 @@ struct sock_mr *sock_mr_verify_desc(struct sock_domain *domain, void *desc,
 struct sock_mr * sock_mr_get_entry(struct sock_domain *domain, uint64_t key);
 
 
-struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr, void *context);
+struct sock_rx_ctx *sock_rx_ctx_alloc(const struct fi_rx_attr *attr,
+				      void *context, int use_shared);
 void sock_rx_ctx_free(struct sock_rx_ctx *rx_ctx);
 
-struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
+struct sock_tx_ctx *sock_tx_ctx_alloc(const struct fi_tx_attr *attr,
+				      void *context, int use_shared);
 struct sock_tx_ctx *sock_stx_ctx_alloc(const struct fi_tx_attr *attr, void *context);
 void sock_tx_ctx_free(struct sock_tx_ctx *tx_ctx);
 void sock_tx_ctx_start(struct sock_tx_ctx *tx_ctx);
@@ -1134,6 +1146,7 @@ ssize_t sock_comm_peek(struct sock_conn *conn, void *buf, size_t len);
 ssize_t sock_comm_discard(struct sock_pe_entry *pe_entry, size_t len);
 int sock_comm_tx_done(struct sock_pe_entry *pe_entry);
 ssize_t sock_comm_flush(struct sock_pe_entry *pe_entry);
+int sock_comm_is_disconnected(struct sock_pe_entry *pe_entry);
 
 ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 			uint64_t flags);
@@ -1164,6 +1177,7 @@ ssize_t sock_queue_tmsg_op(struct fid_ep *ep, const struct fi_msg_tagged *msg,
 			   uint64_t flags, uint8_t op_type);
 ssize_t sock_queue_msg_op(struct fid_ep *ep, const struct fi_msg *msg,
 			  uint64_t flags, uint8_t op_type);
+void sock_cntr_check_trigger_list(struct sock_cntr *cntr);
 
 int sock_epoll_create(struct sock_epoll_set *set, int size);
 int sock_epoll_add(struct sock_epoll_set *set, int fd);

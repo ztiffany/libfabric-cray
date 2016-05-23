@@ -33,6 +33,7 @@ config/libtool.m4
 config/ltmain.sh
 config/lt*.m4
 config/missing
+config/test-driver
 
 prov/gni/test/gnitest
 util/fi_info

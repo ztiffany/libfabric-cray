@@ -23,7 +23,7 @@ fi_pep_bind
 :   Associate a passive endpoint with an event queue
 
 fi_enable
-:   Transitions an endpoint into an active state.
+:   Transitions an active endpoint into an enabled state.
 
 fi_cancel
 :   Cancel a pending asynchronous data transfer
@@ -176,7 +176,7 @@ data are submitted to the receive queue.
 Active endpoints are created in the disabled state.  They must
 transition into an enabled state before accepting data transfer
 operations, including posting of receive buffers.  The fi_enable call
-is used to transition an endpoint into an active enabled state.  The
+is used to transition an active endpoint into an enabled state.  The
 fi_connect and fi_accept calls will also transition an endpoint into
 the enabled state, if it is not already active.
 
@@ -468,9 +468,12 @@ The following option levels and option names and parameters are defined.
 
 - *FI_OPT_CM_DATA_SIZE - size_t*
 : Defines the size of available space in CM messages for user-defined
-  data.  This value limits the amount of data that applications can
-  exchange between peer endpoints using the fi_connect, fi_accept,
-  and fi_reject operations.  This option is read only.
+  data.  This value limits the amount of data that applications can exchange
+  between peer endpoints using the fi_connect, fi_accept, and fi_reject
+  operations.  The size returned is dependent upon the properties of the
+  endpoint, except in the case of passive endpoints, in which the size reflects
+  the maximum size of the data that may be present as part of a connection
+  request event. This option is read only.
 
 ## fi_rx_size_left
 

@@ -64,15 +64,18 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
+	uint64_t op_flags;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
 		rx_ctx = sock_ep->attr->rx_ctx;
+		op_flags = sock_ep->rx_attr.op_flags;
 		break;
 	case FI_CLASS_RX_CTX:
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx);
+		op_flags = rx_ctx->attr.op_flags;
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid ep type\n");
@@ -88,7 +91,7 @@ ssize_t sock_ep_recvmsg(struct fid_ep *ep, const struct fi_msg *msg,
 		return -FI_EOPBADSTATE;
 
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= rx_ctx->attr.op_flags;
+		flags |= op_flags;
 
 	if (flags & FI_TRIGGER) {
 		ret = sock_queue_msg_op(ep, msg, flags, SOCK_OP_RECV);
@@ -184,7 +187,8 @@ ssize_t sock_ep_sendmsg(struct fid_ep *ep, const struct fi_msg *msg,
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
 		ep_attr = sock_ep->attr;
-		tx_ctx = sock_ep->attr->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx->use_shared ?
+			sock_ep->attr->tx_ctx->stx_ctx : sock_ep->attr->tx_ctx;
 		op_flags = sock_ep->tx_attr.op_flags;
 		break;
 	case FI_CLASS_TX_CTX:
@@ -389,15 +393,18 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_rx_entry *rx_entry;
 	struct sock_ep *sock_ep;
+	uint64_t op_flags;
 
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
 		rx_ctx = sock_ep->attr->rx_ctx;
+		op_flags = sock_ep->rx_attr.op_flags;
 		break;
 	case FI_CLASS_RX_CTX:
 	case FI_CLASS_SRX_CTX:
 		rx_ctx = container_of(ep, struct sock_rx_ctx, ctx);
+		op_flags = rx_ctx->attr.op_flags;
 		break;
 	default:
 		SOCK_LOG_ERROR("Invalid ep type\n");
@@ -413,7 +420,7 @@ ssize_t sock_ep_trecvmsg(struct fid_ep *ep,
 		return -FI_EOPBADSTATE;
 
 	if (flags & SOCK_USE_OP_FLAGS)
-		flags |= rx_ctx->attr.op_flags;
+		flags |= op_flags;
 	flags &= ~FI_MULTI_RECV;
 
 	if (flags & FI_TRIGGER) {
@@ -518,7 +525,8 @@ ssize_t sock_ep_tsendmsg(struct fid_ep *ep,
 	switch (ep->fid.fclass) {
 	case FI_CLASS_EP:
 		sock_ep = container_of(ep, struct sock_ep, ep);
-		tx_ctx = sock_ep->attr->tx_ctx;
+		tx_ctx = sock_ep->attr->tx_ctx->use_shared ?
+			sock_ep->attr->tx_ctx->stx_ctx : sock_ep->attr->tx_ctx;
 		ep_attr = sock_ep->attr;
 		op_flags = sock_ep->tx_attr.op_flags;
 		break;
