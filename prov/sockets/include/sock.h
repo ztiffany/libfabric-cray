@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2014 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -41,7 +42,6 @@
 #include <rdma/fi_endpoint.h>
 #include <rdma/fi_eq.h>
 #include <rdma/fi_errno.h>
-#include <rdma/fi_prov.h>
 #include <rdma/fi_rma.h>
 #include <rdma/fi_tagged.h>
 #include <rdma/fi_trigger.h>
@@ -89,6 +89,7 @@
 
 #define SOCK_CQ_DATA_SIZE (sizeof(uint64_t))
 #define SOCK_TAG_SIZE (sizeof(uint64_t))
+#define SOCK_MAX_NETWORK_ADDR_SZ (35)
 
 #define SOCK_PEP_LISTENER_TIMEOUT (10000)
 #define SOCK_CM_COMM_TIMEOUT (2000)
@@ -913,6 +914,11 @@ struct sock_conn_req_handle {
 	struct sock_conn_req *req;
 };
 
+struct sock_host_list_entry {
+	char hostname[HOST_NAME_MAX];
+	struct slist_entry entry;
+};
+
 union sock_tx_op {
 	struct sock_msg {
 		struct sock_op_send op;
@@ -1137,7 +1143,6 @@ ssize_t sock_rx_claim_recv(struct sock_rx_ctx *rx_ctx, void *context,
 			   uint64_t flags, uint64_t tag, uint64_t ignore,
 			   uint8_t is_tagged, const struct iovec *msg_iov,
 			   size_t iov_count);
-size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry);
 void sock_rx_release_entry(struct sock_rx_entry *rx_entry);
 
 ssize_t sock_comm_send(struct sock_pe_entry *pe_entry, const void *buf, size_t len);
@@ -1185,5 +1190,10 @@ int sock_epoll_del(struct sock_epoll_set *set, int fd);
 int sock_epoll_wait(struct sock_epoll_set *set, int timeout);
 int sock_epoll_get_fd_at_index(struct sock_epoll_set *set, int index);
 void sock_epoll_close(struct sock_epoll_set *set);
+
+static inline size_t sock_rx_avail_len(struct sock_rx_entry *rx_entry)
+{
+	return rx_entry->total_len - rx_entry->used;
+}
 
 #endif

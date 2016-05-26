@@ -33,6 +33,7 @@
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
+#include <pthread.h>
 
 #include "fi_osd.h"
 #include "fi_file.h"
@@ -51,5 +52,19 @@ int fi_fd_nonblock(int fd)
 
 	return 0;
 }
+
+int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+{
+	struct timespec ts;
+
+	if (timeout < 0)
+		return pthread_cond_wait(cond, mut);
+
+	clock_gettime(CLOCK_REALTIME, &ts);
+	ts.tv_sec += timeout / 1000;
+	ts.tv_nsec += (timeout % 1000) * 1000000;
+	return pthread_cond_timedwait(cond, mut, &ts);
+}
+
 
 
