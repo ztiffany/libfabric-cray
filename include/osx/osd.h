@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2015 Los Alamos Nat. Security, LLC. All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -43,6 +44,8 @@
 
 #include <pthread.h>
 
+#include "unix/osd.h"
+
 #define CLOCK_REALTIME CALENDAR_CLOCK
 #define CLOCK_MONOTONIC SYSTEM_CLOCK
 
@@ -63,6 +66,11 @@ extern "C" {
 #endif
 
 int clock_gettime(clockid_t clk_id, struct timespec *tp);
+
+static inline int ofi_shm_remap(struct util_shm *shm, size_t newsize, void **mapped)
+{
+	return -1;
+}
 
 #ifdef __cplusplus
 }
