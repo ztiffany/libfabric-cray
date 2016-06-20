@@ -1020,6 +1020,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			if (status != GNI_RC_SUCCESS) {
 				GNIX_WARN(FI_LOG_EP_CTRL, "GNI_CdmAttach returned %s\n",
 					 gni_err_str[status]);
+				_gnix_dump_gni_res(domain->ptag);
 				ret = gnixu_to_fi_errno(status);
 				goto err1;
 			}
@@ -1043,6 +1044,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(domain->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
@@ -1059,6 +1061,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(domain->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
@@ -1079,6 +1082,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(domain->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
@@ -1095,6 +1099,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 			GNIX_WARN(FI_LOG_EP_CTRL,
 				  "GNI_CqCreate returned %s\n",
 				  gni_err_str[status]);
+			_gnix_dump_gni_res(domain->ptag);
 			ret = gnixu_to_fi_errno(status);
 			goto err1;
 		}
