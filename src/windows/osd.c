@@ -34,11 +34,16 @@
 #include <fcntl.h>
 #include <errno.h>
 
+#include "fi.h"
 #include "fi_osd.h"
 #include "fi_file.h"
 
+#include "rdma/providers/fi_log.h"
+
 extern pthread_mutex_t ini_lock;
 static INIT_ONCE ofi_init_once = INIT_ONCE_STATIC_INIT;
+
+static char ofi_shm_prefix[] = "Local\\";
 
 int socketpair(int af, int type, int protocol, int socks[2])
 {
@@ -117,7 +122,7 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 
 	path = malloc(pathlen);
 	if (!path)
-		goto fn_fail;
+		goto fn_nomem;
 
 	lstrcpyA(path, dir);
 	if (lenfile) {
@@ -127,26 +132,22 @@ int fi_read_file(const char *dir, const char *file, char *buf, size_t size)
 
 	fd = CreateFileA(path, GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, 0, OPEN_EXISTING, 0, 0);
 	if (fd == INVALID_HANDLE_VALUE)
-		goto fn_fail;
+		goto fn_nofile;
 
 	if (!ReadFile(fd, buf, (DWORD)size, &read, 0))
-		goto fn_fail;
+		goto fn_faread;
 
 	len = (int)read;
 
 	if (len > 0 && buf[len - 1] == '\n')
 		buf[--len] = '\0';
 
-fn_exit:
-	if (fd != INVALID_HANDLE_VALUE)
-		CloseHandle(fd);
-	if (path)
-		free(path);
+fn_faread:
+	CloseHandle(fd);
+fn_nofile:
+	free(path);
+fn_nomem:
 	return len;
-
-fn_fail:
-	len = -1;
-	goto fn_exit;
 }
 
 static BOOL CALLBACK ofi_init_once_cb(PINIT_ONCE once, void* data, void** ctx)
@@ -176,4 +177,80 @@ BOOL WINAPI DllMain(HINSTANCE instance, DWORD reason, LPVOID reserved)
 
 	return TRUE;
 }
+
+int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,
+	int readonly, void **mapped)
+{
+	int ret = FI_SUCCESS;
+	char *fname = 0;
+	size_t len = lstrlenA(name) + sizeof(ofi_shm_prefix);
+	LARGE_INTEGER large = {.QuadPart = size};
+	DWORD access = FILE_MAP_READ | (readonly ? 0 : FILE_MAP_WRITE);
+
+	ZeroMemory(shm, sizeof(*shm));
+
+	fname = malloc(len);
+	if (!fname)
+	{
+		ret = -FI_ENOMEM;
+		goto fn_fail;
+	}
+	shm->name = fname;
+
+	lstrcpyA(fname, ofi_shm_prefix);
+	lstrcatA(fname, name);
+
+	if (!readonly) {
+		shm->shared_fd = CreateFileMappingA(INVALID_HANDLE_VALUE, 0,
+			PAGE_READWRITE, large.HighPart, large.LowPart,
+			shm->name);
+		if (!shm->shared_fd) {
+			FI_WARN(&core_prov, FI_LOG_CORE, "CreateFileMapping failed\n");
+			ret = -FI_EINVAL;
+			goto fn_fail;
+		}
+	} else { /* readonly */
+		shm->shared_fd = OpenFileMappingA(access, FALSE, shm->name);
+		if (!shm->shared_fd) {
+			FI_WARN(&core_prov, FI_LOG_CORE, "OpenFileMapping failed\n");
+			ret = -FI_EINVAL;
+			goto fn_fail;
+		}
+	}
+
+	shm->ptr = MapViewOfFile(shm->shared_fd, access, 0, 0, size);
+	if (!shm->ptr) {
+		FI_WARN(&core_prov, FI_LOG_CORE, "MapViewOfFile failed\n");
+		ret = -FI_EINVAL;
+		goto fn_fail;
+	}
+
+	*mapped = shm->ptr;
+
+	return FI_SUCCESS;
+
+fn_fail:
+	if (shm->shared_fd)
+		CloseHandle(shm->shared_fd);
+	if (fname)
+		free((void*)fname);
+	ZeroMemory(shm, sizeof(*shm));
+	return ret;
+}
+
+int ofi_shm_unmap(struct util_shm *shm)
+{
+	if (shm->name)
+		free((void*)shm->name);
+	if (shm->ptr)
+		UnmapViewOfFile(shm->ptr);
+	if (shm->shared_fd)
+		CloseHandle(shm->shared_fd);
+
+	ZeroMemory(shm, sizeof(*shm));
+
+	return FI_SUCCESS;
+}
+
+
 
