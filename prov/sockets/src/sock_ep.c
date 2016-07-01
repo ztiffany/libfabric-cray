@@ -682,6 +682,9 @@ static int sock_ep_close(struct fid *fid)
 		sock_rx_ctx_free(sock_ep->attr->rx_array[0]);
 	}
 
+	idm_reset(&sock_ep->attr->conn_idm);
+	idm_reset(&sock_ep->attr->av_idm);
+
 	free(sock_ep->attr->tx_array);
 	free(sock_ep->attr->rx_array);
 
@@ -1269,7 +1272,7 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			host_addr = (struct sockaddr_in *)ifa->ifa_addr;
 			net_addr = (struct sockaddr_in *)ifa->ifa_netmask;
-			// set fabric name to the network_adress in the format of a.b.c.d/e
+			/* set fabric name to the network_adress in the format of a.b.c.d/e */
 			net_in_addr.s_addr = (uint32_t)((uint32_t) host_addr->sin_addr.s_addr &
 						(uint32_t) net_addr->sin_addr.s_addr);
 			inet_ntop(host_addr->sin_family, (void *)&(net_in_addr), netbuf,
@@ -1278,11 +1281,11 @@ char *sock_get_fabric_name(struct sockaddr_in *src_addr)
 			snprintf(netbuf + strlen(netbuf), sizeof(netbuf) - strlen(netbuf),
 				  "%s%d", "/", prefix_len);
 			fabric_name = strdup(netbuf);
-			return fabric_name;
+			goto out;
 		}
 	}
+out:
 	freeifaddrs(ifaddrs);
-
 	return fabric_name;
 }
 
@@ -1302,11 +1305,11 @@ char *sock_get_domain_name(struct sockaddr_in *src_addr)
 			continue;
 		if (ofi_equals_ipaddr((struct sockaddr_in *)ifa->ifa_addr, src_addr)) {
 			domain_name = strdup(ifa->ifa_name);
-			return domain_name;
+			goto out;
 		}
 	}
+out:
 	freeifaddrs(ifaddrs);
-
 	return domain_name;
 }
 #else
@@ -1711,10 +1714,8 @@ struct sock_conn *sock_ep_lookup_conn(struct sock_ep_attr *attr, fi_addr_t index
 
 	idx = (attr->ep_type == FI_EP_MSG) ? index : index & attr->av->mask;
 	conn = idm_lookup(&attr->av_idm, idx);
-	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS) {
-		assert(ofi_equals_sockaddr(&conn->addr, addr));
+	if (conn && conn != SOCK_CM_CONN_IN_PROGRESS)
 		return conn;
-	}
 
 	for (i = 0; i < attr->cmap.used; i++) {
 		if (ofi_equals_sockaddr(&attr->cmap.table[i].addr, addr))
