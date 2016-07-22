@@ -1,6 +1,5 @@
 /*
  * Copyright (c) 2015-2016 Intel Corporation, Inc.  All rights reserved.
- * Copyright (c) 2016 Cisco Systems, Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -35,12 +34,7 @@
 #  include <config.h>
 #endif /* HAVE_CONFIG_H */
 
-#include <sys/types.h>
-#include <netdb.h>
 #include <pthread.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-
 #include <rdma/fabric.h>
 #include <rdma/fi_atomic.h>
 #include <rdma/fi_cm.h>
@@ -53,68 +47,72 @@
 #include <rdma/fi_trigger.h>
 
 #include <fi.h>
+#include <fi_proto.h>
 #include <fi_enosys.h>
-#include <fi_indexer.h>
 #include <fi_rbuf.h>
 #include <fi_list.h>
-#include <fi_signal.h>
 #include <fi_util.h>
 
-#ifndef _UDPX_H_
-#define _UDPX_H_
+#ifndef _RXD_H_
+#define _RXD_H_
 
+#define RXD_MAJOR_VERSION 	(1)
+#define RXD_MINOR_VERSION 	(0)
+#define RXD_PROTOCOL_VERSION 	(1)
+#define RXD_FI_VERSION 		FI_VERSION(1,3)
 
-#define UDPX_MAJOR_VERSION 1
-#define UDPX_MINOR_VERSION 0
+#define RXD_IOV_LIMIT		(4)
+#define RXD_DEF_CQ_CNT		(8)
+#define RXD_DEF_EP_CNT 		(8)
+#define RXD_AV_DEF_COUNT	(128)
 
+#define RXD_MAX_TX_BITS 	(10)
+#define RXD_MAX_RX_BITS 	(10)
+#define RXD_TX_ID(seq, id)	(((seq) << RXD_MAX_TX_BITS) | id)
+#define RXD_RX_ID(seq, id)	(((seq) << RXD_MAX_RX_BITS) | id)
+#define RXD_TX_IDX_BITS		((1ULL << RXD_MAX_TX_BITS) - 1)
+#define RXD_RX_IDX_BITS		((1ULL << RXD_MAX_RX_BITS) - 1)
 
-extern struct fi_provider udpx_prov;
-extern struct util_prov udpx_util_prov;
-extern struct fi_info udpx_info;
+extern struct fi_provider rxd_prov;
+extern struct fi_info rxd_info;
+extern struct fi_fabric_attr rxd_fabric_attr;
+extern struct util_prov rxd_util_prov;
 
-
-int udpx_check_info(struct fi_info *info);
-int udpx_fabric(struct fi_fabric_attr *attr, struct fid_fabric **fabric,
-		void *context);
-int udpx_domain_open(struct fid_fabric *fabric, struct fi_info *info,
-		struct fid_domain **dom, void *context);
-int udpx_eq_open(struct fid_fabric *fabric, struct fi_eq_attr *attr,
-		struct fid_eq **eq, void *context);
-
-
-#define UDPX_FLAG_MULTI_RECV	1
-#define UDPX_IOV_LIMIT		4
-
-struct udpx_ep_entry {
-	void			*context;
-	struct iovec		iov[UDPX_IOV_LIMIT];
-	uint8_t			iov_count;
-	uint8_t			flags;
-	uint8_t			resv[sizeof(size_t) - 2];
+struct rxd_fabric {
+	struct util_fabric util_fabric;
+	struct fid_fabric *dg_fabric;
 };
 
-DECLARE_CIRQUE(struct udpx_ep_entry, udpx_rx_cirq);
+struct rxd_domain {
+	struct util_domain util_domain;
+	struct fid_domain *dg_domain;
 
-struct udpx_ep;
-typedef void (*udpx_rx_comp_func)(struct udpx_ep *ep, void *context,
-		uint64_t flags, size_t len, void *buf, void *addr);
-typedef void (*udpx_tx_comp_func)(struct udpx_ep *ep, void *context);
+	size_t addrlen;
+	ssize_t max_mtu_sz;
+	uint64_t dg_mode;
+	int do_progress;
+	pthread_t progress_thread;
+	fastlock_t lock;
 
-struct udpx_ep {
-	struct util_ep		util_ep;
-	udpx_rx_comp_func	rx_comp;
-	udpx_tx_comp_func	tx_comp;
-	struct udpx_rx_cirq	*rxq;    /* protected by rx_cq lock */
-	int			sock;
-	int			is_bound;
+	struct dlist_entry ep_list;
+	struct dlist_entry cq_list;
 };
 
-int udpx_endpoint(struct fid_domain *domain, struct fi_info *info,
-		  struct fid_ep **ep, void *context);
+struct rxd_cq {
+	struct util_cq util_cq;
+	struct dlist_entry dom_entry;
+};
 
+struct rxd_ep {
+	struct dlist_entry dom_entry;
+};
 
-int udpx_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
-		 struct fid_cq **cq, void *context);
+int rxd_alter_layer_info(struct fi_info *layer_info, struct fi_info *base_info);
+int rxd_alter_base_info(struct fi_info *base_info, struct fi_info *layer_info);
 
+int rxd_fabric(struct fi_fabric_attr *attr,
+	       struct fid_fabric **fabric, void *context);
+int rxd_domain_open(struct fid_fabric *fabric, struct fi_info *info,
+		    struct fid_domain **dom, void *context);
 
 #endif
