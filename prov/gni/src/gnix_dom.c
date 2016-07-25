@@ -356,6 +356,10 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 		break;
 	case GNI_XPMEM_ENABLE:
 		*(bool *)val = domain->params.xpmem_enabled;
+#if !HAVE_XPMEM
+		GNIX_WARN(FI_LOG_DOMAIN,
+			  "GNI provider XPMEM support not configured\n");
+#endif
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -478,6 +482,9 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 	case GNI_XPMEM_ENABLE:
 #if HAVE_XPMEM
 		domain->params.xpmem_enabled = *(bool *)val;
+#else
+		GNIX_WARN(FI_LOG_DOMAIN,
+			  "GNI provider XPMEM support not configured\n");
 #endif
 		break;
 	default:
