@@ -50,6 +50,7 @@ extern "C" {
 #include "gnix_util.h"
 
 #define GNIX_DEF_MAX_NICS_PER_PTAG	4
+#define GNIX_MAX_IOV_LIMIT 8	/* this should have been pulled in from gnix.h.. */
 
 extern uint32_t gnix_max_nics_per_ptag;
 
@@ -267,7 +268,7 @@ struct gnix_smsg_rndzv_iov_start_hdr {
 	uint64_t imm;
 	uint64_t msg_tag;
 	uint64_t req_addr;
-	size_t iov_cnt;
+	size_t   iov_cnt;
 	uint64_t send_len;
 };
 
@@ -319,6 +320,8 @@ struct gnix_smsg_amo_cntr_hdr {
  *                       rma operations
  * @var gnix_smsg_amo_cntr_hdr embedded header for AMO remote counter events.
  * @var req              pointer to fab request associated with this descriptor
+ * @var send_info_idx	 the sender's iov index associated with this descriptor
+ * @var recv_info_idx	 the receiver's iov index associated with this descriptor
  * @var completer_fn     call back to invoke when associated GNI CQE's are
  *                       returned.
  * @var id               the id of this descriptor - the value returned
