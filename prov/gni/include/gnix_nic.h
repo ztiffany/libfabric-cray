@@ -320,8 +320,6 @@ struct gnix_smsg_amo_cntr_hdr {
  *                       rma operations
  * @var gnix_smsg_amo_cntr_hdr embedded header for AMO remote counter events.
  * @var req              pointer to fab request associated with this descriptor
- * @var send_info_idx	 the sender's iov index associated with this descriptor
- * @var recv_info_idx	 the receiver's iov index associated with this descriptor
  * @var completer_fn     call back to invoke when associated GNI CQE's are
  *                       returned.
  * @var id               the id of this descriptor - the value returned

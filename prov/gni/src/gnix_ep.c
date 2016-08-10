@@ -1407,7 +1407,7 @@ static int __destruct_tag_storages(struct gnix_fid_ep *ep)
 
 static void __ep_destruct(void *obj)
 {
-	int __attribute__((unused)) ret, i;
+	int ret;
 	struct gnix_fid_domain *domain;
 	struct gnix_nic *nic;
 	struct gnix_fid_av *av;

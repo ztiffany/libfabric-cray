@@ -167,7 +167,7 @@ static inline void _gnix_ep_release_htd_buf(struct gnix_fid_ep *ep, struct slist
 	GNIX_DEBUG(FI_LOG_EP_DATA, "sl.head = %p, sl.tail = %p\n", ep->htd_pool.sl.head,
 		   ep->htd_pool.sl.tail);
 
-	slist_insert_tail(e, &ep->htd_pool.sl);
+	slist_insert_head(e, &ep->htd_pool.sl);
 
 	fastlock_release(&ep->htd_pool.lock);
 }
