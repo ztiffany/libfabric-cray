@@ -363,7 +363,7 @@ static inline int __gnix_msg_recv_completion(struct gnix_fid_ep *ep,
 					FI_MULTI_RECV);
 
 	return __recv_completion(ep, req, req->user_context, flags,
-				 req->msg.cum_send_len,
+				 MIN(req->msg.cum_send_len, req->msg.cum_recv_len),
 				 req->msg.recv_flags & FI_MULTI_RECV ?
 				 (void *)req->msg.recv_info[0].recv_addr :
 				 NULL,
@@ -1724,7 +1724,7 @@ static int __smsg_eager_msg_w_data(void *data, void *msg)
 		req->gnix_ep = ep;
 		req->vc = vc;
 
-		req->msg.cum_send_len = MIN(hdr->len, req->msg.cum_recv_len);
+		req->msg.cum_send_len = hdr->len;
 		req->msg.send_flags = hdr->flags;
 		req->msg.send_iov_cnt = 1;
 		req->msg.tag = hdr->msg_tag;
@@ -1902,7 +1902,7 @@ static int __smsg_rndzv_start(void *data, void *msg)
 		req->msg.send_info[0].send_len =
 			MIN(hdr->len, req->msg.cum_recv_len);
 		req->msg.send_info[0].mem_hndl = hdr->mdh;
-		req->msg.cum_send_len = MIN(req->msg.send_info[0].send_len, req->msg.cum_recv_len);
+		req->msg.cum_send_len = req->msg.send_info[0].send_len;
 		req->msg.send_iov_cnt = 1;
 		req->msg.send_flags = hdr->flags;
 		req->msg.tag = hdr->msg_tag;
@@ -2049,7 +2049,7 @@ static int __smsg_rndzv_iov_start(void *data, void *msg)
 	if (req) {		/* Found a request in the posted queue */
 		is_req_posted = 1;
 		req->tx_failures = 0;
-		req->msg.cum_send_len = MIN(hdr->send_len, req->msg.cum_recv_len);
+		req->msg.cum_send_len = hdr->send_len;
 
 		GNIX_INFO(FI_LOG_EP_DATA, "Matched req: %p (%p, %u)\n",
 			  req, req->msg.recv_info[0].recv_addr, hdr->send_len);
@@ -2200,7 +2200,8 @@ static int __gnix_peek_request(struct gnix_fab_req *req)
 {
 	struct gnix_fid_cq *recv_cq = req->gnix_ep->recv_cq;
 	int rendezvous = !!(req->msg.send_flags & GNIX_MSG_RENDEZVOUS);
-	int ret;
+	int ret, i, j, copy_len;
+	uint64_t send_ptr, recv_ptr, send_len, recv_len;
 
 	/* All claim work is performed by the tag storage, so nothing special
 	 * here.  If no CQ, no data is to be returned.  Just inform the user
@@ -2214,12 +2215,45 @@ static int __gnix_peek_request(struct gnix_fab_req *req)
 	 * location and length, then data will not be copied. */
 	if (!rendezvous && req->msg.recv_info[0].recv_addr &&
 	    !INVALID_PEEK_FORMAT(recv_cq->attr.format)) {
-		int copy_len = MIN(req->msg.send_info[0].send_len,
-				   req->msg.recv_info[0].recv_len);
+		send_len = req->msg.send_info[0].send_len;
+		send_ptr = req->msg.send_info[0].send_addr;
+		recv_len = req->msg.recv_info[0].recv_len;
+		recv_ptr = req->msg.recv_info[0].recv_addr;
+		i = j = 0;
 
-		memcpy((void *)req->msg.recv_info[0].recv_addr,
-		       (void *)req->msg.send_info[0].send_addr,
-		       copy_len);
+		while (1) {
+			copy_len = MIN(send_len, recv_len);
+			memcpy((void *)recv_ptr, (void *)send_ptr, copy_len);
+
+			/* Update lengths/addresses */
+			send_len -= copy_len;
+			recv_len -= copy_len;
+
+			if (send_len == 0) {
+				i++;
+
+				if (i == req->msg.send_iov_cnt)
+					break;
+
+				send_ptr = req->msg.send_info[i].send_addr;
+				send_len = req->msg.send_info[i].send_len;
+			} else {
+				send_ptr += copy_len;
+			}
+
+			if (recv_len == 0) {
+				j++;
+
+				if (j == req->msg.recv_iov_cnt)
+					break;
+
+				recv_ptr = req->msg.recv_info[j].recv_addr;
+				recv_len = req->msg.recv_info[j].recv_len;
+			} else {
+				recv_ptr += copy_len;
+			}
+
+		}
 	} else {
 		/* The CQE should not contain a valid buffer. */
 		req->msg.recv_info[0].recv_addr = 0;
@@ -2358,7 +2392,6 @@ retry_match:
 		req->msg.recv_info[0].recv_addr = (uint64_t)buf;
 		req->msg.recv_info[0].recv_len = len;
 		req->msg.cum_recv_len = len;
-		req->msg.cum_send_len = MIN(req->msg.cum_send_len, len);
 
 		if (mdesc) {
 			md = container_of(mdesc,
@@ -2946,7 +2979,8 @@ ssize_t _gnix_recvv(struct gnix_fid_ep *ep, const struct iovec *iov,
 		req->flags = 0;
 		req->msg.recv_flags = flags;
 		req->msg.recv_iov_cnt = count;
-		req->msg.cum_send_len = MIN(req->msg.cum_send_len, cum_len);
+		req->msg.cum_recv_len = cum_len;
+		/* req->msg.cum_send_len = MIN(req->msg.cum_send_len, cum_len); */
 
 		if (tagged) {
 			req->type = GNIX_FAB_RQ_TRECVV;
