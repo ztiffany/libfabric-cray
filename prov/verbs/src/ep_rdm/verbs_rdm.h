@@ -219,8 +219,11 @@ struct fi_ibv_rdm_buf {
 struct fi_ibv_rdm_cm {
 	struct rdma_cm_id *listener;
 	struct rdma_event_channel *ec;
-	struct sockaddr_in my_addr;
-	struct rdma_addrinfo *rai;
+
+	/* conn_hash has a sockaddr_in -> conn associative */
+	struct fi_ibv_rdm_conn *conn_hash;
+	/* Used only for FI_AV_TABLE */
+	struct fi_ibv_rdm_conn **conn_table;
 };
 
 struct fi_ibv_rdm_ep {
@@ -229,8 +232,9 @@ struct fi_ibv_rdm_ep {
 	struct fi_ibv_rdm_cq *fi_scq;
 	struct fi_ibv_rdm_cq *fi_rcq;
 
-	struct fi_ibv_rdm_cm cm;
 	size_t addrlen;
+	struct rdma_addrinfo *rai;
+	struct sockaddr_in my_addr;
 
 	struct fi_ibv_av *av;
 	int tx_selective_completion;
@@ -250,12 +254,17 @@ struct fi_ibv_rdm_ep {
 	int num_active_conns;
 	int max_inline_rc;
 	int rndv_threshold;
+	int rndv_seg_size;
 	struct ibv_cq *scq;
 	struct ibv_cq *rcq;
 	int scq_depth;
 	int rcq_depth;
+	int cqread_bunch_size;
+
+	/* TODO: move all CM things to domain */
 	pthread_t cm_progress_thread;
 	pthread_mutex_t cm_lock;
+	int cm_progress_timeout;
 	int is_closing;
 	int recv_preposted_threshold;
 };
@@ -569,7 +578,6 @@ fi_ibv_rdm_check_connection(struct fi_ibv_rdm_conn *conn,
 			fi_ibv_rdm_start_connection(ep, conn);
 		}
 		pthread_mutex_unlock(&ep->cm_lock);
-		usleep(1000);
 	}
 
 	return status;
