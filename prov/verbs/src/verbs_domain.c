@@ -203,7 +203,7 @@ static struct fi_ops_domain fi_ibv_rdm_domain_ops = {
 	.cq_open = fi_ibv_rdm_cq_open,
 	.endpoint = fi_ibv_rdm_open_ep,
 	.scalable_ep = fi_no_scalable_ep,
-	.cntr_open = fi_no_cntr_open,
+	.cntr_open = fi_rbv_rdm_cntr_open,
 	.poll_open = fi_no_poll_open,
 	.stx_ctx = fi_no_stx_context,
 	.srx_ctx = fi_no_srx_context,
@@ -264,20 +264,23 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 			VERBS_INFO(FI_LOG_EP_CTRL,
 				"Failed to create listener event channel: %s\n",
 				strerror(errno));
-			return -FI_EOTHER;
+			ret = -FI_EOTHER;
+			goto err2;
 		}
 
 		if (fi_fd_nonblock(_domain->rdm_cm->ec->fd) != 0) {
 			VERBS_INFO_ERRNO(FI_LOG_EP_CTRL, "fcntl", errno);
-			return -FI_EOTHER;
+			ret = -FI_EOTHER;
+			goto err3;
 		}
 
 		if (rdma_create_id(_domain->rdm_cm->ec,
 				   &_domain->rdm_cm->listener, NULL, RDMA_PS_TCP))
 		{
 			VERBS_INFO(FI_LOG_EP_CTRL, "Failed to create cm listener: %s\n",
-				     strerror(errno));
-			return -FI_EOTHER;
+				   strerror(errno));
+			ret = -FI_EOTHER;
+			goto err3;
 		}
 	} else {
 		_domain->domain_fid.ops = &fi_ibv_domain_ops;
@@ -286,8 +289,12 @@ fi_ibv_domain(struct fid_fabric *fabric, struct fi_info *info,
 
 	*domain = &_domain->domain_fid;
 	return 0;
+err3:
+	if (_domain->rdm)
+		rdma_destroy_event_channel(_domain->rdm_cm->ec);
 err2:
-	free(_domain->rdm_cm);
+	if (_domain->rdm)
+		free(_domain->rdm_cm);
 	fi_freeinfo(_domain->info);
 err1:
 	free(_domain);
