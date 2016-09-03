@@ -321,8 +321,12 @@ void pp_banner_options(struct ct_pingpong *ct)
 	PP_DEBUG("  - %-20s: [%" PRIu16 "]\n", "dst_port", opts.dst_port);
 	PP_DEBUG("  - %-20s: %s\n", "sizes_enabled", size_msg);
 	PP_DEBUG("  - %-20s: %s\n", "iterations", iter_msg);
-	PP_DEBUG("  - %-20s: %s\n", "provider",
-		 ct->hints->fabric_attr->prov_name);
+	if (ct->hints->fabric_attr->prov_name)
+		PP_DEBUG("  - %-20s: %s\n", "provider",
+			  ct->hints->fabric_attr->prov_name);
+	if (ct->hints->domain_attr->name)
+		PP_DEBUG("  - %-20s: %s\n", "domain",
+			  ct->hints->domain_attr->name);
 }
 
 /*******************************************************************************
@@ -905,7 +909,7 @@ void pp_process_eq_err(ssize_t rd, struct fid_eq *eq, const char *fn)
 
 int generate_test_sizes(struct pp_opts *opts, size_t tx_size, int **sizes_)
 {
-	int defaults[6] = {64, 256, 1024, 4096, 655616, 1048576};
+	int defaults[6] = {64, 256, 1024, 4096, 65536, 1048576};
 	int power_of_two;
 	int half_up;
 	int n = 0;
