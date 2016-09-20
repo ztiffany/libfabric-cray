@@ -263,9 +263,7 @@ together when binding an endpoint to a completion domain CQ.
 *FI_TRANSMIT*
 : Directs the completion of outbound data transfer requests to the
   specified completion queue.  This includes send message, RMA, and
-  atomic operations.  The FI_SEND flag may be used interchangeably.
-  This binding automatically includes FI_READ and FI_WRITE, if
-  applicable to the endpoint.
+  atomic operations.
 
 *FI_RECV*
 : Directs the notification of inbound data transfers to the specified
@@ -280,7 +278,7 @@ together when binding an endpoint to a completion domain CQ.
   completions are generated.  If FI_SELECTIVE_COMPLETION is specified,
   data transfer operations will not generate entries for successful
   completions unless FI_COMPLETION is set as an operational flag for the
-  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_SEND
+  given operation.  FI_SELECTIVE_COMPLETION must be OR'ed with FI_TRANSMIT
   and/or FI_RECV flags.
 
   When FI_SELECTIVE_COMPLETION is set, the user must determine when a
@@ -294,7 +292,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = 0; // default - no completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
+  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);                   // no completion
   fi_sendv(ep, ...);                  // no completion
   fi_sendmsg(ep, ..., FI_COMPLETION); // completion!
@@ -306,7 +304,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = FI_COMPLETION; // default - completion
-  fi_ep_bind(ep, cq, FI_SEND | FI_SELECTIVE_COMPLETION);
+  fi_ep_bind(ep, cq, FI_TRANSMIT | FI_SELECTIVE_COMPLETION);
   fi_send(ep, ...);       // completion
   fi_sendv(ep, ...);      // completion
   fi_sendmsg(ep, ..., 0); // no completion!
@@ -318,7 +316,7 @@ together when binding an endpoint to a completion domain CQ.
 
 ```c
   fi_tx_attr::op_flags = 0;
-  fi_ep_bind(ep, cq, FI_SEND);  // default - completion
+  fi_ep_bind(ep, cq, FI_TRANSMIT);    // default - completion
   fi_send(ep, ...);                   // completion
   fi_sendv(ep, ...);                  // completion
   fi_sendmsg(ep, ..., 0);             // completion!
@@ -974,11 +972,12 @@ the _Transmit Context Attribute_ section.
 ## total_buffered_recv
 
 Defines the total available space allocated by the provider to buffer messages
-that are received for which there is no matching receive operation.  If set to
-0, and the domain does not support FI_RM_ENABLED, any messages that arrive
-before a receive buffer has been posted are lost. When the domain supports
-FI_RM_ENABLED, the actual amount of buffering provided may exceed the value
-specified in total_buffered_recv.
+that are received for which there is no matching receive operation.  That is,
+this defines the minimal amount of receive side buffering available.  If
+receive side buffering is disabled (total_buffered_recv = 0) and a message is
+received by an endpoint, then the behavior is dependent on whether resource
+management has been enabled (FI_RM_ENABLED has be set or not).  See
+the Resource Management section of fi_domain.3 for further clarification.
 
 ## size
 
@@ -1122,8 +1121,10 @@ value of transmit or receive context attributes of an endpoint.
   user's control immediately after a data transfer call returns, even
   if the operation is handled asynchronously.  This may require that
   the provider copy the data into a local buffer and transfer out of
-  that buffer.  A provider may limit the total amount of send data
-  that may be buffered and/or the size of a single send.
+  that buffer.  A provider can limit the total amount of send data
+  that may be buffered and/or the size of a single send that can use
+  this flag. This limit is indicated using inject_size (see inject_size
+  above).
 
 *FI_MULTI_RECV*
 : Applies to posted receive operations.  This flag allows the user to
@@ -1151,7 +1152,8 @@ value of transmit or receive context attributes of an endpoint.
 
   Note: This flag is used to control when a completion entry is inserted
   into a completion queue.  It does not apply to operations that do not
-  generate a completion queue entry, such as the fi_inject operation.
+  generate a completion queue entry, such as the fi_inject operation, and
+  is not subject to the inject_size message limit restriction.
 
 *FI_TRANSMIT_COMPLETE*
 : Indicates that a completion should be generated when the transmit
