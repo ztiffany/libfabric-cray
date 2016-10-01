@@ -87,6 +87,9 @@
 	OFI_Q_READERR(prov, log, eq, "eq", fi_eq_readerr, 	\
 			fi_eq_strerror, ret, err_entry)
 
+#define ofi_sin_addr(addr) (((struct sockaddr_in *)(addr))->sin_addr)
+#define ofi_sin6_addr(addr) (((struct sockaddr_in6 *)(addr))->sin6_addr)
+
 enum fi_match_type {
 	FI_MATCH_EXACT,
 	FI_MATCH_PREFIX,
@@ -228,6 +231,8 @@ struct util_cntr {
 	struct fid_cntr		cntr_fid;
 	struct util_domain	*domain;
 	atomic_t		ref;
+	uint64_t		checkpoint_cnt;
+	uint64_t		checkpoint_err;
 };
 
 
@@ -510,8 +515,6 @@ int util_getinfo(const struct util_prov *util_prov, uint32_t version,
 struct fid_list_entry {
 	struct dlist_entry	entry;
 	struct fid		*fid;
-
-	uint64_t		last_cntr_val;
 };
 
 int fid_list_insert(struct dlist_entry *fid_list, fastlock_t *lock,
