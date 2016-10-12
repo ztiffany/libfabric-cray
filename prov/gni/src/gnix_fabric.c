@@ -91,7 +91,7 @@ DIRECT_FN int gnix_fabric_trywait(struct fid_fabric *fabric, struct fid **fids, 
 static struct fi_ops_fabric gnix_fab_ops = {
 	.size = sizeof(struct fi_ops_fabric),
 	.domain = gnix_domain_open,
-	.passive_ep = fi_no_passive_ep,
+	.passive_ep = gnix_passive_ep_open,
 	.eq_open = gnix_eq_open,
 	.wait_open = gnix_wait_open,
 	.trywait = gnix_fabric_trywait
@@ -184,68 +184,15 @@ static int gnix_fabric_open(struct fi_fabric_attr *attr,
 	return FI_SUCCESS;
 }
 
-static int gnix_getinfo(uint32_t version, const char *node, const char *service,
-			uint64_t flags, struct fi_info *hints,
-			struct fi_info **info)
+static struct fi_info *_gnix_allocinfo()
 {
-	int ret = 0;
-	int ep_type_unspec = 1;
-	uint64_t mode = GNIX_FAB_MODES;
-	struct fi_info *gnix_info = NULL;
-	struct gnix_ep_name *dest_addr = NULL;
-	struct gnix_ep_name *src_addr = NULL;
-	struct gnix_ep_name *addr = NULL;
+	struct fi_info *gnix_info;
 
-	/*
-	 * the code below for resolving a node/service to what
-	 * will be a gnix_ep_name address is not fully implemented,
-	 * but put a place holder in place
-	 */
-	if (node) {
-		addr = malloc(sizeof(*addr));
-		if (!addr) {
-			goto err;
-		}
-
-		/* resolve node/service to gnix_ep_name */
-		ret = gnix_resolve_name(node, service, flags, addr);
-		if (ret) {
-			goto err;
-		}
-
-		if (flags & FI_SOURCE) {
-			/* resolved address is the local address */
-			src_addr = addr;
-			if (hints && hints->dest_addr)
-				dest_addr = hints->dest_addr;
-		} else {
-			/* resolved address is a peer */
-			dest_addr = addr;
-			if (hints && hints->src_addr)
-				src_addr = hints->src_addr;
-		}
-	}
-
-	if (src_addr)
-		GNIX_INFO(FI_LOG_FABRIC, "src_pe: 0x%x src_port: 0x%lx\n",
-			  src_addr->gnix_addr.device_addr,
-			  src_addr->gnix_addr.cdm_id);
-	if (dest_addr)
-		GNIX_INFO(FI_LOG_FABRIC, "dest_pe: 0x%x dest_port: 0x%lx\n",
-			  dest_addr->gnix_addr.device_addr,
-			  dest_addr->gnix_addr.cdm_id);
-
-	/*
-	 * fill in the gnix_info struct
-	 */
 	gnix_info = fi_allocinfo();
 	if (gnix_info == NULL) {
-		goto err;
+		return NULL;
 	}
 
-	/*
-	 * Set the default values
-	 */
 	gnix_info->tx_attr->op_flags = 0;
 	gnix_info->rx_attr->op_flags = 0;
 	gnix_info->ep_attr->type = FI_EP_RDM;
@@ -261,7 +208,7 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->domain_attr->data_progress = FI_PROGRESS_AUTO;
 	gnix_info->domain_attr->av_type = FI_AV_UNSPEC;
 	gnix_info->domain_attr->tx_ctx_cnt = gnix_max_nics_per_ptag;
-	/* only one aries per node */
+
 	gnix_info->domain_attr->name = strdup(gnix_dom_name);
 	gnix_info->domain_attr->cq_data_size = sizeof(uint64_t);
 	gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
@@ -272,10 +219,8 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->addr_format = FI_ADDR_GNI;
 	gnix_info->src_addrlen = sizeof(struct gnix_ep_name);
 	gnix_info->dest_addrlen = sizeof(struct gnix_ep_name);
-	gnix_info->src_addr = src_addr;
-	gnix_info->dest_addr = dest_addr;
-	/* prov_name gets filled in by fi_getinfo from the gnix_prov struct */
-	/* let's consider gni copyrighted :) */
+	gnix_info->src_addr = NULL;
+	gnix_info->dest_addr = NULL;
 
 	gnix_info->tx_attr->msg_order = FI_ORDER_SAS;
 	gnix_info->tx_attr->comp_order = FI_ORDER_NONE;
@@ -288,26 +233,98 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->rx_attr->size = GNIX_RX_SIZE_DEFAULT;
 	gnix_info->rx_attr->iov_limit = GNIX_MAX_MSG_IOV_LIMIT;
 
+	return gnix_info;
+}
+
+static void _gnix_freeinfo(struct fi_info *info)
+{
+	if (!info)
+		return;
+
+	if (info->src_addr)
+		free(info->src_addr);
+
+	if (info->dest_addr)
+		free(info->dest_addr);
+
+	fi_freeinfo(info);
+}
+
+static int __gnix_getinfo_resolve_node(const char *node, const char *service,
+				       uint64_t flags, struct fi_info *info)
+{
+	int ret;
+	struct gnix_ep_name *dest_addr = NULL;
+	struct gnix_ep_name *src_addr = NULL;
+	struct gnix_ep_name *addr = NULL;
+
+	if (node) {
+		addr = malloc(sizeof(*addr));
+		if (!addr) {
+			return -FI_ENOMEM;
+		}
+
+		/* resolve node/service to gnix_ep_name */
+		ret = gnix_resolve_name(node, service, flags, addr);
+		if (ret) {
+			return ret;
+		}
+
+		if (flags & FI_SOURCE) {
+			/* resolved address is the local address */
+			src_addr = addr;
+			if (info && info->dest_addr)
+				dest_addr = info->dest_addr;
+		} else {
+			/* resolved address is a peer */
+			dest_addr = addr;
+			if (info && info->src_addr)
+				src_addr = info->src_addr;
+		}
+	}
+
+	GNIX_INFO(FI_LOG_FABRIC, "%snode: %s service: %s\n",
+		  flags & FI_SOURCE ? "(FI_SOURCE) " : "", node, service);
+
+	if (src_addr)
+		GNIX_INFO(FI_LOG_FABRIC, "src_pe: 0x%x src_port: 0x%lx\n",
+			  src_addr->gnix_addr.device_addr,
+			  src_addr->gnix_addr.cdm_id);
+	if (dest_addr)
+		GNIX_INFO(FI_LOG_FABRIC, "dest_pe: 0x%x dest_port: 0x%lx\n",
+			  dest_addr->gnix_addr.device_addr,
+			  dest_addr->gnix_addr.cdm_id);
+
+	info->src_addr = src_addr;
+	info->dest_addr = dest_addr;
+
+	return FI_SUCCESS;
+}
+
+static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
+			    const char *node, const char *service,
+			    uint64_t flags, struct fi_info *hints,
+			    struct fi_info **info)
+{
+	uint64_t mode = GNIX_FAB_MODES;
+	struct fi_info *gnix_info = NULL;
+	int ret;
+
+	if ((hints && hints->ep_attr) &&
+	    (hints->ep_attr->type != FI_EP_UNSPEC &&
+	     hints->ep_attr->type != ep_type)) {
+		return -FI_ENODATA;
+	}
+
+	gnix_info = _gnix_allocinfo(info);
+	if (!gnix_info)
+		return -FI_ENOMEM;
+
+	gnix_info->ep_attr->type = ep_type;
+
 	if (hints) {
 		if (hints->ep_attr) {
-			/*
-			 * support FI_EP_RDM, FI_EP_DGRAM endpoint types
-			 */
-			switch (hints->ep_attr->type) {
-			case FI_EP_UNSPEC:
-				break;
-			case FI_EP_RDM:
-			case FI_EP_DGRAM:
-				gnix_info->ep_attr->type = hints->ep_attr->type;
-				ep_type_unspec = 0;
-				break;
-			default:
-				goto err;
-			}
-
-			/*
-			 * only support FI_PROTO_GNI protocol
-			 */
+			/* Only support FI_PROTO_GNI protocol. */
 			switch (hints->ep_attr->protocol) {
 			case FI_PROTO_UNSPEC:
 			case FI_PROTO_GNI:
@@ -316,17 +333,14 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 				goto err;
 			}
 
-			if (hints->ep_attr->tx_ctx_cnt > 1) {
+			if (hints->ep_attr->tx_ctx_cnt > 1)
 				goto err;
-			}
 
-			if (hints->ep_attr->rx_ctx_cnt > 1) {
+			if (hints->ep_attr->rx_ctx_cnt > 1)
 				goto err;
-			}
 
-			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE) {
+			if (hints->ep_attr->max_msg_size > GNIX_MAX_MSG_SIZE)
 				goto err;
-			}
 		}
 
 		/*
@@ -340,19 +354,17 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 
 		if (!hints->caps) {
-			/* Return all supported capabilities. */
-			gnix_info->caps = GNIX_EP_RDM_CAPS_FULL;
+			/* If no caps are requested, return all supported. */
+			gnix_info->caps = GNIX_EP_CAPS_FULL;
 		} else {
 			/* The provider must support all requested
 			 * capabilities. */
-			if ((hints->caps & GNIX_EP_RDM_CAPS_FULL) !=
-			    hints->caps) {
+			if ((hints->caps & GNIX_EP_CAPS_FULL) != hints->caps)
 				goto err;
-			}
 
 			/* The provider may silently enable secondary
 			 * capabilities that do not introduce any overhead. */
-			gnix_info->caps = hints->caps | GNIX_EP_RDM_SEC_CAPS;
+			gnix_info->caps = hints->caps | GNIX_EP_SEC_CAPS;
 		}
 
 		if (hints->tx_attr) {
@@ -429,6 +441,10 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 		}
 	}
 
+	ret = __gnix_getinfo_resolve_node(node, service, flags, gnix_info);
+	if (ret != FI_SUCCESS)
+		goto  err;
+
 	gnix_info->mode = mode;
 	gnix_info->fabric_attr->name = strdup(gnix_fab_name);
 	gnix_info->tx_attr->caps = gnix_info->caps;
@@ -436,37 +452,50 @@ static int gnix_getinfo(uint32_t version, const char *node, const char *service,
 	gnix_info->rx_attr->caps = gnix_info->caps;
 	gnix_info->rx_attr->mode = gnix_info->mode;
 
-	if (ep_type_unspec) {
-		struct fi_info *dg_info = fi_dupinfo(gnix_info);
-
-		if (!dg_info) {
-			GNIX_WARN(FI_LOG_FABRIC, "cannot copy info\n");
-			goto err;
-		}
-
-		dg_info->ep_attr->type = FI_EP_DGRAM;
-		gnix_info->next = dg_info;
-	}
-
 	*info = gnix_info;
 
-	return 0;
+	GNIX_DEBUG(FI_LOG_FABRIC, "Returning EP type: %s\n",
+		   fi_tostr(&ep_type, FI_TYPE_EP_TYPE));
+	return FI_SUCCESS;
 err:
-	if (gnix_info) {
-		if (gnix_info->tx_attr) free(gnix_info->tx_attr);
-		if (gnix_info->rx_attr) free(gnix_info->rx_attr);
-		if (gnix_info->ep_attr) free(gnix_info->ep_attr);
-		if (gnix_info->domain_attr) free(gnix_info->domain_attr);
-		if (gnix_info->fabric_attr) free(gnix_info->fabric_attr);
-		free(gnix_info);
+	_gnix_freeinfo(gnix_info);
+	return -FI_ENODATA;
+}
+
+static int gnix_getinfo(uint32_t version, const char *node, const char *service,
+			uint64_t flags, struct fi_info *hints,
+			struct fi_info **info)
+{
+	int ret = 0;
+	struct fi_info *info_ptr;
+
+	/* Note that info entries are added to the head of 'info', that is,
+	 * they are preferred in the reverse order shown here. */
+
+	*info = NULL;
+
+	ret = _gnix_ep_getinfo(FI_EP_MSG, version, node, service, flags,
+			       hints, &info_ptr);
+	if (ret == FI_SUCCESS) {
+		info_ptr->next = *info;
+		*info = info_ptr;
 	}
 
-	/*
-	 *  for the getinfo method, we need to return -FI_ENODATA  otherwise
-	 *  the fi_getinfo call will make an early exit without querying
-	 *  other providers which may be avaialble.
-	 */
-	return -FI_ENODATA;
+	ret = _gnix_ep_getinfo(FI_EP_DGRAM, version, node, service, flags,
+			       hints, &info_ptr);
+	if (ret == FI_SUCCESS) {
+		info_ptr->next = *info;
+		*info = info_ptr;
+	}
+
+	ret = _gnix_ep_getinfo(FI_EP_RDM, version, node, service, flags,
+			       hints, &info_ptr);
+	if (ret == FI_SUCCESS) {
+		info_ptr->next = *info;
+		*info = info_ptr;
+	}
+
+	return *info ? FI_SUCCESS : -FI_ENODATA;
 }
 
 static void gnix_fini(void)
