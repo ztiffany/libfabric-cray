@@ -39,6 +39,7 @@ extern "C" {
 #endif
 
 #include <rdma/fi_eq.h>
+#include <stdbool.h>
 
 #include "gnix_queue.h"
 #include "gnix_wait.h"
@@ -69,12 +70,19 @@ struct gnix_eq_entry {
 	struct slist_entry item;
 };
 
+struct gnix_eq_poll_obj {
+	struct dlist_entry list;
+	struct fid *obj_fid;
+};
+
 /*
  * EQ structure. Contains error and event queue.
  */
 struct gnix_fid_eq {
 	struct fid_eq eq_fid;
 	struct gnix_fid_fabric *fabric;
+
+	bool requires_lock;
 
 	struct gnix_queue *events;
 	struct gnix_queue *errors;
@@ -85,7 +93,13 @@ struct gnix_fid_eq {
 
 	fastlock_t lock;
 	struct gnix_reference ref_cnt;
+
+	rwlock_t poll_obj_lock;
+	struct dlist_entry poll_objs;
 };
+
+int _gnix_eq_poll_obj_add(struct gnix_fid_eq *eq, struct fid *obj_fid);
+int _gnix_eq_poll_obj_rem(struct gnix_fid_eq *eq, struct fid *obj_fid);
 
 #ifdef __cplusplus
 }

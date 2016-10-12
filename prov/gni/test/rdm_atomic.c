@@ -112,7 +112,7 @@ void common_atomic_setup(void)
 	hints->domain_attr->cq_data_size = 4;
 	hints->mode = ~0;
 	hints->fabric_attr->name = strdup("gni");
-	hints->caps |= GNIX_EP_RDM_PRIMARY_CAPS;
+	hints->caps |= GNIX_EP_PRIMARY_CAPS;
 
 	target = malloc(BUF_SZ);
 	assert(target);

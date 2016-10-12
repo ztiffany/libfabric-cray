@@ -62,9 +62,6 @@ enum {
 	GNIX_SMSG_T_AMO_CNTR
 };
 
-extern smsg_completer_fn_t gnix_ep_smsg_completers[];
-extern smsg_callback_fn_t gnix_ep_smsg_callbacks[];
-
 /*
  * typedefs for function vectors used to steer send/receive/rma/amo requests,
  * i.e. fi_send, fi_recv, etc. to ep type specific methods

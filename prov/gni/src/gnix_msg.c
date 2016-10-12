@@ -52,6 +52,8 @@
 
 #define GNIX_TAGGED_PCD_COMPLETION_FLAGS	(FI_MSG | FI_RECV | FI_TAGGED)
 
+smsg_completer_fn_t gnix_ep_smsg_completers[];
+
 /*******************************************************************************
  * helper functions
  ******************************************************************************/
