@@ -397,10 +397,15 @@ endpoint has successfully be re-enabled.
 fi_cancel attempts to cancel an outstanding asynchronous operation.
 Canceling an operation causes the fabric provider to search for the
 operation and, if it is still pending, complete it as having been
-canceled.  If multiple outstanding operations match the context
-parameter, only one will be canceled.  In this case, the operation
-which is canceled is provider specific.  The cancel operation is
-asynchronous, but will complete within a bounded period of time.
+canceled. An error queue entry will be available in the the
+associated error queue with error code FI_ECANCELED. On the other hand,
+if the operation completed before the call to fi_cancel, then the
+completion status of that operation will be available in the associated
+completion queue.  No specific entry related to fi_cancel itself will be posted.
+If multiple outstanding operations match the context parameter, only one
+will be canceled. In this case, the operation which is canceled is provider specific.
+The cancel operation is asynchronous, but will complete within a bounded
+period of time.
 
 ## fi_ep_alias
 
@@ -1013,9 +1018,10 @@ create transmit and receive contexts as described below.
 Transmit contexts are independent transmit queues.  Ordering and
 synchronization between contexts are not defined.  Conceptually a
 transmit context behaves similar to a send-only endpoint.  A transmit
-context may be configured with relaxed capabilities, and has its own
-completion queue.  The number of transmit contexts associated with an
-endpoint is specified during endpoint creation.
+context may be configured with fewer attributes than the base endpoint,
+such as fewer capabilities, relaxed ordering, etc.  Each transmit context
+has its own completion queue.  The number of transmit contexts associated
+with an endpoint is specified during endpoint creation.
 
 The fi_tx_context call is used to retrieve a specific context,
 identified by an index.  Providers may dynamically allocate contexts
@@ -1033,8 +1039,9 @@ Receive contexts are independent receive queues for receiving incoming
 data.  Ordering and synchronization between contexts are not
 guaranteed.  Conceptually a receive context behaves similar to a
 receive-only endpoint.  A receive context may be configured with
-relaxed endpoint capabilities, and has its own completion queue.  The
-number of receive contexts associated with an endpoint is specified
+fewer attributes than the base endpoint, such as fewer capabilities,
+relaxed ordering, etc.  Each receive context has its own completion queue.
+The number of receive contexts associated with an endpoint is specified
 during endpoint creation.
 
 Receive contexts are often associated with steering flows, that
