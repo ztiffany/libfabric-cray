@@ -320,6 +320,7 @@ void rdm_sr_bnd_ep_setup(void)
 	hints->domain_attr->cq_data_size = NUMEPS * 2;
 	hints->mode = ~0;
 	hints->fabric_attr->prov_name = strdup("gni");
+	hints->caps = FI_SOURCE | FI_MSG;
 
 	ret = gethostname(my_hostname, sizeof(my_hostname));
 	cr_assert(!ret, "gethostname");
