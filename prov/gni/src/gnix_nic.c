@@ -71,6 +71,7 @@ static struct gnix_nic_attr default_attr = {
 /*******************************************************************************
  * Helper functions.
  ******************************************************************************/
+static int trans_irqs = 0;
 
 /*
  * this function is intended to be invoked as an argument to pthread_create,
@@ -82,9 +83,10 @@ static void *__gnix_nic_prog_thread_fn(void *the_arg)
 	uint32_t which;
 	struct gnix_nic *nic = (struct gnix_nic *)the_arg;
 	sigset_t  sigmask;
-	gni_cq_handle_t cqv[2];
+	gni_cq_handle_t cqv[4];
 	gni_return_t status;
 	gni_cq_entry_t cqe;
+	uint32_t monitor_cqs = 2;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -136,9 +138,15 @@ static void *__gnix_nic_prog_thread_fn(void *the_arg)
 	cqv[0] = nic->tx_cq_blk;
 	cqv[1] = nic->rx_cq_blk;
 
+	if (trans_irqs) {
+		cqv[2] = nic->tx_cq;
+		cqv[3] = nic->rx_cq;
+		monitor_cqs = 4;
+	}
+
 try_again:
 	status = GNI_CqVectorMonitor(cqv,
-				     2,
+				     monitor_cqs,
 				     -1,
 				     &which);
 
@@ -965,6 +973,15 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 	uint32_t num_corespec_cpus = 0;
 	bool must_alloc_nic = false;
 	bool free_list_inited = false;
+	uint32_t trans_cq_flags = domain->gni_cq_modes;
+
+	if (getenv("GNIX_DEBUG_TRANS_IRQS")) {
+		trans_irqs = 1;
+		GNIX_WARN(FI_LOG_EP_DATA, "Enabling transaction CQ IRQs\n");
+	}
+
+	if (trans_irqs)
+		trans_cq_flags |= GNI_CQ_BLOCKING;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 
@@ -1082,8 +1099,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		status = GNI_CqCreate(nic->gni_nic_hndl,
 					domain->params.tx_cq_size,
 					0,                  /* no delay count */
-					GNI_CQ_NOBLOCK |
-					domain->gni_cq_modes,
+					trans_cq_flags,
 					NULL,              /* useless handler */
 					NULL,               /* useless handler
 								context */
@@ -1121,8 +1137,7 @@ int gnix_nic_alloc(struct gnix_fid_domain *domain,
 		status = GNI_CqCreate(nic->gni_nic_hndl,
 					domain->params.rx_cq_size,
 					0,
-					GNI_CQ_NOBLOCK |
-						domain->gni_cq_modes,
+					trans_cq_flags,
 					NULL,
 					NULL,
 					&nic->rx_cq);
