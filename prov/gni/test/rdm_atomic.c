@@ -3063,6 +3063,7 @@ void do_fetch_atomic_read(int len)
 	ssize_t sz;
 	struct fi_cq_tagged_entry cqe = { (void *) -1, UINT_MAX, UINT_MAX,
 					  (void *) -1, UINT_MAX, UINT_MAX };
+	uint64_t operand;
 	float operand_fp;
 	double operand_dp;
 	uint64_t w[NUMEPS] = {0}, r[NUMEPS] = {0}, w_e[NUMEPS] = {0};
