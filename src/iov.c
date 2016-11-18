@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2016 Intel Corporation, Inc.  All rights reserved.
+ * Copyright (c) 2016 Intel Corp., Inc.  All rights reserved.
  *
  * This software is available to you under a choice of one of two
  * licenses.  You may choose to be licensed under the terms of the GNU
@@ -30,38 +30,37 @@
  * SOFTWARE.
  */
 
-#include <stdlib.h>
+#include "config.h"
+
 #include <string.h>
 
-#include <fi_enosys.h>
-#include <fi_util.h>
+#include <fi.h>
+#include <fi_iov.h>
 
-int ofi_endpoint_init(struct fid_domain *domain, const struct util_prov *util_prov,
-		struct fi_info *info, struct util_ep *ep, void *context,
-		ofi_ep_progress_func progress, enum fi_match_type type)
+uint64_t ofi_copy_iov_buf(const struct iovec *iov, size_t iov_count,
+		void *buf, uint64_t rem, uint64_t skip, int dir)
 {
-	struct util_domain *util_domain;
-	int ret;
+	int i;
+	uint64_t done = 0, len;
+	char *iov_base;
 
-	util_domain = container_of(domain, struct util_domain, domain_fid);
+	for (i = 0; i < iov_count && rem; i++) {
+		len = iov[i].iov_len;
 
-	if (!info || !info->ep_attr || !info->rx_attr || !info->tx_attr)
-		return -FI_EINVAL;
+		if (skip > len) {
+			skip -= len;
+			continue;
+		}
 
-	ret = fi_check_info(util_prov, info, type);
-	if (ret)
-		return ret;
+		iov_base = (char *)iov[i].iov_base + skip;
+		len -= skip;
 
-	ep->ep_fid.fid.fclass = FI_CLASS_EP;
-	ep->ep_fid.fid.context = context;
-	ep->domain = util_domain;
-	ep->progress = progress;
-	atomic_inc(&util_domain->ref);
-	return 0;
-}
-
-int ofi_endpoint_close(struct util_ep *util_ep)
-{
-	atomic_dec(&util_ep->domain->ref);
-	return 0;
+		len = MIN(len, rem);
+		if (dir == OFI_COPY_BUF_TO_IOV)
+			memcpy(iov_base, (char *) buf + done, len);
+		else if (dir == OFI_COPY_IOV_TO_BUF)
+			memcpy((char *) buf + done, iov_base, len);
+		skip = 0, rem -= len, done += len;
+	}
+	return done;
 }

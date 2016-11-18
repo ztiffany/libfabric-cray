@@ -34,7 +34,15 @@
 #include <stdlib.h>
 #include <string.h>
 #include <inttypes.h>
+#include <fi_iov.h>
 #include "rxd.h"
+
+static const char *rxd_cq_strerror(struct fid_cq *cq_fid, int prov_errno,
+		const void *err_data, char *buf, size_t len)
+{
+	struct rxd_cq *rxd_cq = container_of(cq_fid, struct rxd_cq, util_cq.cq_fid);
+	return fi_cq_strerror(rxd_cq->dg_cq, prov_errno, err_data, buf, len);
+}
 
 static int rxd_cq_write_ctx(struct rxd_cq *cq,
 			     struct fi_cq_tagged_entry *cq_entry)
@@ -640,8 +648,8 @@ void rxd_ep_handle_data_msg(struct rxd_ep *ep, struct rxd_peer *peer,
 	uint64_t done;
 
 	ep->credits++;
-	done = rxd_ep_copy_iov_buf(iov, iov_count, data, ctrl->seg_size,
-				   rx_entry->done, RXD_COPY_BUF_TO_IOV);
+	done = ofi_copy_iov_buf(iov, iov_count, data, ctrl->seg_size,
+				   rx_entry->done, OFI_COPY_BUF_TO_IOV);
 	rx_entry->done += done;
 	rx_entry->window--;
 	rx_entry->exp_seg_no++;
@@ -1278,6 +1286,17 @@ static struct fi_ops rxd_cq_fi_ops = {
 	.ops_open = fi_no_ops_open,
 };
 
+static struct fi_ops_cq rxd_cq_ops = {
+	.size = sizeof(struct fi_ops_cq),
+	.read = ofi_cq_read,
+	.readfrom = ofi_cq_readfrom,
+	.readerr = ofi_cq_readerr,
+	.sread = ofi_cq_sread,
+	.sreadfrom = ofi_cq_sreadfrom,
+	.signal = ofi_cq_signal,
+	.strerror = rxd_cq_strerror,
+};
+
 int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq_fid, void *context)
 {
@@ -1341,7 +1360,7 @@ int rxd_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 
 	*cq_fid = &cq->util_cq.cq_fid;
 	(*cq_fid)->fid.ops = &rxd_cq_fi_ops;
-	*cq_fid = &cq->util_cq.cq_fid;
+	(*cq_fid)->ops = &rxd_cq_ops;
 	cq->domain = rxd_domain;
 	return 0;
 
