@@ -571,9 +571,6 @@ gnix_ep_msg_injectdata(struct fid_ep *ep, const void *buf, size_t len,
  * EP RMA API function implementations.
  ******************************************************************************/
 
-#define GNIX_RMA_READ_FLAGS_DEF		(FI_RMA | FI_READ)
-#define GNIX_RMA_WRITE_FLAGS_DEF	(FI_RMA | FI_WRITE)
-
 DIRECT_FN STATIC ssize_t gnix_ep_read(struct fid_ep *ep, void *buf, size_t len,
 				      void *desc, fi_addr_t src_addr, uint64_t addr,
 				      uint64_t key, void *context)
@@ -928,10 +925,7 @@ DIRECT_FN STATIC ssize_t gnix_ep_tinjectdata(struct fid_ep *ep, const void *buf,
  * EP atomic API implementation.
  ******************************************************************************/
 
-#define GNIX_ATOMIC_WRITE_FLAGS_DEF	(FI_ATOMIC | FI_WRITE)
-#define GNIX_ATOMIC_READ_FLAGS_DEF	(FI_ATOMIC | FI_READ)
-
-DIRECT_FN STATIC int gnix_ep_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_atomic_valid(struct fid_ep *ep,
 					  enum fi_datatype datatype,
 					  enum fi_op op, size_t *count)
 {
@@ -942,7 +936,7 @@ DIRECT_FN STATIC int gnix_ep_atomic_valid(struct fid_ep *ep,
 		0 : -FI_ENOENT;
 }
 
-DIRECT_FN STATIC int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 						enum fi_datatype datatype,
 						enum fi_op op, size_t *count)
 {
@@ -953,7 +947,7 @@ DIRECT_FN STATIC int gnix_ep_fetch_atomic_valid(struct fid_ep *ep,
 		0 : -FI_ENOENT;
 }
 
-DIRECT_FN STATIC int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
+DIRECT_FN int gnix_ep_cmp_atomic_valid(struct fid_ep *ep,
 					      enum fi_datatype datatype,
 					      enum fi_op op, size_t *count)
 {
