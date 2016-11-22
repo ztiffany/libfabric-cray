@@ -283,15 +283,6 @@ void sep_setup(void)
 		rx_addr[i] = fi_rx_addr(gni_addr[1], i, rx_ctx_bits);
 		dbg_printf("fi_rx_addr[%d] %016lx\n", i, rx_addr[i]);
 	}
-
-	/* test for inserting an ep_name that doesn't fit in the AV */
-	av_attr.rx_ctx_bits = 1;
-	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
-	cr_assert(!ret, "fi_av_open");
-	ret = fi_av_insert(t_av, ep_name[0], 1, &gni_addr[0], 0, NULL);
-	cr_assert(ret == -FI_EINVAL);
-	ret = fi_close(&t_av->fid);
-	cr_assert(!ret, "failure in closing av.");
 }
 
 static void sep_teardown(void)
@@ -538,8 +529,34 @@ check_iov_data(struct iovec *ib, struct iovec *ob, size_t cnt)
  * Test MSG functions
  ******************************************************************************/
 
-TestSuite(scalable, .init = sep_setup, .fini = sep_teardown,
-	  .disabled = false);
+TestSuite(scalable, .init = sep_setup, .fini = sep_teardown);
+
+Test(scalable, bind)
+{
+	int ret;
+	struct fi_av_attr av_attr = {0};
+
+	/* test if bind fails */
+	ret = fi_ep_bind(tx_ep[0][0], &tx_cq[0][0]->fid,
+			 FI_TRANSMIT);
+	cr_assert(ret, "fi_ep_bind should fail");
+
+	ret = fi_ep_bind(rx_ep[0][0], &rx_cq[0][0]->fid,
+			 FI_TRANSMIT);
+	cr_assert(ret, "fi_ep_bind should fail");
+
+	/* test for inserting an ep_name that doesn't fit in the AV */
+	av_attr.type = FI_AV_MAP;
+	av_attr.count = NUMEPS;
+	av_attr.rx_ctx_bits = 1;
+
+	ret = fi_av_open(dom[0], &av_attr, &t_av, NULL);
+	cr_assert(!ret, "fi_av_open");
+	ret = fi_av_insert(t_av, ep_name[0], 1, &gni_addr[0], 0, NULL);
+	cr_assert(ret == -FI_EINVAL);
+	ret = fi_close(&t_av->fid);
+	cr_assert(!ret, "failure in closing av.");
+}
 
 /*
  * ssize_t fi_send(struct fid_ep *ep, void *buf, size_t len,

@@ -297,7 +297,6 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 	struct gnix_fid_av  *av;
 	struct gnix_fid_sep *sep;
 	struct gnix_fid_cntr *cntr;
-	struct gnix_fid_trx *trx_priv;
 	struct gnix_fid_domain *domain_priv;
 
 	GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
@@ -307,8 +306,7 @@ static int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 		break;
 	case FI_CLASS_TX_CTX:
 	case FI_CLASS_RX_CTX:
-		trx_priv = container_of(fid, struct gnix_fid_trx, ep_fid);
-		return gnix_ep_bind(&trx_priv->ep->ep_fid.fid, bfid, flags);
+		return gnix_ep_bind(fid, bfid, flags);
 	default:
 		return -FI_ENOSYS;
 	}
