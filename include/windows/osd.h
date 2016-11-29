@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2016 Intel Corporation.  All rights reserved.
+ * Copyright (c) 2016 Cisco Systems, Inc.  All rights reserved.
  *
  * THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND,
  * EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF
@@ -23,6 +24,8 @@
 #include <malloc.h>
 #include <errno.h>
 #include "pthread.h"
+
+#include <sys/uio.h>
 
 #include <rdma/fi_errno.h>
 #include <rdma/fabric.h>
@@ -157,12 +160,6 @@ static inline char* strsep(char **stringp, const char *delim)
 	return ptr;
 }
 
-struct iovec
-{
-	void *iov_base; /* Pointer to data.  */
-	size_t iov_len; /* Length of data.  */
-};
-
 #define __attribute__(x)
 
 static inline int ofi_memalign(void **memptr, size_t alignment, size_t size)
@@ -203,9 +200,9 @@ static inline int ofi_sockerr(void)
 	}
 }
 
-static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout)
+static inline int fi_wait_cond(pthread_cond_t *cond, pthread_mutex_t *mut, int timeout_ms)
 {
-	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout);
+	return !SleepConditionVariableCS(cond, mut, (DWORD)timeout_ms);
 }
 
 int ofi_shm_map(struct util_shm *shm, const char *name, size_t size,

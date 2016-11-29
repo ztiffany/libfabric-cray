@@ -473,8 +473,7 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 			switch (hints->domain_attr->mr_mode) {
 			case FI_MR_UNSPEC:
 			case FI_MR_BASIC:
-				gnix_info->domain_attr->mr_mode =
-					hints->domain_attr->mr_mode;
+				gnix_info->domain_attr->mr_mode = FI_MR_BASIC;
 				break;
 			case FI_MR_SCALABLE:
 				goto err;
