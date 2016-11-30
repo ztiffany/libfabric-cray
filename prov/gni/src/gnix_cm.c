@@ -225,7 +225,17 @@ int _gnix_ep_progress(struct gnix_fid_ep *ep)
 	int ret, bytes_read;
 	struct gnix_pep_sock_connresp resp;
 
+	/* No lock, fast exit. */
+	if (ep->conn_state != GNIX_EP_CONNECTING) {
+		return FI_SUCCESS;
+	}
+
 	COND_ACQUIRE(ep->requires_lock, &ep->vc_lock);
+
+	if (ep->conn_state != GNIX_EP_CONNECTING) {
+		COND_RELEASE(ep->requires_lock, &ep->vc_lock);
+		return FI_SUCCESS;
+	}
 
 	/* Check for a connection response. */
 	bytes_read = read(ep->conn_fd, &resp, sizeof(resp));
@@ -368,6 +378,8 @@ DIRECT_FN STATIC int gnix_connect(struct fid_ep *ep, const void *addr,
 		ret = -FI_EIO;
 		goto err_write;
 	}
+
+	ep_priv->conn_state = GNIX_EP_CONNECTING;
 
 	COND_RELEASE(ep_priv->requires_lock, &ep_priv->vc_lock);
 
