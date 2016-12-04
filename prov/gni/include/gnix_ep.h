@@ -229,10 +229,10 @@ _gnix_fr_free(struct gnix_fid_ep *ep, struct gnix_fab_req *fr)
 {
 	assert(fr->gnix_ep == ep);
 
-	if (fr->msg.htd_buf_e != NULL) {
-		_gnix_ep_release_htd_buf(ep, fr->msg.htd_buf_e);
-		fr->msg.htd_buf_e = NULL;
-		fr->msg.htd_buf = NULL;
+	if (fr->htd_buf_e != NULL) {
+		_gnix_ep_release_htd_buf(ep, fr->htd_buf_e);
+		fr->htd_buf_e = NULL;
+		fr->htd_buf = NULL;
 	}
 
 	_gnix_fl_free(&fr->dlist, &ep->fr_freelist);

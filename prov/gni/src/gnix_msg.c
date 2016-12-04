@@ -597,7 +597,8 @@ static inline void __gnix_msg_iov_cpy_unaligned_head_tail_data(struct gnix_fab_r
 	/* Copy out the "middle" head and tail data found when building the iov request */
 	for (i = 0; i < req->msg.recv_iov_cnt; i++) {
 		if (req->msg.recv_info[i].tail_len) {
-			addr = (void *) ((uint8_t *) req->msg.htd_buf + (GNI_READ_ALIGN * i));
+			addr = (void *) ((uint8_t *) req->htd_buf +
+			       (GNI_READ_ALIGN * i));
 
 			recv_addr = (void *) (req->msg.recv_info[i].recv_addr +
 					      req->msg.recv_info[i].recv_len -
@@ -617,7 +618,7 @@ static inline void __gnix_msg_iov_cpy_unaligned_head_tail_data(struct gnix_fab_r
 			 * what we read from the htd_buf is just the actual head
 			 * data we are interested in.
 			 */
-			addr = (void *) ((uint8_t *) req->msg.htd_buf +
+			addr = (void *) ((uint8_t *) req->htd_buf +
 			     (GNI_READ_ALIGN * (i + GNIX_MAX_MSG_IOV_LIMIT)) +
 			     GNI_READ_ALIGN - req->msg.recv_info[i].head_len);
 			recv_addr = (void *) req->msg.recv_info[i].recv_addr;
@@ -1190,19 +1191,21 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 		 */
 		if (send_ptr & GNI_READ_ALIGN_MASK ||
 		    (send_ptr + get_len) & GNI_READ_ALIGN_MASK) {
-			if (req->msg.htd_buf_e == NULL) {
-				req->msg.htd_buf_e = _gnix_ep_get_htd_buf(ep);
+			if (req->htd_buf_e == NULL) {
+				req->htd_buf_e = _gnix_ep_get_htd_buf(ep);
 
 				/* There are no available htd bufs */
-				if (req->msg.htd_buf_e == NULL) {
+				if (req->htd_buf_e == NULL) {
 					atomic_set(&req->msg.outstanding_txds, 0);
 					req->work_fn = __gnix_rndzv_iov_req_post;
 					return _gnix_vc_queue_work_req(req);
 				}
 
-				req->msg.htd_buf = ((struct gnix_htd_buf *) req->msg.htd_buf_e)->buf;
-				req->msg.htd_mdh = _gnix_ep_get_htd_mdh(ep);
-				GNIX_DEBUG(FI_LOG_EP_DATA, "req->msg.htd_buf = %p\n", req->msg.htd_buf);
+				req->htd_buf = ((struct gnix_htd_buf *)
+						req->htd_buf_e)->buf;
+				req->htd_mdh = _gnix_ep_get_htd_mdh(ep);
+				GNIX_DEBUG(FI_LOG_EP_DATA,
+					   "req->htd_buf = %p\n", req->htd_buf);
 			}
 
 			head_off = send_ptr & GNI_READ_ALIGN_MASK;
@@ -1253,10 +1256,10 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 					cur_ct->ep_hndl = gni_ep;
 					cur_ct->remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
-					cur_ct->local_mem_hndl = req->msg.htd_mdh;
+					cur_ct->local_mem_hndl = req->htd_mdh;
 					cur_ct->length = GNI_READ_ALIGN;
 					cur_ct->remote_addr = (send_ptr + get_len + tail_len) & ~GNI_READ_ALIGN_MASK;
-					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) + (GNI_READ_ALIGN * recv_idx));
+					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->htd_buf) + (GNI_READ_ALIGN * recv_idx));
 					next_ct = &cur_ct->next_descr;
 				}
 
@@ -1277,10 +1280,10 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 					cur_ct->ep_hndl = gni_ep;
 					cur_ct->remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
-					cur_ct->local_mem_hndl = req->msg.htd_mdh;
+					cur_ct->local_mem_hndl = req->htd_mdh;
 					cur_ct->length = GNI_READ_ALIGN;
 					cur_ct->remote_addr = send_ptr - GNI_READ_ALIGN;
-					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) +
+					cur_ct->local_addr = (uint64_t) (((uint8_t *) req->htd_buf) +
 						(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
 					next_ct = &cur_ct->next_descr;
 				}
@@ -1313,8 +1316,8 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 					ct_txd->gni_desc.remote_addr = (send_ptr + get_len + tail_len) & ~GNI_READ_ALIGN_MASK;
 					ct_txd->gni_desc.remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
 
-					ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->msg.htd_buf + (GNI_READ_ALIGN * recv_idx));
-					ct_txd->gni_desc.local_mem_hndl = req->msg.htd_mdh;
+					ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->htd_buf + (GNI_READ_ALIGN * recv_idx));
+					ct_txd->gni_desc.local_mem_hndl = req->htd_mdh;
 
 					ct_txd->gni_desc.length = GNI_READ_ALIGN;
 
@@ -1338,10 +1341,10 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 
 						cur_ct->ep_hndl = gni_ep;
 						cur_ct->remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
-						cur_ct->local_mem_hndl = req->msg.htd_mdh;
+						cur_ct->local_mem_hndl = req->htd_mdh;
 						cur_ct->length = GNI_READ_ALIGN;
 						cur_ct->remote_addr = send_ptr - GNI_READ_ALIGN;
-						cur_ct->local_addr = (uint64_t) (((uint8_t *) req->msg.htd_buf) +
+						cur_ct->local_addr = (uint64_t) (((uint8_t *) req->htd_buf) +
 								(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
 						next_ct = &cur_ct->next_descr;
 					} else { /* New FMA ct */
@@ -1372,9 +1375,9 @@ static int __gnix_rndzv_iov_req_build(void *arg)
 						ct_txd->gni_desc.remote_addr = send_ptr - GNI_READ_ALIGN;
 						ct_txd->gni_desc.remote_mem_hndl = req->msg.send_info[send_idx].mem_hndl;
 
-						ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->msg.htd_buf +
+						ct_txd->gni_desc.local_addr = (uint64_t) ((uint8_t *) req->htd_buf +
 								(GNI_READ_ALIGN * (recv_idx + GNIX_MAX_MSG_IOV_LIMIT)));
-						ct_txd->gni_desc.local_mem_hndl = req->msg.htd_mdh;
+						ct_txd->gni_desc.local_mem_hndl = req->htd_mdh;
 
 						ct_txd->gni_desc.length = GNI_READ_ALIGN;
 

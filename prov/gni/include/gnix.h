@@ -749,11 +749,6 @@ struct gnix_fab_req_msg {
 	uint64_t                     recv_flags; /* protocol, API info */
 	size_t			     cum_recv_len;
 
-	/* @var htd_buf->buf "head(H) tail(T) data buf" layout: '[T|T|...|H|H]' */
-	struct slist_entry	     *htd_buf_e;
-	uint8_t			     *htd_buf;
-	gni_mem_handle_t	     htd_mdh;
-
 	uint64_t                     tag;
 	uint64_t                     ignore;
 	uint64_t                     imm;
@@ -999,6 +994,11 @@ struct gnix_fab_req {
 	struct gnix_vc            *vc;
 	int                       (*work_fn)(void *);
 	uint64_t                  flags;
+
+	/* @var htd_buf->buf head(H) tail(T) data buf layout:'[T|T|...|H|H]' */
+	struct slist_entry	     *htd_buf_e;
+	uint8_t			     *htd_buf;
+	gni_mem_handle_t	     htd_mdh;
 
 	/* TODO: change the size of this for unaligned data? */
 	struct gnix_tx_descriptor *iov_txds[GNIX_MAX_MSG_IOV_LIMIT];
