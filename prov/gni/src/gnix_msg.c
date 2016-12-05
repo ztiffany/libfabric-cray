@@ -646,7 +646,7 @@ static int __gnix_rndzv_req_complete(void *arg, gni_return_t tx_status)
 		 * unaligned bytes.  Bytes are copied from the request to the
 		 * user buffer once both TXDs arrive. */
 		if (txd->gni_desc.type == GNI_POST_FMA_GET)
-			req->msg.send_info[0].tail = *(uint32_t *)txd->int_buf;
+			req->msg.send_info[0].tail = *(uint32_t *)req->htd_buf;
 
 		/* Remember any failure.  Retransmit both TXDs once both are
 		 * complete. */
@@ -963,6 +963,17 @@ static int __gnix_rndzv_req(void *arg)
 			return -FI_ENOSPC;
 		}
 
+		if (req->htd_buf_e == NULL) {
+			req->htd_buf_e = _gnix_ep_get_htd_buf(ep);
+			if (req->htd_buf_e == NULL)
+				GNIX_WARN(FI_LOG_EP_DATA,
+					  "RAN OUT OF HTD_BUFS");
+				return -FI_ENOSPC;
+		}
+
+		req->htd_buf = ((struct gnix_htd_buf *) req->htd_buf_e)->buf;
+		req->htd_mdh = _gnix_ep_get_htd_mdh(ep);
+
 		tail_txd->completer_fn = __gnix_rndzv_req_complete;
 		tail_txd->req = req;
 
@@ -973,11 +984,11 @@ static int __gnix_rndzv_req(void *arg)
 		tail_txd->gni_desc.type = GNI_POST_FMA_GET;
 		tail_txd->gni_desc.cq_mode = GNI_CQMODE_GLOBAL_EVENT;
 		tail_txd->gni_desc.dlvr_mode = GNI_DLVMODE_PERFORMANCE;
-		tail_txd->gni_desc.local_mem_hndl = nic->int_bufs_mdh;
+		tail_txd->gni_desc.local_mem_hndl = req->htd_mdh;
 		tail_txd->gni_desc.remote_mem_hndl = req->msg.rma_mdh;
 		tail_txd->gni_desc.rdma_mode = 0;
 		tail_txd->gni_desc.src_cq_hndl = nic->tx_cq;
-		tail_txd->gni_desc.local_addr = (uint64_t)tail_txd->int_buf;
+		tail_txd->gni_desc.local_addr = (uint64_t)req->htd_buf;
 		tail_txd->gni_desc.remote_addr = (uint64_t)tail_data;
 		tail_txd->gni_desc.length = GNI_READ_ALIGN;
 
