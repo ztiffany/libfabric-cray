@@ -131,7 +131,7 @@ static void __gnix_rma_copy_indirect_get_data(struct gnix_tx_descriptor *txd)
 	int head_off = req->rma.rem_addr & GNI_READ_ALIGN_MASK;
 
 	memcpy((void *)req->rma.loc_addr,
-	       (void *) ((uint8_t *) req->htd_buf + head_off),
+	       (void *) ((uint8_t *) req->int_tx_buf + head_off),
 	       req->rma.len);
 }
 
@@ -149,7 +149,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  head_len, req->rma.loc_addr);
 		memcpy((void *)req->rma.loc_addr,
-		       (void *) ((uint8_t *) req->htd_buf + head_off),
+		       (void *) ((uint8_t *) req->int_tx_buf + head_off),
 		       head_len);
 	}
 
@@ -161,7 +161,7 @@ static void __gnix_rma_copy_chained_get_data(struct gnix_tx_descriptor *txd)
 		GNIX_INFO(FI_LOG_EP_DATA, "writing %d bytes to %p\n",
 			  tail_len, addr);
 		memcpy((void *)addr,
-		       (void *) ((uint8_t *) req->htd_buf + GNI_READ_ALIGN),
+		       (void *) ((uint8_t *) req->int_tx_buf + GNI_READ_ALIGN),
 		       tail_len);
 	}
 }
@@ -513,15 +513,15 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 	struct gnix_fid_mem_desc *loc_md;
 	struct gnix_fid_ep *ep = req->gnix_ep;
 
-	if (req->htd_buf_e == NULL) {
-		req->htd_buf_e = _gnix_ep_get_htd_buf(ep);
-		if (req->htd_buf_e == NULL)
-			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF HTD_BUFS");
+	if (req->int_tx_buf_e == NULL) {
+		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
+		if (req->int_tx_buf_e == NULL)
+			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			/* TODO Create growable list of buffers */
 	}
 
-	req->htd_buf = ((struct gnix_htd_buf *) req->htd_buf_e)->buf;
-	req->htd_mdh = _gnix_ep_get_htd_mdh(ep);
+	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
 
 	/* Copy head and tail through intermediate buffer.  Copy
 	 * aligned data directly to user buffer. */
@@ -544,8 +544,8 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 		txd->gni_ct_descs[0].remote_addr =
 				req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
 		txd->gni_ct_descs[0].remote_mem_hndl = *rem_mdh;
-		txd->gni_ct_descs[0].local_addr = (uint64_t)req->htd_buf;
-		txd->gni_ct_descs[0].local_mem_hndl = req->htd_mdh;
+		txd->gni_ct_descs[0].local_addr = (uint64_t)req->int_tx_buf;
+		txd->gni_ct_descs[0].local_mem_hndl = req->int_tx_mdh;
 
 		if (tail_len)
 			txd->gni_ct_descs[0].next_descr =
@@ -564,8 +564,8 @@ static void __gnix_rma_fill_pd_chained_get(struct gnix_fab_req *req,
 				 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 		txd->gni_ct_descs[desc_idx].remote_mem_hndl = *rem_mdh;
 		txd->gni_ct_descs[desc_idx].local_addr =
-				(uint64_t)req->htd_buf + GNI_READ_ALIGN;
-		txd->gni_ct_descs[desc_idx].local_mem_hndl = req->htd_mdh;
+				(uint64_t)req->int_tx_buf + GNI_READ_ALIGN;
+		txd->gni_ct_descs[desc_idx].local_mem_hndl = req->int_tx_mdh;
 		txd->gni_ct_descs[desc_idx].next_descr = NULL;
 	}
 
@@ -583,19 +583,19 @@ static void __gnix_rma_fill_pd_indirect_get(struct gnix_fab_req *req,
 	int head_off = req->rma.rem_addr & GNI_READ_ALIGN_MASK;
 	struct gnix_fid_ep *ep = req->gnix_ep;
 
-	if (req->htd_buf_e == NULL) {
-		req->htd_buf_e = _gnix_ep_get_htd_buf(ep);
-		if (req->htd_buf_e == NULL)
-			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF HTD_BUFS");
+	if (req->int_tx_buf_e == NULL) {
+		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
+		if (req->int_tx_buf_e == NULL)
+			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			/* TODO Create growable list of buffers */
 	}
 
-	req->htd_buf = ((struct gnix_htd_buf *) req->htd_buf_e)->buf;
-	req->htd_mdh = _gnix_ep_get_htd_mdh(ep);
+	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
 
 	/* Copy all data through an intermediate buffer. */
-	txd->gni_desc.local_addr = (uint64_t)req->htd_buf;
-	txd->gni_desc.local_mem_hndl = req->htd_mdh;
+	txd->gni_desc.local_addr = (uint64_t)req->int_tx_buf;
+	txd->gni_desc.local_mem_hndl = req->int_tx_mdh;
 	txd->gni_desc.length = CEILING(req->rma.len + head_off, GNI_READ_ALIGN);
 	txd->gni_desc.remote_addr =
 			(uint64_t)req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
@@ -661,16 +661,16 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	int head_off, head_len, tail_len;
 	int fma_chain = 0;
 
-	if (req->htd_buf_e == NULL) {
-		req->htd_buf_e = _gnix_ep_get_htd_buf(ep);
-		if (req->htd_buf_e == NULL)
-			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF HTD_BUFS");
+	if (req->int_tx_buf_e == NULL) {
+		req->int_tx_buf_e = _gnix_ep_get_int_tx_buf(ep);
+		if (req->int_tx_buf_e == NULL)
+			GNIX_FATAL(FI_LOG_EP_DATA, "RAN OUT OF INT_TX_BUFS");
 			return -FI_ENOSPC;
 			/* TODO Create growable list of buffers */
 	}
 
-	req->htd_buf = ((struct gnix_htd_buf *) req->htd_buf_e)->buf;
-	req->htd_mdh = _gnix_ep_get_htd_mdh(ep);
+	req->int_tx_buf = ((struct gnix_int_tx_buf *) req->int_tx_buf_e)->buf;
+	req->int_tx_mdh = _gnix_ep_get_int_tx_mdh(ep);
 
 	if (!gnix_ops_allowed(ep, req->vc->peer_caps, req->flags)) {
 		rc = __gnix_rma_post_err_no_retrans(req, FI_EOPNOTSUPP);
@@ -734,13 +734,13 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 	ct_txd->gni_desc.remote_mem_hndl = mdh;
 	ct_txd->gni_desc.rdma_mode = 0; /* check flags */
 	ct_txd->gni_desc.src_cq_hndl = nic->tx_cq; /* check flags */
-	ct_txd->gni_desc.local_mem_hndl = req->htd_mdh;
+	ct_txd->gni_desc.local_mem_hndl = req->int_tx_mdh;
 	ct_txd->gni_desc.length = GNI_READ_ALIGN;
 
 	if (head_off) {
 		ct_txd->gni_desc.remote_addr =
 				req->rma.rem_addr & ~GNI_READ_ALIGN_MASK;
-		ct_txd->gni_desc.local_addr = (uint64_t)req->htd_buf;
+		ct_txd->gni_desc.local_addr = (uint64_t)req->int_tx_buf;
 
 		if (tail_len) {
 			ct_txd->gni_desc.next_descr = &ct_txd->gni_ct_descs[0];
@@ -751,9 +751,10 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 					 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 			ct_txd->gni_ct_descs[0].remote_mem_hndl = mdh;
 			ct_txd->gni_ct_descs[0].local_addr =
-					(uint64_t)req->htd_buf +
+					(uint64_t)req->int_tx_buf +
 					GNI_READ_ALIGN;
-			ct_txd->gni_ct_descs[0].local_mem_hndl = req->htd_mdh;
+			ct_txd->gni_ct_descs[0].local_mem_hndl =
+					req->int_tx_mdh;
 			ct_txd->gni_ct_descs[0].next_descr = NULL;
 			fma_chain = 1;
 		}
@@ -762,7 +763,7 @@ int _gnix_rma_post_rdma_chain_req(void *data)
 				(req->rma.rem_addr +
 				 req->rma.len) & ~GNI_READ_ALIGN_MASK;
 		ct_txd->gni_desc.local_addr =
-				(uint64_t)req->htd_buf + GNI_READ_ALIGN;
+				(uint64_t)req->int_tx_buf + GNI_READ_ALIGN;
 	}
 
 	GNIX_LOG_DUMP_TXD(ct_txd);
