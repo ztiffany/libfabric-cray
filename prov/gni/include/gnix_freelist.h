@@ -112,7 +112,7 @@ extern int __gnix_fl_refill(struct gnix_freelist *fl, int n);
  * @return      FI_SUCCESS on success, -FI_ENOMEM or -FI_EAGAIN on failure
  */
 __attribute__((unused))
-static int inline _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl)
+static inline int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *fl)
 {
     int ret = FI_SUCCESS;
     struct dlist_entry *de = NULL;
