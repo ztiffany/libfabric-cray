@@ -71,7 +71,8 @@ int fi_ibv_rdm_req_match_by_info(struct dlist_entry *item, const void *info)
 			&&
 			(request->minfo.is_tagged ?
 			((request->minfo.tag & request->minfo.tagmask) ==
-			(minfo->tag          & request->minfo.tagmask)) : 1)
+			(minfo->tag          & request->minfo.tagmask)) :
+			(request->minfo.is_tagged == minfo->is_tagged))
 		);
 }
 
@@ -92,7 +93,8 @@ int fi_ibv_rdm_req_match_by_info2(struct dlist_entry *item, const void *info)
 			&&
 			(minfo->is_tagged ?
 			((request->minfo.tag & minfo->tagmask) ==
-			(minfo->tag          & minfo->tagmask)) : 1)
+			(minfo->tag          & minfo->tagmask)) :
+			(request->minfo.is_tagged == minfo->is_tagged))
 		);
 }
 
@@ -191,7 +193,7 @@ void fi_ibv_rdm_clean_queues(struct fi_ibv_rdm_ep* ep)
 		util_buf_release(fi_ibv_rdm_request_pool, request);
 	}
 
-	while ((request = fi_ibv_rdm_take_first_from_posted_queue())) {
+	while ((request = fi_ibv_rdm_take_first_from_posted_queue(ep))) {
 		if (request->iov_count > 0) {
 			util_buf_release(fi_ibv_rdm_extra_buffers_pool,
 					request->unexp_rbuf);
@@ -250,6 +252,8 @@ fi_ibv_rdm_send_common(struct fi_ibv_rdm_send_start_data* sdata)
 	request->state.rndv  = FI_IBV_STATE_RNDV_NOT_USED;
 	request->state.err   = FI_SUCCESS;
 
+	/* postponed_entry means that there are elements postponed to
+	 * send & current request must be queued */
 	const int in_order = (sdata->conn->postponed_entry) ? 0 : 1;
 	int ret = fi_ibv_rdm_req_hndl(request, FI_IBV_EVENT_SEND_START, sdata);
 
