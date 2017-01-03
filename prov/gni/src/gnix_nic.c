@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015-2016 Cray Inc. All rights reserved.
+ * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  * Copyright (c) 2015-2016 Los Alamos National Security, LLC.
  *                         All rights reserved.
  *
@@ -1329,7 +1329,7 @@ void _gnix_nic_init(void)
 {
 	int i, rc;
 
-	for (i = 0; i <= GNI_PTAG_MAX; i++) {
+	for (i = 0; i < GNI_PTAG_MAX; i++) {
 		dlist_init(&gnix_nic_list_ptag[i]);
 	}
 
