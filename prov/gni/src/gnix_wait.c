@@ -112,48 +112,46 @@ static void *__gnix_wait_nic_prog_thread_fn(void *the_arg)
 
 	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &prev_state);
 
-	pthread_setcanceltype(PTHREAD_CANCEL_ASYNCHRONOUS, NULL);
+	while (1) {
+		/* Check if we're tearing down. */
+		pthread_testcancel();
 
-try_again:
+		/* Wait until we're signaled to poll. */
+		pthread_mutex_lock(&gnix_wait_mutex);
+		if (!gnix_wait_thread_enabled)
+			pthread_cond_wait(&gnix_wait_cond, &gnix_wait_mutex);
+		pthread_mutex_unlock(&gnix_wait_mutex);
 
-	pthread_mutex_lock(&gnix_wait_mutex);
-	if (!gnix_wait_thread_enabled)
-		pthread_cond_wait(&gnix_wait_cond, &gnix_wait_mutex);
+		/* Progress all EQs. */
+		pthread_mutex_lock(&gnix_eq_list_lock);
 
-	pthread_mutex_unlock(&gnix_wait_mutex);
+		dlist_for_each_safe(&gnix_eq_list, eq1, eq2, gnix_fid_eq_list) {
+			_gnix_eq_progress(eq1);
+		}
 
-	pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, NULL);
+		pthread_mutex_unlock(&gnix_eq_list_lock);
 
-	/* Progress all EQs. */
-	pthread_mutex_lock(&gnix_eq_list_lock);
+		/* Progress all NICs. */
+		pthread_mutex_lock(&gnix_nic_list_lock);
 
-	dlist_for_each_safe(&gnix_eq_list, eq1, eq2, gnix_fid_eq_list) {
-		_gnix_eq_progress(eq1);
+		dlist_for_each_safe(&gnix_nic_list, nic1, nic2, gnix_nic_list) {
+			_gnix_nic_progress(nic1);
+		}
+
+		pthread_mutex_unlock(&gnix_nic_list_lock);
+
+		/* Progress all CM NICs. */
+		pthread_mutex_lock(&gnix_cm_nic_list_lock);
+
+		dlist_for_each_safe(&gnix_cm_nic_list, cm_nic1, cm_nic2,
+				    cm_nic_list) {
+			_gnix_cm_nic_progress((void *)cm_nic1);
+		}
+
+		pthread_mutex_unlock(&gnix_cm_nic_list_lock);
+
+		usleep(gnix_wait_thread_sleep_time);
 	}
-
-	pthread_mutex_unlock(&gnix_eq_list_lock);
-
-	/* Progress all NICs. */
-	pthread_mutex_lock(&gnix_nic_list_lock);
-
-	dlist_for_each_safe(&gnix_nic_list, nic1, nic2, gnix_nic_list) {
-		_gnix_nic_progress(nic1);
-	}
-
-	pthread_mutex_unlock(&gnix_nic_list_lock);
-
-	/* Progress all CM NICs. */
-	pthread_mutex_lock(&gnix_cm_nic_list_lock);
-
-	dlist_for_each_safe(&gnix_cm_nic_list, cm_nic1, cm_nic2, cm_nic_list) {
-		_gnix_cm_nic_progress((void *)cm_nic1);
-	}
-
-	pthread_mutex_unlock(&gnix_cm_nic_list_lock);
-
-	pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, NULL);
-	usleep(gnix_wait_thread_sleep_time);
-	goto try_again;
 
 	return NULL;
 }
@@ -189,15 +187,18 @@ static void __gnix_wait_stop_progress(void)
 	pthread_mutex_lock(&gnix_wait_mutex);
 	if (gnix_wait_thread) {
 		if (atomic_dec(&gnix_wait_refcnt) == 0) {
-			gnix_wait_thread_enabled++;
-			pthread_cond_signal(&gnix_wait_cond);
-			pthread_mutex_unlock(&gnix_wait_mutex);
-			GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
 			ret = pthread_cancel(gnix_wait_thread);
 			if (ret)
 				GNIX_WARN(WAIT_SUB,
 					  "pthread_cancel call returned %d\n",
 					  ret);
+
+			gnix_wait_thread_enabled++;
+			pthread_cond_signal(&gnix_wait_cond);
+			pthread_mutex_unlock(&gnix_wait_mutex);
+
+			GNIX_TRACE(FI_LOG_EP_CTRL, "\n");
+
 			ret = pthread_join(gnix_wait_thread, NULL);
 			if (ret)
 				GNIX_WARN(WAIT_SUB,

@@ -156,7 +156,9 @@ try_again:
 							&cqe);
 			} while (status == GNI_RC_SUCCESS);
 		}
-		_gnix_nic_progress((void *)nic);
+		pthread_setcancelstate(PTHREAD_CANCEL_DISABLE, &prev_state);
+		_gnix_nic_progress(nic);
+		pthread_setcancelstate(PTHREAD_CANCEL_ENABLE, &prev_state);
 		retry = 1;
 		break;
 	case GNI_RC_TIMEOUT:
