@@ -124,38 +124,6 @@ Test(gnix_freelist, freelist_refill_test)
 	_gnix_fl_destroy(&fl);
 }
 
-Test(gnix_freelist, freelist_zero_refill_test)
-{
-	struct gnix_freelist fl;
-	int i, ret;
-	const int num_elems = 71;
-	struct dlist_entry *elems[num_elems + 1];
-	const int refill_size = 0;
-
-	/* non-optimized code may not zero structures */
-	memset(&fl, 0x0, sizeof(struct gnix_freelist));
-
-	ret = _gnix_fl_init(sizeof(struct dlist_entry), 0,
-						num_elems, refill_size, 0, 0, &fl);
-	cr_assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
-
-	for (i = 0; i < num_elems; i++) {
-		ret = _gnix_fl_alloc(&elems[i], &fl);
-		cr_assert_eq(ret, FI_SUCCESS, "Failed to obtain dlist_entry");
-	}
-
-	cr_assert(_gnix_fl_empty(&fl), "Freelist not empty");
-
-	ret = _gnix_fl_alloc(&elems[num_elems], &fl);
-	cr_assert_eq(ret, -FI_ECANCELED, "Unexpected return code from "
-                 "_gnix_fl_alloc");
-
-	for (i = num_elems-1; i >= 0 ; i--)
-		_gnix_fl_free(elems[i], &fl);
-
-	_gnix_fl_destroy(&fl);
-}
-
 struct list_ts {
 	char dummy[7];
 	struct dlist_entry e;
@@ -181,7 +149,7 @@ Test(gnix_freelist, freelist_random_alloc_free)
 
 	ret = _gnix_fl_init(sizeof(struct list_ts),
 			     offsetof(struct list_ts, e),
-			     0, 1, 0, 0, &fl);
+			     0, 0, 0, 0, &fl);
 	cr_assert_eq(ret, FI_SUCCESS, "Failed to initialize freelist");
 
 	for (i = 0; i < n; i++) {
