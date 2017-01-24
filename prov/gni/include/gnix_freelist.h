@@ -77,7 +77,6 @@ struct gnix_freelist {
  * @param max_refill_size   Max refill size
  * @param fl                gnix_freelist
  * @return                  FI_SUCCESS on success, -FI_ENOMEM on failure
- * @note - If the refill_size is zero the freelist is not be growable.
  */
 int _gnix_fl_init(int elem_size, int offset, int init_size,
 		   int refill_size, int growth_factor,
@@ -93,7 +92,6 @@ int _gnix_fl_init(int elem_size, int offset, int init_size,
  * @param max_refill_size   Max refill size
  * @param fl                gnix_freelist
  * @return                  FI_SUCCESS on success, -FI_ENOMEM on failure
- * @note - If the refill_size is zero the freelist is not be growable.
  */
 int _gnix_fl_init_ts(int elem_size, int offset, int init_size,
 		      int refill_size, int growth_factor,
@@ -123,8 +121,8 @@ static inline int _gnix_fl_alloc(struct dlist_entry **e, struct gnix_freelist *f
 
     if (fl->ts)
         fastlock_acquire(&fl->lock);
-    
-    if (dlist_empty(&fl->freelist) && fl->refill_size) {
+
+    if (dlist_empty(&fl->freelist)) {
         ret = __gnix_fl_refill(fl, fl->refill_size);
         if (ret != FI_SUCCESS)
             goto err;
