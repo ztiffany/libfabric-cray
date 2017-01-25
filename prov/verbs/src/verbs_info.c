@@ -150,116 +150,6 @@ struct fi_ibv_rdm_sysaddr
 static struct fi_info *verbs_info = NULL;
 static pthread_mutex_t verbs_info_lock = PTHREAD_MUTEX_INITIALIZER;
 
-int fi_ibv_check_fabric_attr(const struct fi_fabric_attr *attr,
-			     const struct fi_info *info)
-{
-	if (attr->name && strcmp(attr->name, info->fabric_attr->name)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown fabric name\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->prov_version > info->fabric_attr->prov_version) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported provider version\n");
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
-int fi_ibv_check_domain_attr(const struct fi_domain_attr *attr,
-			     const struct fi_info *info)
-{
-	if (attr->name && strcmp(attr->name, info->domain_attr->name)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unknown domain name\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->threading) {
-	case FI_THREAD_UNSPEC:
-	case FI_THREAD_SAFE:
-	case FI_THREAD_FID:
-	case FI_THREAD_DOMAIN:
-	case FI_THREAD_COMPLETION:
-	case FI_THREAD_ENDPOINT:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Invalid threading model\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->control_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Given control progress mode not supported\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->data_progress) {
-	case FI_PROGRESS_UNSPEC:
-	case FI_PROGRESS_AUTO:
-	case FI_PROGRESS_MANUAL:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Given data progress mode not supported!\n");
-		return -FI_ENODATA;
-	}
-
-	switch (attr->mr_mode) {
-	case FI_MR_UNSPEC:
-	case FI_MR_BASIC:
-		break;
-	default:
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"MR mode not supported\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->mr_key_size > info->domain_attr->mr_key_size) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"MR key size too large\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_data_size > info->domain_attr->cq_data_size) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"CQ data size too large\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->cq_cnt > info->domain_attr->cq_cnt) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"cq_cnt exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->ep_cnt > info->domain_attr->ep_cnt) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"ep_cnt exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_tx_ctx > info->domain_attr->max_ep_tx_ctx) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"domain_attr: max_ep_tx_ctx exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	if (attr->max_ep_rx_ctx > info->domain_attr->max_ep_rx_ctx) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"domain_attr: max_ep_rx_ctx exceeds supported size\n");
-		return -FI_ENODATA;
-	}
-
-	return 0;
-}
-
 int fi_ibv_check_ep_attr(const struct fi_ep_attr *attr,
 			 const struct fi_info *info)
 {
@@ -459,13 +349,15 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->fabric_attr) {
-		ret = fi_ibv_check_fabric_attr(hints->fabric_attr, info);
+		ret = ofi_check_fabric_attr(&fi_ibv_prov, info->fabric_attr,
+				hints->fabric_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}
 
 	if (hints->domain_attr) {
-		ret = fi_ibv_check_domain_attr(hints->domain_attr, info);
+		ret = ofi_check_domain_attr(&fi_ibv_prov, info->domain_attr,
+				hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}
@@ -890,6 +782,10 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 	const char *ret_ptr;
 	int ret, num_verbs_ifs = 0;
 
+	char *iface = NULL;
+	size_t iface_len = 0;
+	int exact_match = 0;
+
 	ret = getifaddrs(&ifaddr);
 	if (ret) {
 		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
@@ -897,11 +793,34 @@ static int fi_ibv_getifaddrs(struct dlist_entry *verbs_devs)
 		return ret;
 	}
 
+	/* select best iface name based on user's input */
+	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface) == FI_SUCCESS) {
+		iface_len = strlen(iface);
+		if (iface_len > IFNAMSIZ) {
+			VERBS_INFO(FI_LOG_EP_CTRL,
+				   "Too long iface name: %s, max: %d\n",
+				   iface, IFNAMSIZ);
+			return -FI_EINVAL;
+		}
+		for (ifa = ifaddr; ifa && !exact_match; ifa = ifa->ifa_next)
+			exact_match = !strcmp(ifa->ifa_name, iface);
+	}
+
 	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
 		if (!ifa->ifa_addr || !(ifa->ifa_flags & IFF_UP) ||
 				!strcmp(ifa->ifa_name, "lo"))
 			continue;
-		// TODO call a function here that filters ifa based on interface name
+
+		if(iface) {
+			if(exact_match) {
+				if(strcmp(ifa->ifa_name, iface))
+					continue;
+			} else {
+				if(strncmp(ifa->ifa_name, iface, iface_len))
+					continue;
+			}
+		}
+
 		switch (ifa->ifa_addr->sa_family) {
 		case AF_INET:
 			ret_ptr = inet_ntop(AF_INET, &ofi_sin_addr(ifa->ifa_addr),
@@ -1118,36 +1037,13 @@ unlock:
 	return ret;
 }
 
-void fi_ibv_update_info(const struct fi_info *hints, struct fi_info *info)
-{
-	if (hints) {
-		if (hints->ep_attr) {
-			if (hints->ep_attr->tx_ctx_cnt)
-				info->ep_attr->tx_ctx_cnt = hints->ep_attr->tx_ctx_cnt;
-			if (hints->ep_attr->rx_ctx_cnt)
-				info->ep_attr->rx_ctx_cnt = hints->ep_attr->rx_ctx_cnt;
-		}
-
-		if (hints->tx_attr)
-			info->tx_attr->op_flags = hints->tx_attr->op_flags;
-
-		if (hints->rx_attr)
-			info->rx_attr->op_flags = hints->rx_attr->op_flags;
-
-		if (hints->handle)
-			info->handle = hints->handle;
-	} else {
-		info->tx_attr->op_flags = 0;
-		info->rx_attr->op_flags = 0;
-	}
-}
-
 int fi_ibv_find_fabric(const struct fi_fabric_attr *attr)
 {
 	struct fi_info *fi;
 
 	for (fi = verbs_info; fi; fi = fi->next) {
-		if (!fi_ibv_check_fabric_attr(attr, fi))
+		if (!ofi_check_fabric_attr(&fi_ibv_prov, fi->fabric_attr, attr,
+					FI_MATCH_EXACT))
 			return 0;
 	}
 
@@ -1192,8 +1088,6 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 			goto err1;
 		}
 
-		fi_ibv_update_info(hints, fi);
-
 		if (!*info)
 			*info = fi;
 		else
@@ -1208,70 +1102,6 @@ static int fi_ibv_get_matching_info(const char *dev_name, struct fi_info *hints,
 err1:
 	fi_freeinfo(*info);
 	return ret;
-}
-
-static int
-fi_ibv_rdm_find_sysaddrs(struct fi_ibv_rdm_sysaddr *iface_addr,
-			 struct fi_ibv_rdm_sysaddr *lo_addr)
-{
-	struct ifaddrs *ifaddr, *ifa;
-	char iface[IFNAMSIZ];
-	char *iface_tmp = "ib";
-	size_t iface_len = 2;
-	int ret;
-
-	if (!iface_addr || !lo_addr) {
-		return -FI_EINVAL;
-	}
-
-	iface_addr->is_found = 0;
-	lo_addr->is_found = 0;
-
-	if (fi_param_get_str(&fi_ibv_prov, "iface", &iface_tmp) == FI_SUCCESS) {
-		iface_len = strlen(iface_tmp);
-		if (iface_len > IFNAMSIZ) {
-			VERBS_INFO(FI_LOG_EP_CTRL,
-				   "Too long iface name: %s, max: %d\n",
-				   iface_tmp, IFNAMSIZ);
-			return -FI_EINVAL;
-		}
-	}
-	strncpy(iface, iface_tmp, iface_len);
-
-	ret = getifaddrs(&ifaddr);
-	if (ret) {
-		FI_WARN(&fi_ibv_prov, FI_LOG_FABRIC,
-				"Unable to get interface addresses\n");
-		return ret;
-	}
-
-	for (ifa = ifaddr; ifa; ifa = ifa->ifa_next) {
-		if (!iface_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, iface, iface_len)) {
-			memcpy(&iface_addr->addr, ifa->ifa_addr,
-				sizeof(iface_addr->addr));
-			iface_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC,
-				"iface addr %s:%u\n",
-				inet_ntoa(iface_addr->addr.sin_addr),
-				ntohs(iface_addr->addr.sin_port));
-		}
-		if (!lo_addr->is_found && (ifa->ifa_addr->sa_family == AF_INET) &&
-		    !strncmp(ifa->ifa_name, "lo", strlen(ifa->ifa_name))) {
-			memcpy(&lo_addr->addr, ifa->ifa_addr, sizeof(lo_addr->addr));
-			lo_addr->is_found = 1;
-			FI_INFO(&fi_ibv_prov, FI_LOG_FABRIC, "lo addr %s:%u\n",
-				inet_ntoa(lo_addr->addr.sin_addr),
-				ntohs(lo_addr->addr.sin_port));
-		}
-		if (iface_addr->is_found && lo_addr->is_found) {
-			break;
-		}
-	}
-
-	freeifaddrs(ifaddr);
-
-	return 0;
 }
 
 static inline int fi_ibv_retain_info(struct fi_info *info,
@@ -1310,42 +1140,6 @@ static inline int fi_ibv_retain_info(struct fi_info *info,
 	return retain;
 }
 
-static int fi_ibv_rdm_remove_nonaddr_info(struct fi_info **info)
-{
-	struct fi_info *fi, *prev, *tmp;
-	struct fi_ibv_rdm_sysaddr iface_addr, lo_addr;
-	int ret;
-
-	ret = fi_ibv_rdm_find_sysaddrs(&iface_addr, &lo_addr);
-	if (ret || (!iface_addr.is_found && !lo_addr.is_found)) {
-		return ret;
-	}
-
-	prev = NULL;
-	fi = *info;
-	while (fi) {
-		if (fi_ibv_retain_info(fi, &iface_addr, &lo_addr)) {
-			prev = fi;
-			fi = fi->next;
-		} else {
-			if (fi == *info) {
-				*info = (*info)->next;
-			}
-
-			if (prev) {
-				prev->next = fi->next;
-			}
-
-			tmp = fi;
-			fi = fi->next;
-			tmp->next = NULL;
-			fi_freeinfo(tmp);
-		}
-	}
-
-	return *info ? 0 : -FI_ENODEV;
-}
-
 int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		   uint64_t flags, struct fi_info *hints, struct fi_info **info)
 {
@@ -1370,13 +1164,6 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 		goto err;
 
 	ret = fi_ibv_fill_addr(flags, rai, *info, id);
-	if (ret) {
-		fi_freeinfo(*info);
-		goto err;
-	}
-
-	// TODO remove this and add a filtering function within fi_ibv_getifaddrs
-	ret = fi_ibv_rdm_remove_nonaddr_info(info);
 	if (ret) {
 		fi_freeinfo(*info);
 		goto err;
