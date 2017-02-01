@@ -256,7 +256,7 @@ Test(insertion, single)
 
 	cr_assert(!cq_priv->events->item_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert_eq(cq_priv->events->item_list.head,
@@ -278,12 +278,12 @@ Test(insertion, limit)
 	const size_t cq_size = cq_priv->attr.size;
 
 	for (size_t i = 0; i < cq_size; i++)
-		_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+		_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert(!cq_priv->events->free_list.head);
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	for (size_t i = 0; i < cq_size + 1; i++) {
 		ret = fi_cq_read(rcq, &entry, 1);
@@ -371,7 +371,7 @@ Test(reading, issue192)
 	char input_ctx = 'a';
 	struct fi_cq_entry entries[ENTRY_CNT];
 
-	_gnix_cq_add_event(cq_priv, &input_ctx, 0, 0, 0, 0, 0, 0);
+	_gnix_cq_add_event(cq_priv, NULL, &input_ctx, 0, 0, 0, 0, 0, 0);
 
 	ret = fi_cq_read(rcq, &entries, ENTRY_CNT);
 	cr_assert_eq(ret, 1);
@@ -444,7 +444,7 @@ static void cq_add_read(enum fi_cq_format format)
 
 	cr_assert(!cq_priv->events->item_list.head);
 
-	_gnix_cq_add_event(cq_priv, expected.op_context, expected.flags,
+	_gnix_cq_add_event(cq_priv, NULL, expected.op_context, expected.flags,
 			   expected.len, expected.buf, expected.data,
 			   expected.tag, 0x0);
 
@@ -483,7 +483,7 @@ static void cq_fill_test(enum fi_cq_format format)
 
 	cq_size = cq_priv->attr.size;
 	for (size_t i = 0; i < cq_size; i++) {
-		_gnix_cq_add_event(cq_priv, expected.op_context,
+		_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 				   expected.flags, expected.len,
 				   expected.buf, expected.data,
 				   expected.tag, 0x0);
@@ -492,7 +492,7 @@ static void cq_fill_test(enum fi_cq_format format)
 	cr_assert(cq_priv->events->item_list.head);
 	cr_assert(!cq_priv->events->free_list.head);
 
-	_gnix_cq_add_event(cq_priv, expected.op_context,
+	_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 			   expected.flags, 2 * expected.len, expected.buf,
 			   expected.data, expected.tag, 0x0);
 
@@ -552,7 +552,7 @@ static void cq_multi_read_test(enum fi_cq_format format)
 	cr_assert(!cq_priv->events->item_list.head);
 
 	for (size_t i = 0; i < count; i++) {
-		_gnix_cq_add_event(cq_priv, expected.op_context,
+		_gnix_cq_add_event(cq_priv, NULL, expected.op_context,
 				   expected.flags, expected.len,
 				   expected.buf, expected.data,
 				   expected.tag, 0x0);
@@ -671,7 +671,7 @@ Test(cq_msg, multi_sread, .init = cq_wait_unspec_setup, .disabled = false)
 	cr_assert_eq(ret, -FI_EAGAIN);
 
 	for (size_t i = 0; i < count; i++)
-		_gnix_cq_add_event(cq_priv, 0, (uint64_t) i, 0, 0, 0, 0, 0);
+		_gnix_cq_add_event(cq_priv, NULL, 0, (uint64_t) i, 0, 0, 0, 0, 0);
 
 	cr_assert(cq_priv->events->item_list.head);
 
