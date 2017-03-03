@@ -234,7 +234,7 @@ int fi_ibv_check_rx_attr(const struct fi_rx_attr *attr,
 	}
 
 	compare_mode = attr->mode ? attr->mode : hints->mode;
-	
+
 	check_mode = FI_IBV_EP_TYPE_IS_RDM(info) ? VERBS_RDM_MODE :
 		(hints->caps & FI_RMA) ? info->rx_attr->mode : VERBS_MODE;
 
@@ -357,8 +357,9 @@ static int fi_ibv_check_hints(const struct fi_info *hints,
 	}
 
 	if (hints->domain_attr) {
-		ret = ofi_check_domain_attr(&fi_ibv_prov, info->domain_attr,
-				hints->domain_attr, FI_MATCH_EXACT);
+		ret = ofi_check_domain_attr(&fi_ibv_prov, OFI_TODO_API_VERSION,
+					    info->domain_attr,
+					    hints->domain_attr, FI_MATCH_EXACT);
 		if (ret)
 			return ret;
 	}
@@ -870,9 +871,10 @@ err1:
 	return ret;
 }
 
-int fi_ibv_get_srcaddr_devs(struct fi_info *info)
+static int fi_ibv_get_srcaddr_devs(struct fi_info **info)
 {
 	struct fi_info *fi, *add_info;
+	struct fi_info *fi_unconf = NULL, *fi_prev = NULL;
 	struct verbs_dev_info *dev;
 	struct verbs_addr *addr;
 	int ret = 0;
@@ -888,35 +890,70 @@ int fi_ibv_get_srcaddr_devs(struct fi_info *info)
 		return 0;
 	}
 
-	for (fi = info; fi; fi = fi->next) {
+	for (fi = *info; fi; fi = fi->next) {
 		dlist_foreach_container(&verbs_devs, dev, entry)
-			if (!strncmp(fi->domain_attr->name, dev->name, strlen(dev->name)))
-				break;
+			if (!strncmp(fi->domain_attr->name, dev->name, strlen(dev->name))) {
+				dlist_foreach_container(&dev->addrs, addr, entry) {
+					/* When a device has multiple interfaces/addresses configured
+					 * duplicate fi_info and add the address info. fi->src_addr
+					 * would have been set in the previous iteration */
+					if (fi->src_addr) {
+						if (!(add_info = fi_dupinfo(fi))) {
+							ret = -FI_ENOMEM;
+							goto out;
+						}
 
-		dlist_foreach_container(&dev->addrs, addr, entry) {
-			/* When a device has multiple interfaces/addresses configured
-			 * duplicate fi_info and add the address info. fi->src_addr
-			 * would have been set in the previous iteration */
-			if (fi->src_addr) {
-				if (!(add_info = fi_dupinfo(fi))) {
-					ret = -FI_ENOMEM;
-					goto out;
+						add_info->next = fi->next;
+						fi->next = add_info;
+						fi = add_info;
+					}
+
+					ret = fi_ibv_rai_to_fi(addr->rai, fi);
+					if (ret)
+						goto out;
 				}
-
-				add_info->next = fi->next;
-				fi->next = add_info;
-				fi = add_info;
+				break;
 			}
+	}
 
-			ret = fi_ibv_rai_to_fi(addr->rai, fi);
-			if (ret)
-				goto out;
+        /* re-order info: move info without src_addr to tail */
+	for (fi = *info; fi;) {
+		if (!fi->src_addr) {
+			/* re-link list - exclude current element */
+			if (fi == *info) {
+				*info = fi->next;
+				fi->next = fi_unconf;
+				fi_unconf = fi;
+				fi = *info;
+			} else {
+				assert(fi_prev);
+				fi_prev->next = fi->next;
+				fi->next = fi_unconf;
+				fi_unconf = fi;
+				fi = fi_prev->next;
+			}
+		} else {
+			fi_prev = fi;
+			fi = fi->next;
 		}
 	}
+
+	/* append excluded elements to tail of list */
+	if (fi_unconf) {
+		if (fi_prev) {
+			assert(!fi_prev->next);
+			fi_prev->next = fi_unconf;
+		} else if (*info) {
+			assert(!(*info)->next);
+			(*info)->next = fi_unconf;
+		} else /* !(*info) */ {
+			(*info) = fi_unconf;
+		}
+	}
+
 out:
 	fi_ibv_verbs_devs_free(&verbs_devs);
 	return ret;
-
 }
 
 static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
@@ -932,7 +969,7 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 }
 
 static int fi_ibv_fill_addr(uint64_t flags, struct rdma_addrinfo *rai,
-		struct fi_info *info, struct rdma_cm_id *id)
+		struct fi_info **info, struct rdma_cm_id *id)
 {
 	struct fi_info *fi;
 	struct sockaddr *local_addr;
@@ -962,7 +999,7 @@ static int fi_ibv_fill_addr(uint64_t flags, struct rdma_addrinfo *rai,
 			fi_ibv_sockaddr_set_port(rai->ai_src_addr, 0);
 		}
 
-		for (fi = info; fi; fi = fi->next) {
+		for (fi = *info; fi; fi = fi->next) {
 			ret = fi_ibv_rai_to_fi(rai, fi);
 			if (ret)
 				return ret;
@@ -1130,7 +1167,7 @@ int fi_ibv_getinfo(uint32_t version, const char *node, const char *service,
 	if (ret)
 		goto err;
 
-	ret = fi_ibv_fill_addr(flags, rai, *info, id);
+	ret = fi_ibv_fill_addr(flags, rai, info, id);
 	if (ret) {
 		fi_freeinfo(*info);
 		goto err;
