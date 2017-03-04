@@ -87,16 +87,25 @@ fi_ibv_rdm_prepare_rma_request(struct fi_ibv_rdm_request *request,
 
 static int fi_ibv_rdm_tagged_getname(fid_t fid, void *addr, size_t * addrlen)
 {
-	struct fi_ibv_rdm_ep *ep =
-		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+	struct fi_ibv_rdm_ep *ep;
+
+	if (fid->fclass == FI_CLASS_EP) {
+ 		ep = container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
+	} else {
+		VERBS_INFO(FI_LOG_EP_CTRL, "Invalid fid class: %d\n",
+			  fid->fclass);
+		return -FI_EINVAL;
+	}
 
 	if (FI_IBV_RDM_DFLT_ADDRLEN > *addrlen) {
 		*addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
 		return -FI_ETOOSMALL;
 	}
+
 	memset(addr, 0, *addrlen);
 	memcpy(addr, &ep->my_addr, FI_IBV_RDM_DFLT_ADDRLEN);
-	ep->addrlen = *addrlen;
+	*addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
+	ep->addrlen = FI_IBV_RDM_DFLT_ADDRLEN;
 
 	return 0;
 }
@@ -280,14 +289,12 @@ static ssize_t fi_ibv_rdm_tagged_senddatato(struct fid_ep *fid, const void *buf,
 {
 	struct fi_ibv_rdm_ep *ep_rdm = 
 		container_of(fid, struct fi_ibv_rdm_ep, ep_fid);
-
 	struct fi_ibv_rdm_send_start_data sdata = {
 		.ep_rdm = container_of(fid, struct fi_ibv_rdm_ep, ep_fid),
 		.conn = ep_rdm->av->addr_to_conn(ep_rdm, dest_addr),
 		.data_len = len,
 		.context = context,
-		.flags = FI_TAGGED | FI_SEND |
-			(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION),
+		.flags = FI_TAGGED | FI_SEND | GET_TX_COMP(ep_rdm),
 		.tag = tag,
 		.is_tagged = 1,
 		.buf.src_addr = (void*)buf,
@@ -319,8 +326,7 @@ static ssize_t fi_ibv_rdm_tagged_sendmsg(struct fid_ep *ep,
 		.conn = ep_rdm->av->addr_to_conn(ep_rdm, msg->addr),
 		.data_len = 0,
 		.context = msg->context,
-		.flags = FI_TAGGED | FI_SEND | (ep_rdm->tx_selective_completion ?
-			(flags & FI_COMPLETION) : FI_COMPLETION),
+		.flags = FI_TAGGED | FI_SEND | GET_TX_COMP_FLAG(ep_rdm, flags),
 		.tag = msg->tag,
 		.is_tagged = 1,
 		.buf.src_addr = NULL,
@@ -385,8 +391,7 @@ static ssize_t fi_ibv_rdm_tagged_sendv(struct fid_ep *ep,
 		.data = 0
 	};
 
-	return fi_ibv_rdm_tagged_sendmsg(ep, &msg,
-		(ep_rdm->tx_selective_completion ? 0ULL : FI_COMPLETION));
+	return fi_ibv_rdm_tagged_sendmsg(ep, &msg, GET_TX_COMP(ep_rdm));
 }
 
 struct fi_ops_tagged fi_ibv_rdm_tagged_ops = {
