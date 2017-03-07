@@ -444,7 +444,10 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->send_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 
@@ -457,7 +460,10 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->write_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 
@@ -470,7 +476,10 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->rwrite_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 		}
@@ -492,7 +501,10 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->recv_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 
@@ -505,7 +517,10 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->read_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 
@@ -518,13 +533,15 @@ DIRECT_FN STATIC int gnix_sep_bind(fid_t fid, struct fid *bfid, uint64_t flags)
 					break;
 				}
 				ep->rread_cntr = cntr;
-				_gnix_cntr_poll_nic_add(cntr, ep->nic);
+				_gnix_cntr_poll_obj_add(cntr, ep->nic,
+							_gnix_nic_progress);
+				_gnix_cntr_poll_obj_add(cntr, ep->cm_nic,
+							_gnix_cm_nic_progress);
 				_gnix_ref_get(cntr);
 			}
 		}
 
 		break;
-			break;
 	default:
 		ret = -FI_ENOSYS;
 		break;
