@@ -267,7 +267,6 @@ ssize_t _gnix_cq_add_event(struct gnix_fid_cq *cq, struct gnix_fid_ep *ep,
 	struct slist_entry *item;
 	uint64_t mask;
 
-	/* TODO: handle scalable eps - note info is NULL for scalable eps */
 	if (ep) {
 		if (ep->info && ep->info->mode & FI_NOTIFY_FLAGS_ONLY) {
 			mask = (FI_REMOTE_CQ_DATA | FI_MULTI_RECV);
