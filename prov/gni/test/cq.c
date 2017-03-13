@@ -359,7 +359,7 @@ Test(reading, error)
 	cr_assert(!cq_priv->errors->free_list.head);
 
 	_gnix_cq_add_error(cq_priv, &input_ctx, flags, len, buf, data, tag,
-			   olen, err, prov_errno, 0);
+			   olen, err, prov_errno, 0, 0);
 
 	cr_assert(cq_priv->errors->item_list.head);
 
@@ -391,7 +391,7 @@ Test(reading, error)
 	cr_assert_eq(err_entry.olen, olen);
 	cr_assert_eq(err_entry.err, err);
 	cr_assert_eq(err_entry.prov_errno, prov_errno);
-	cr_assert_eq(err_entry.err_data, 0);
+	cr_assert(err_entry.err_data == NULL);
 }
 
 #define ENTRY_CNT 5
@@ -538,7 +538,7 @@ static void cq_fill_test(enum fi_cq_format format)
 	 */
 
 	_gnix_cq_add_error(cq_priv, &input_ctx, flags, len, 0, 0, 0, 0, 0, 0,
-			   0);
+			   0, 0);
 	cr_assert(cq_priv->errors->item_list.head);
 
 	ret = fi_cq_read(rcq, &entry, 1);
