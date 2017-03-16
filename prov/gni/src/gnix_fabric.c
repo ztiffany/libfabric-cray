@@ -393,6 +393,20 @@ static int _gnix_ep_getinfo(enum fi_ep_type ep_type, uint32_t version,
 	if (!gnix_info)
 		return -FI_ENOMEM;
 
+	if (hints->addr_format == FI_ADDR_STR) {
+		gnix_info->addr_format = FI_ADDR_STR;
+		/* TODO: uncomment the ifdef below after the 1.5 release */
+#if 0
+		if (!FI_VERSION_GE(version, FI_VERSION(1, 5))) {
+			GNIX_WARN(FI_LOG_FABRIC, "FI_ADDR_STR is only "
+				"supported in api versions >= 1.5 but the "
+				"current api version is: %u.%u",
+				  FI_MAJOR(version), FI_MINOR(version));
+			goto err;
+		}
+#endif
+	}
+
 	gnix_info->ep_attr->type = ep_type;
 
 	if (hints) {
