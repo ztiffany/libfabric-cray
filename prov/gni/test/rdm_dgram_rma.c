@@ -669,6 +669,7 @@ void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
 	cr_assert(tcqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(tcqe->flags == flags, "CQE flags mismatch");
 
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
 	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps)) {
 		cr_assert(tcqe->data == data, "CQE data invalid");
 	} else {

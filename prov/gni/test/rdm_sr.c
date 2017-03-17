@@ -566,7 +566,8 @@ static inline void rdm_sr_check_cqe(struct fi_cq_tagged_entry *cqe, void *ctx,
 			cr_assert(cqe->buf == NULL, "CQE address mismatch");
 
 
-		if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps))
 			cr_assert(cqe->data == data, "CQE data mismatch");
 	} else {
 		cr_assert(cqe->len == 0, "Invalid CQE length");
