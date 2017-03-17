@@ -53,6 +53,7 @@
 
 #include <criterion/criterion.h>
 #include "gnix_rdma_headers.h"
+#include "common.h"
 
 #if 1
 #define dbg_printf(...)
@@ -99,6 +100,7 @@ static uint64_t writes[2] = {0}, reads[2] = {0}, write_errs[2] = {0},
 	read_errs[2] = {0};
 #define MLOOPS 1000
 static int dgm_fail;
+static bool fi_more_set;
 
 void common_setup(void)
 {
@@ -491,6 +493,7 @@ void rdm_rma_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_RDM;
+	hints->caps = FI_RMA_EVENT;
 	common_setup();
 }
 
@@ -499,6 +502,7 @@ void dgram_setup(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
 	common_setup();
 }
 
@@ -507,6 +511,7 @@ void dgram_setup_1dom(void)
 	hints = fi_allocinfo();
 	cr_assert(hints, "fi_allocinfo");
 	hints->ep_attr->type = FI_EP_DGRAM;
+	hints->caps = FI_RMA_EVENT;
 	common_setup_1dom();
 }
 
@@ -657,12 +662,15 @@ int check_data(char *buf1, char *buf2, int len)
 }
 
 void rdm_rma_check_tcqe(struct fi_cq_tagged_entry *tcqe, void *ctx,
-			uint64_t flags, uint64_t data)
+			uint64_t flags, uint64_t data, struct fid_ep *fid_ep)
 {
+	struct gnix_fid_ep *gnix_ep = get_gnix_ep(fid_ep);
+
 	cr_assert(tcqe->op_context == ctx, "CQE Context mismatch");
 	cr_assert(tcqe->flags == flags, "CQE flags mismatch");
 
-	if (flags & FI_REMOTE_CQ_DATA) {
+	/* TODO: Remove GNIX_ALLOW_FI_REMOTE_CQ_DATA and only check flags for FI_RMA_EVENT */
+	if (GNIX_ALLOW_FI_REMOTE_CQ_DATA(flags, gnix_ep->caps)) {
 		cr_assert(tcqe->data == data, "CQE data invalid");
 	} else {
 		cr_assert(tcqe->data == 0, "CQE data invalid");
@@ -701,11 +709,20 @@ void rdm_rma_check_cntrs(uint64_t w[2], uint64_t r[2], uint64_t w_e[2],
 	cr_assert(fi_cntr_readerr(read_cntr[1]) == read_errs[1],
 		  "Bad read err count");
 
-	if (hints->caps & FI_RMA_EVENT) {
+	/*
+	 * These tests should be refactored and all occurrences of
+	 * fi_more_set should be removed.
+	 *
+	 * When fi_more_set is true, we do not want to check the rwrite and
+	 * rread counters since they are not being used within the provider.
+	 */
+	if (hints->caps & FI_RMA_EVENT && fi_more_set == false) {
 		cr_assert(fi_cntr_read(rwrite_cntr) == writes[0],
-			  "Bad rwrite count");
+			  "Bad rwrite count: expected(%lu) actual(%lu)",
+			  writes[0], fi_cntr_read(rwrite_cntr));
 		cr_assert(fi_cntr_read(rread_cntr) == reads[0],
-			  "Bad rread count");
+			  "Bad rread count: expected(%lu) actual(%lu)",
+			  reads[0], fi_cntr_read(rread_cntr));
 		cr_assert(fi_cntr_readerr(rwrite_cntr) == 0,
 			  "Bad rwrite err count");
 		cr_assert(fi_cntr_readerr(rread_cntr) == 0,
@@ -776,7 +793,7 @@ void do_write(int len)
 		return;
 	}
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -851,7 +868,7 @@ void do_writev(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -937,7 +954,7 @@ void do_writemsg(int len)
 		return;
 	}
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1040,14 +1057,14 @@ void do_writemsg_more(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target2, FI_RMA | FI_WRITE, 0, ep[0]);
 
 
         w[0] = 2;
@@ -1062,7 +1079,9 @@ void do_writemsg_more(int len)
 
 Test(rdm_rma, writemsgmore)
 {
+	fi_more_set = true;
 	xfer_for_each_size(do_writemsg_more, 8, BUF_SZ);
+	fi_more_set = false;
 }
 
 void do_mixed_more(int len)
@@ -1203,7 +1222,7 @@ void do_write_fence(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	/* reset cqe */
 	cqe.op_context = cqe.buf = (void *) -1;
@@ -1215,7 +1234,7 @@ void do_write_fence(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 2;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1355,7 +1374,7 @@ void do_writedata(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1371,7 +1390,7 @@ void do_writedata(int len)
 
 	rdm_rma_check_tcqe(&dcqe, NULL,
 			   (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-			   WRITE_DATA);
+			   WRITE_DATA, ep[1]);
 }
 
 Test(rdm_rma, writedata)
@@ -1452,7 +1471,7 @@ void do_inject_writedata(int len)
 
 	rdm_rma_check_tcqe(&dcqe, NULL,
 			   (FI_RMA | FI_REMOTE_WRITE | FI_REMOTE_CQ_DATA),
-			   INJECTWRITE_DATA);
+			   INJECTWRITE_DATA, ep[1]);
 }
 
 Test(rdm_rma, inject_writedata)
@@ -1513,7 +1532,7 @@ void do_read(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0, ep[0]);
 
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1568,7 +1587,7 @@ void do_readv(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, ep[0]);
 
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1636,7 +1655,7 @@ void do_readmsg(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_READ, 0, ep[0]);
 
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1742,14 +1761,14 @@ void do_readmsg_more(int len, void *s, void *t, int len2, void *s2, void *t2)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_READ, 0, ep[0]);
 
 	while ((ret = fi_cq_read(send_cq[0], &cqe, 1)) == -FI_EAGAIN) {
 		pthread_yield();
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, t2, FI_RMA | FI_READ, 0, ep[0]);
 
 	r[0] = 2;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1840,7 +1859,9 @@ void do_read_alignment_more(void)
 
 Test(rdm_rma, readmsgmore)
 {
+	fi_more_set = true;
 	do_read_alignment_more();
+	fi_more_set = false;
 }
 
 void inject_common(void)
@@ -1885,7 +1906,7 @@ void inject_common(void)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1931,7 +1952,7 @@ void do_write_autoreg(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -1976,7 +1997,7 @@ void do_write_autoreg_uncached(int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, target, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -2153,7 +2174,7 @@ void do_read_buf(void *s, void *t, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0);
+	rdm_rma_check_tcqe(&cqe, (void *)READ_CTX, FI_RMA | FI_READ, 0, ep[0]);
 
 	r[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -2227,7 +2248,7 @@ void do_write_buf(void *s, void *t, int len)
 	}
 
 	cr_assert_eq(ret, 1);
-	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0);
+	rdm_rma_check_tcqe(&cqe, t, FI_RMA | FI_WRITE, 0, ep[0]);
 
 	w[0] = 1;
 	rdm_rma_check_cntrs(w, r, w_e, r_e);
@@ -2344,7 +2365,7 @@ void do_trigger(int len)
 
 		cr_assert_eq(ret, 1);
 
-		rdm_rma_check_tcqe(&cqe, ctxs[i], FI_RMA | FI_WRITE, 0);
+		rdm_rma_check_tcqe(&cqe, ctxs[i], FI_RMA | FI_WRITE, 0, ep[0]);
 	}
 
 	sz = fi_cntr_set(write_cntr[0], 0);
