@@ -284,7 +284,6 @@ static const uint32_t default_rx_cq_size = 16384;
 static const uint32_t default_tx_cq_size = 2048;
 static const uint32_t default_max_retransmits = 5;
 static const int32_t default_err_inject_count; /* static var is zeroed */
-static const uint32_t default_dgram_progress_timeout = 100;
 
 static int __gnix_string_to_mr_type(const char *name)
 {
@@ -396,9 +395,6 @@ __gnix_dom_ops_get_val(struct fid *fid, dom_ops_val_t t, void *val)
 			  "GNI provider XPMEM support not configured\n");
 #endif
 		break;
-	case GNI_DGRAM_PROGRESS_TIMEOUT:
-		*(uint32_t *)val = domain->params.dgram_progress_timeout;
-		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
 		return -FI_EINVAL;
@@ -507,9 +503,6 @@ __gnix_dom_ops_set_val(struct fid *fid, dom_ops_val_t t, void *val)
 		GNIX_WARN(FI_LOG_DOMAIN,
 			  "GNI provider XPMEM support not configured\n");
 #endif
-		break;
-	case GNI_DGRAM_PROGRESS_TIMEOUT:
-		domain->params.dgram_progress_timeout = *(uint32_t *)val;
 		break;
 	default:
 		GNIX_WARN(FI_LOG_DOMAIN, ("Invalid dom_ops_val\n"));
@@ -636,7 +629,6 @@ DIRECT_FN int gnix_domain_open(struct fid_fabric *fabric, struct fi_info *info,
 #else
 	domain->params.xpmem_enabled = false;
 #endif
-	domain->params.dgram_progress_timeout = default_dgram_progress_timeout;
 
 	domain->gni_cq_modes = gnix_def_gni_cq_modes;
 	_gnix_ref_init(&domain->ref_cnt, 1, __domain_destruct);

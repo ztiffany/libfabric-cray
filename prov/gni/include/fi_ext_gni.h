@@ -65,7 +65,6 @@ typedef enum dom_ops_val { GNI_MSG_RENDEZVOUS_THRESHOLD,
 			   GNI_MR_HARD_REG_LIMIT,
 			   GNI_MR_HARD_STALE_REG_LIMIT,
 			   GNI_XPMEM_ENABLE,
-			   GNI_DGRAM_PROGRESS_TIMEOUT,
 			   GNI_NUM_DOM_OPS
 } dom_ops_val_t;
 
@@ -124,7 +123,6 @@ struct gnix_ops_domain {
 	uint32_t max_retransmits;
 	int32_t err_inject_count;
 	bool xpmem_enabled;
-	uint32_t dgram_progress_timeout;
 };
 
 struct fi_gni_ops_fab {
