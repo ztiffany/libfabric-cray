@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2015 Los Alamos National Security, LLC. All rights reserved.
+ * Copyright (c) 2015-2017 Los Alamos National Security, LLC. All rights reserved.
  * Copyright (c) 2015-2017 Cray Inc. All rights reserved.
  *
  * This software is available to you under a choice of one of two

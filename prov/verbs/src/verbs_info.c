@@ -340,15 +340,14 @@ static int fi_ibv_check_hints(uint32_t version, const struct fi_info *hints,
 	int ret;
 
 	if (hints->caps & ~(info->caps)) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Unsupported capabilities\n");
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "Unsupported capabilities\n");
+		FI_INFO_CHECK(&fi_ibv_prov, hints, info, caps, FI_TYPE_CAPS);
 		return -FI_ENODATA;
 	}
 
 	if ((hints->mode & info->mode) != info->mode) {
-		FI_INFO(&fi_ibv_prov, FI_LOG_CORE,
-			"Required hints mode bits not set. Expected:0x%llx"
-			" Given:0x%llx\n", info->mode, hints->mode);
+		FI_INFO(&fi_ibv_prov, FI_LOG_CORE, "needed mode not set\n");
+		FI_INFO_MODE(&fi_ibv_prov, hints, info);
 		return -FI_ENODATA;
 	}
 
@@ -969,6 +968,13 @@ static void fi_ibv_sockaddr_set_port(struct sockaddr *sa, uint16_t port)
 	}
 }
 
+static inline int fi_ibv_is_loopback(struct sockaddr *addr)
+{
+	assert(addr);
+	return addr->sa_family == AF_INET &&
+	       ((struct sockaddr_in *)addr)->sin_addr.s_addr == ntohl(INADDR_LOOPBACK);
+}
+
 static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 		struct rdma_cm_id *id)
 {
@@ -976,7 +982,7 @@ static int fi_ibv_fill_addr(struct rdma_addrinfo *rai, struct fi_info **info,
 	struct sockaddr *local_addr;
 	int ret;
 
-	if (rai->ai_src_addr)
+	if (rai->ai_src_addr && !fi_ibv_is_loopback(rai->ai_src_addr))
 		goto rai_to_fi;
 
 	if (!id->verbs)

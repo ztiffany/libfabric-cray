@@ -230,18 +230,6 @@ The parameter for `flush_cache` is a struct fid pointer to a fi_domain. The
 memory registration cache is tied to the domain, so issuing a `flush_cache` to
 the domain will flush the registration cache of the domain.
 
-The `flush_cache` function allows the user to flush any stale registration
-cache entries from the cache. This has the effect of removing registrations
-from the cache that have been deregistered with the provider, but still
-exist in case that they may be reused in the near future. Flushing the stale
-registrations forces hardware-level deregistration of the stale memory
-registrations and frees any memory related to those stale registrations. Only
-the provider-level registration struct is freed, not the user buffer
-associated with the registration.
-The parameter for `flush_cache` is a struct fid pointer to a fi_domain. The
-memory registration cache is tied to the domain, so issuing a `flush_cache` to
-the domain will flush the registration cache of the domain.
-
 For *FI_GNI_EP_OPS_1*, the currently supported values are:
 *GNI_HASH_TAG_IMPL*
 : Use a hashlist for the tag list implementation.  The value is of type uint32_t.

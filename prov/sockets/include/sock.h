@@ -107,10 +107,8 @@
 			 FI_READ | FI_WRITE | FI_RECV | FI_SEND | \
 			 FI_REMOTE_READ | FI_REMOTE_WRITE)
 
-#define SOCK_EP_RDM_SEC_CAP (FI_MULTI_RECV | \
-			 FI_SOURCE | \
-			 FI_RMA_EVENT | \
-			 FI_FENCE | FI_TRIGGER)
+#define SOCK_EP_RDM_SEC_CAP (FI_MULTI_RECV | FI_SOURCE | FI_RMA_EVENT | \
+			 FI_SHARED_AV | FI_FENCE | FI_TRIGGER)
 
 #define SOCK_EP_RDM_CAP (SOCK_EP_RDM_PRI_CAP | SOCK_EP_RDM_SEC_CAP)
 
@@ -124,8 +122,7 @@
 			   FI_NAMED_RX_CTX | FI_DIRECTED_RECV | \
 			   FI_RECV | FI_SEND)
 
-#define SOCK_EP_DGRAM_SEC_CAP (FI_MULTI_RECV | \
-			   FI_SOURCE | \
+#define SOCK_EP_DGRAM_SEC_CAP (FI_MULTI_RECV | FI_SOURCE | FI_SHARED_AV | \
 			   FI_FENCE | FI_TRIGGER)
 
 #define SOCK_EP_DGRAM_CAP (SOCK_EP_DGRAM_PRI_CAP | SOCK_EP_DGRAM_SEC_CAP)
@@ -152,6 +149,10 @@
 #define SOCK_USE_OP_FLAGS (1ULL << 61)
 #define SOCK_PE_COMM_BUFF_SZ (1024)
 #define SOCK_PE_OVERFLOW_COMM_BUFF_SZ (128)
+
+/* it must be adjusted if error data size in CQ/EQ 
+ * will be larger than SOCK_EP_MAX_CM_DATA_SZ */
+#define SOCK_MAX_ERR_CQ_EQ_DATA_SZ SOCK_EP_MAX_CM_DATA_SZ
 
 enum {
 	SOCK_SIGNAL_RD_FD = 0,
@@ -195,22 +196,22 @@ struct sock_fabric {
 };
 
 struct sock_conn {
-        int sock_fd;
-        int connected;
+	int sock_fd;
+	int connected;
 	int address_published;
-        struct sockaddr_in addr;
-        struct sock_pe_entry *rx_pe_entry;
-        struct sock_pe_entry *tx_pe_entry;
+	struct sockaddr_in addr;
+	struct sock_pe_entry *rx_pe_entry;
+	struct sock_pe_entry *tx_pe_entry;
 	struct sock_ep_attr *ep_attr;
 	fi_addr_t av_index;
 	struct dlist_entry ep_entry;
 };
 
 struct sock_conn_map {
-        struct sock_conn *table;
+	struct sock_conn *table;
 	struct sock_epoll_set epoll_set;
-        int used;
-        int size;
+	int used;
+	int size;
 	fastlock_t lock;
 };
 
@@ -1015,7 +1016,8 @@ int sock_srx_ctx(struct fid_domain *domain,
 int sock_cq_open(struct fid_domain *domain, struct fi_cq_attr *attr,
 		 struct fid_cq **cq, void *context);
 int sock_cq_report_error(struct sock_cq *cq, struct sock_pe_entry *entry,
-			 size_t olen, int err, int prov_errno, void *err_data);
+			 size_t olen, int err, int prov_errno, void *err_data,
+			 size_t err_data_size);
 int sock_cq_progress(struct sock_cq *cq);
 void sock_cq_add_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
 void sock_cq_remove_tx_ctx(struct sock_cq *cq, struct sock_tx_ctx *tx_ctx);
