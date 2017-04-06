@@ -729,7 +729,8 @@ static int sock_ep_close(struct fid *fid)
 
 static int sock_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 {
-	int ret, i;
+	int ret;
+	size_t i;
 	struct sock_ep *ep;
 	struct sock_eq *eq;
 	struct sock_cq *cq;
@@ -965,7 +966,7 @@ struct fi_ops sock_ep_fi_ops = {
 
 int sock_ep_enable(struct fid_ep *ep)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 	struct sock_tx_ctx *tx_ctx;
 	struct sock_rx_ctx *rx_ctx;
@@ -1010,7 +1011,7 @@ int sock_ep_enable(struct fid_ep *ep)
 
 int sock_ep_disable(struct fid_ep *ep)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
@@ -1071,7 +1072,7 @@ static int sock_ep_getopt(fid_t fid, int level, int optname,
 static int sock_ep_setopt(fid_t fid, int level, int optname,
 		       const void *optval, size_t optlen)
 {
-	int i;
+	size_t i;
 	struct sock_ep *sock_ep;
 	sock_ep = container_of(fid, struct sock_ep, ep.fid);
 
@@ -1104,7 +1105,7 @@ static int sock_ep_tx_ctx(struct fid_ep *ep, int index, struct fi_tx_attr *attr,
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (sock_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= sock_ep->attr->ep_attr.tx_ctx_cnt)
+		index >= (int)sock_ep->attr->ep_attr.tx_ctx_cnt)
 		return -FI_EINVAL;
 
 	if (attr) {
@@ -1145,7 +1146,7 @@ static int sock_ep_rx_ctx(struct fid_ep *ep, int index, struct fi_rx_attr *attr,
 
 	sock_ep = container_of(ep, struct sock_ep, ep);
 	if (sock_ep->attr->fclass != FI_CLASS_SEP ||
-		index >= sock_ep->attr->ep_attr.rx_ctx_cnt)
+		index >= (int)sock_ep->attr->ep_attr.rx_ctx_cnt)
 		return -FI_EINVAL;
 
 	if (attr) {
@@ -1390,7 +1391,8 @@ static void sock_set_fabric_attr(void *src_addr, const struct fi_fabric_attr *hi
 	attr->prov_name = NULL;
 }
 
-static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hint_attr,
+static void sock_set_domain_attr(uint32_t api_version, void *src_addr,
+				 const struct fi_domain_attr *hint_attr,
 				 struct fi_domain_attr *attr)
 {
 	struct sock_domain *domain;
@@ -1399,6 +1401,9 @@ static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hi
 	attr->domain = domain ? &domain->dom_fid : NULL;
 	if (!hint_attr) {
 		*attr = sock_domain_attr;
+
+		if (FI_VERSION_LT(api_version, FI_VERSION(1, 5)))
+			attr->mr_mode = FI_MR_SCALABLE;
 		goto out;
 	}
 
@@ -1417,8 +1422,12 @@ static void sock_set_domain_attr(void *src_addr, const struct fi_domain_attr *hi
 		attr->control_progress = sock_domain_attr.control_progress;
 	if (attr->data_progress == FI_PROGRESS_UNSPEC)
 		attr->data_progress = sock_domain_attr.data_progress;
-	if (attr->mr_mode == FI_MR_UNSPEC)
+	if (FI_VERSION_LT(api_version, FI_VERSION(1, 5))) {
+		if (attr->mr_mode == FI_MR_UNSPEC)
+			attr->mr_mode = FI_MR_SCALABLE;
+	} else {
 		attr->mr_mode = sock_domain_attr.mr_mode;
+	}
 
 	if (attr->cq_cnt == 0)
 		attr->cq_cnt = sock_domain_attr.cq_cnt;
@@ -1448,8 +1457,9 @@ out:
 }
 
 
-struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
-			     void *src_addr, void *dest_addr)
+struct fi_info *sock_fi_info(uint32_t version, enum fi_ep_type ep_type,
+			     struct fi_info *hints, void *src_addr,
+			     void *dest_addr)
 {
 	struct fi_info *info;
 
@@ -1494,10 +1504,12 @@ struct fi_info *sock_fi_info(enum fi_ep_type ep_type, struct fi_info *hints,
 		if (hints->handle)
 			info->handle = hints->handle;
 
-		sock_set_domain_attr(info->src_addr, hints->domain_attr, info->domain_attr);
+		sock_set_domain_attr(version, info->src_addr, hints->domain_attr,
+				     info->domain_attr);
 		sock_set_fabric_attr(info->src_addr, hints->fabric_attr, info->fabric_attr);
 	} else {
-		sock_set_domain_attr(info->src_addr, NULL, info->domain_attr);
+		sock_set_domain_attr(version, info->src_addr, NULL,
+				     info->domain_attr);
 		sock_set_fabric_attr(info->src_addr, NULL, info->fabric_attr);
 	}
 
@@ -1554,15 +1566,15 @@ int sock_alloc_endpoint(struct fid_domain *domain, struct fi_info *info,
 	struct sock_rx_ctx *rx_ctx;
 	struct sock_domain *sock_dom;
 
+	sock_dom = container_of(domain, struct sock_domain, dom_fid);
 	if (info) {
-		ret = sock_verify_info(info);
+		ret = sock_verify_info(sock_dom->fab->fab_fid.api_version, info);
 		if (ret) {
 			SOCK_LOG_DBG("Cannot support requested options!\n");
 			return -FI_EINVAL;
 		}
 	}
 
-	sock_dom = container_of(domain, struct sock_domain, dom_fid);
 	sock_ep = (struct sock_ep *) calloc(1, sizeof(*sock_ep));
 	if (!sock_ep)
 		return -FI_ENOMEM;
