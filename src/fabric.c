@@ -96,7 +96,8 @@ static struct ofi_prov *ofi_getprov(const char *prov_name, size_t len)
 	struct ofi_prov *prov;
 
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (!strncmp(prov->provider->name, prov_name, len))
+		if ((strlen(prov->provider->name) == len) &&
+		    !strncmp(prov->provider->name, prov_name, len))
 			return prov;
 	}
 
@@ -437,6 +438,7 @@ libdl_done:
 	ofi_register_provider(VERBS_INIT, NULL);
 	ofi_register_provider(GNI_INIT, NULL);
 	ofi_register_provider(BGQ_INIT, NULL);
+	ofi_register_provider(NETDIR_INIT, NULL);
 
 	/* Initialize the socket(s) provider last.  This will result in
 	 * it being the least preferred provider. */
@@ -492,8 +494,12 @@ void DEFAULT_SYMVER_PRE(fi_freeinfo)(struct fi_info *info)
 		free(info->dest_addr);
 		free(info->tx_attr);
 		free(info->rx_attr);
-		free(info->ep_attr);
+		if (info->ep_attr) {
+			free(info->ep_attr->auth_key);
+			free(info->ep_attr);
+		}
 		if (info->domain_attr) {
+			free(info->domain_attr->auth_key);
 			free(info->domain_attr->name);
 			free(info->domain_attr);
 		}
@@ -600,16 +606,6 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 	*info = tail = NULL;
 	for (prov = prov_head; prov; prov = prov->next) {
-		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
-			FI_INFO(&core_prov, FI_LOG_CORE,
-				"Provider %s fi_version %d.%d < requested %d.%d\n",
-				prov->provider->name,
-				FI_MAJOR(prov->provider->fi_version),
-				FI_MINOR(prov->provider->fi_version),
-				FI_MAJOR(version), FI_MINOR(version));
-			continue;
-		}
-
 		if (ofi_is_util_prov(prov->provider) &&
 		    (flags & OFI_CORE_PROV_ONLY)) {
 			FI_INFO(&core_prov, FI_LOG_CORE,
@@ -620,12 +616,24 @@ int DEFAULT_SYMVER_PRE(fi_getinfo)(uint32_t version, const char *node,
 
 		if (util_len && util_name) {
 			assert(!(flags & OFI_CORE_PROV_ONLY));
-			if (strncasecmp(util_name, prov->provider->name, util_len))
+			if ((strlen(prov->provider->name) != util_len) ||
+			    strncasecmp(util_name, prov->provider->name, util_len))
 				continue;
 		} else if (core_len && core_name) {
 			if (!ofi_is_util_prov(prov->provider) &&
-			    strncasecmp(core_name, prov->provider->name, core_len))
+			    ((strlen(prov->provider->name) != core_len) ||
+			     strncasecmp(core_name, prov->provider->name, core_len)))
 				continue;
+		}
+
+		if (FI_VERSION_LT(prov->provider->fi_version, version)) {
+			FI_WARN(&core_prov, FI_LOG_CORE,
+				"Provider %s fi_version %d.%d < requested %d.%d\n",
+				prov->provider->name,
+				FI_MAJOR(prov->provider->fi_version),
+				FI_MINOR(prov->provider->fi_version),
+				FI_MAJOR(version), FI_MINOR(version));
+			continue;
 		}
 
 		ret = prov->provider->getinfo(version, node, service, flags,
@@ -730,15 +738,31 @@ struct fi_info *DEFAULT_SYMVER_PRE(fi_dupinfo)(const struct fi_info *info)
 		dup->ep_attr = mem_dup(info->ep_attr, sizeof(*info->ep_attr));
 		if (dup->ep_attr == NULL)
 			goto fail;
+		if (info->ep_attr->auth_key != NULL) {
+			dup->ep_attr->auth_key =
+				mem_dup(info->ep_attr->auth_key,
+					info->ep_attr->auth_key_size);
+			if (dup->ep_attr->auth_key == NULL)
+				goto fail;
+		}
 	}
 	if (info->domain_attr) {
 		dup->domain_attr = mem_dup(info->domain_attr,
 					   sizeof(*info->domain_attr));
 		if (dup->domain_attr == NULL)
 			goto fail;
+		dup->domain_attr->name = NULL;
+		dup->domain_attr->auth_key = NULL;
 		if (info->domain_attr->name != NULL) {
 			dup->domain_attr->name = strdup(info->domain_attr->name);
 			if (dup->domain_attr->name == NULL)
+				goto fail;
+		}
+		if (info->domain_attr->auth_key != NULL) {
+			dup->domain_attr->auth_key =
+				mem_dup(info->domain_attr->auth_key,
+					info->domain_attr->auth_key_size);
+			if (dup->domain_attr->auth_key == NULL)
 				goto fail;
 		}
 	}

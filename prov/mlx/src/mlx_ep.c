@@ -79,13 +79,13 @@ static int mlx_ep_close(fid_t fid)
 	ucp_worker_flush(fid_ep->worker);
 	ucp_worker_destroy(fid_ep->worker);
 	if (fid_ep->ep.tx_cq) {
-		atomic_dec(&(fid_ep->ep.tx_cq->ref));
+		ofi_atomic_dec32(&(fid_ep->ep.tx_cq->ref));
 	}
 	if (fid_ep->ep.rx_cq) {
-		atomic_dec(&(fid_ep->ep.rx_cq->ref));
+		ofi_atomic_dec32(&(fid_ep->ep.rx_cq->ref));
 	}
 
-	atomic_dec(&(fid_ep->ep.domain->ref));
+	ofi_atomic_dec32(&(fid_ep->ep.domain->ref));
 	free(fid_ep);
 	return FI_SUCCESS;
 }
@@ -114,12 +114,12 @@ static int mlx_ep_bind(struct fid *fid, struct fid *bfid, uint64_t flags)
 
 			if (flags & FI_TRANSMIT) {
 				ep->ep.tx_cq = cq;
-				atomic_inc(&(cq->ref));
+				ofi_atomic_inc32(&(cq->ref));
 			}
 
 			if (flags & FI_RECV) {
 				ep->ep.rx_cq = cq;
-				atomic_inc(&(cq->ref));
+				ofi_atomic_inc32(&(cq->ref));
 				status = fid_list_insert( &cq->ep_list,
 							&cq->ep_list_lock,
 							&ep->ep.ep_fid.fid);
@@ -190,7 +190,9 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	struct mlx_domain *u_domain;
 	int ofi_status = FI_SUCCESS;
 	ucs_status_t status = UCS_OK;
-
+	ucp_worker_params_t worker_params;
+	worker_params.field_mask = UCP_WORKER_PARAM_FIELD_THREAD_MODE;
+	worker_params.thread_mode = UCS_THREAD_MODE_MULTI;
 	u_domain = container_of( domain, struct mlx_domain, u_domain.domain_fid);
 
 	ep = (struct mlx_ep *) calloc(1, sizeof (struct mlx_ep));
@@ -205,11 +207,11 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	}
 
 	status = ucp_worker_create( u_domain->context,
-				UCS_THREAD_MODE_MULTI,
+				&worker_params,
 				&(ep->worker));
 	if (status != UCS_OK) {
 		ofi_status = MLX_TRANSLATE_ERRCODE(status);
-		atomic_dec(&(u_domain->u_domain.ref));
+		ofi_atomic_dec32(&(u_domain->u_domain.ref));
 		goto free_ep;
 	}
 
@@ -218,7 +220,7 @@ int mlx_ep_open( struct fid_domain *domain, struct fi_info *info,
 	ep->ep.ep_fid.cm = &mlx_cm_ops;
 	ep->ep.ep_fid.tagged = &mlx_tagged_ops;
 	ep->ep.flags = info->mode;
-	ep->ep.caps = u_domain->u_domain.caps;
+	ep->ep.caps = u_domain->u_domain.info_domain_caps;
 
 	*fid = &(ep->ep.ep_fid);
 
